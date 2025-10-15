@@ -1,0 +1,47 @@
+version: '3.8'
+
+services:
+  db:
+    image: timescale/timescaledb:latest-pg14
+    container_name: wellhead_db
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+    ports:
+      - "5432:5432"
+    volumes:
+      - timescaledb_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+
+  simulator:
+    build: .
+    container_name: wellhead_simulator
+    command: python wellhead_simulator.py
+
+  modbus:
+    build: .
+    container_name: modbus_gateway
+    command: python modbus_gateway.py
+    ports:
+      - "5020:5020"
+    depends_on:
+      - simulator
+
+  ingestion:
+    build: .
+    container_name: database_ingestion
+    command: python database_ingestion.py
+    depends_on:
+      - db
+      - modbus
+    environment:
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_NAME=${POSTGRES_DB}
+      - DB_USER=${POSTGRES_USER}
+      - DB_PASSWORD=${POSTGRES_PASSWORD}
+      - MODBUS_HOST=modbus
+
+volumes:
+  timescaledb_data:

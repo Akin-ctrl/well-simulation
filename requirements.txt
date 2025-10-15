@@ -1,0 +1,2 @@
+pymodbus
+psycopg2-binary

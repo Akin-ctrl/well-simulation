@@ -1,0 +1,21 @@
+
+ [
+    {"name": "Tubing Pressure", "low": 500, "high": 3000, "type": "float"},
+    {"name": "Casing Pressure", "low": 200, "high": 2000, "type": "float"},
+    {"name": "Annulus Pressure", "low": 50, "high": 500, "type": "float"},
+    {"name": "Wellhead Temperature", "low": 60, "high": 250, "type": "float"},
+    {"name": "Choke Valve Position", "low": 0, "high": 100, "type": "integer"},
+    {"name": "Flow Rate", "low": 100, "high": 5000, "type": "float"},
+    {"name": "Gas Oil Ratio", "low": 500, "high": 3000, "type": "float"},
+    {"name": "Water Cut", "low": 0, "high": 80, "type": "float"},
+    {"name": "Sand Detector", "low": 0, "high": 100, "type": "float"},
+    {"name": "Corrosion Rate", "low": 0, "high": 10, "type": "float"},
+    {"name": "H2S Level", "low": 0, "high": 50, "type": "float"},
+    {"name": "CO2 Level", "low": 0, "high": 5, "type": "float"},
+    {"name": "Vibration", "low": 0, "high": 5, "type": "float"},
+    {"name": "Master Valve Status", "low": 0, "high": 1, "type": "boolean"},
+    {"name": "Wing Valve Status", "low": 0, "high": 1, "type": "boolean"},
+    {"name": "Swab Valve Status", "low": 0, "high": 1, "type": "boolean"},
+    {"name": "Emergency Shutdown", "low": 0, "high": 1, "type": "boolean"},
+    {"name": "Pump Status", "low": 0, "high": 1, "type": "boolean"}
+]
