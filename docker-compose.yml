@@ -13,11 +13,39 @@ services:
     volumes:
       - timescaledb_data:/var/lib/postgresql/data
       - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: wellhead_pgadmin
+    environment:
+      - PGADMIN_DEFAULT_EMAIL=${PGADMIN_DEFAULT_EMAIL}
+      - PGADMIN_DEFAULT_PASSWORD=${PGADMIN_DEFAULT_PASSWORD}
+    ports:
+      - "5050:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    depends_on:
+      db:
+        condition: service_healthy
 
   simulator:
     build: .
     container_name: wellhead_simulator
     command: python wellhead_simulator.py
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_NAME=${POSTGRES_DB}
+      - DB_USER=${POSTGRES_USER}
+      - DB_PASSWORD=${POSTGRES_PASSWORD}
 
   modbus:
     build: .
@@ -27,14 +55,16 @@ services:
       - "5020:5020"
     depends_on:
       - simulator
-
+    
   ingestion:
     build: .
     container_name: database_ingestion
     command: python database_ingestion.py
     depends_on:
-      - db
-      - modbus
+      db:
+        condition: service_healthy
+      modbus:
+        condition: service_started
     environment:
       - DB_HOST=db
       - DB_PORT=5432
@@ -45,3 +75,4 @@ services:
 
 volumes:
   timescaledb_data:
+  pgadmin_data:

@@ -1,130 +1,245 @@
+# import time
+# import json
+# from datetime import datetime
+# import psycopg2
+# from psycopg2.extras import execute_batch
+# from pymodbus.client import ModbusTcpClient
+# from pymodbus.payload import BinaryPayloadDecoder
+# from pymodbus.constants import Endian
+
+# # --- Configuration ---
+# # Modbus Server Configuration
+# MODBUS_HOST = 'localhost'
+# MODBUS_PORT = 5020
+# REGISTERS_PER_WELLHEAD = 50 # Must match the gateway script
+
+# # Database Configuration
+# DB_HOST = 'localhost'
+# DB_PORT = '5432'
+# DB_NAME = 'wellhead_data'
+# DB_USER = 'postgres' # Change to your username
+# DB_PASSWORD = 'your_password' # Change to your password
+
+# # Simulation Configuration
+# NUMBER_OF_WELLHEADS = 5 # Must match the simulator script
+# POLL_INTERVAL = 30 # seconds
+
+# def load_parameter_config(config_file="parameters.json"):
+#     """Loads the parameter configuration to ensure consistent data decoding."""
+#     try:
+#         with open(config_file, 'r') as f:
+#             return json.load(f)
+#     except FileNotFoundError:
+#         print(f"Error: Parameter config file '{config_file}' not found.")
+#         exit()
+
+# def main():
+#     """Main function to run the polling and ingestion loop."""
+#     print("Starting Database Ingestion Service...")
+    
+#     parameter_config = load_parameter_config()
+    
+#     # Create a Modbus client
+#     client = ModbusTcpClient(MODBUS_HOST, port=MODBUS_PORT)
+    
+#     # Construct the SQL INSERT statement dynamically
+#     # This makes it robust to parameter changes
+#     column_names = [p['name'].replace(' ', '_').lower() for p in parameter_config]
+#     sql_columns = ", ".join(column_names)
+#     sql_placeholders = ", ".join(["%s"] * len(column_names))
+#     insert_sql = f"""
+#         INSERT INTO wellhead_readings (time, wellhead_id, {sql_columns})
+#         VALUES (%s, %s, {sql_placeholders})
+#     """
+
+#     while True:
+#         try:
+#             # Connect to the database
+#             conn = psycopg2.connect(
+#                 host=DB_HOST,
+#                 port=DB_PORT,
+#                 dbname=DB_NAME,
+#                 user=DB_USER,
+#                 password=DB_PASSWORD
+#             )
+#             cursor = conn.cursor()
+#             print("Successfully connected to the database.")
+
+#             client.connect()
+#             print("Successfully connected to the Modbus gateway.")
+
+#             while True:
+#                 start_time = time.time()
+                
+#                 records_to_insert = []
+#                 current_timestamp = datetime.utcnow()
+
+#                 for i in range(NUMBER_OF_WELLHEADS):
+#                     wellhead_index = i
+#                     wellhead_id = f"WH-{str(i+1).zfill(3)}"
+#                     base_address = wellhead_index * REGISTERS_PER_WELLHEAD
+                    
+#                     # Read the block of holding registers for the current wellhead
+#                     result = client.read_holding_registers(base_address, len(parameter_config) * 2, slave=1)
+                    
+#                     if result.isError():
+#                         print(f"Modbus Error reading {wellhead_id}: {result}")
+#                         continue
+
+#                     # Decode the registers back into data
+#                     decoder = BinaryPayloadDecoder.fromRegisters(result.registers, byteorder=Endian.Big, wordorder=Endian.Little)
+                    
+#                     decoded_data = {}
+#                     for param in parameter_config:
+#                         param_name = param['name']
+#                         param_type = param['type']
+#                         sql_col_name = param_name.replace(' ', '_').lower()
+
+#                         if param_type == 'float':
+#                             decoded_data[sql_col_name] = decoder.decode_32bit_float()
+#                         elif param_type in ['integer', 'boolean']:
+#                             val = decoder.decode_32bit_int()
+#                             if param_type == 'boolean':
+#                                 decoded_data[sql_col_name] = bool(val)
+#                             else:
+#                                 decoded_data[sql_col_name] = val
+                    
+#                     # Prepare the record for batch insertion
+#                     record_values = [decoded_data[col] for col in column_names]
+#                     records_to_insert.append((current_timestamp, wellhead_id) + tuple(record_values))
+
+#                 # Insert all records for this poll cycle in a single transaction
+#                 if records_to_insert:
+#                     execute_batch(cursor, insert_sql, records_to_insert)
+#                     conn.commit()
+#                     print(f"[{datetime.now()}] Inserted {len(records_to_insert)} records into the database.")
+
+#                 # Wait for the next poll cycle
+#                 time_to_wait = POLL_INTERVAL - (time.time() - start_time)
+#                 if time_to_wait > 0:
+#                     time.sleep(time_to_wait)
+
+#         except Exception as e:
+#             print(f"An error occurred: {e}. Reconnecting in 10 seconds...")
+#             if 'client' in locals() and client.is_socket_open():
+#                 client.close()
+#             if 'conn' in locals() and not conn.closed:
+#                 conn.close()
+#             time.sleep(10)
+
+# if __name__ == "__main__":
+#     main()
+
 import time
-import json
-from datetime import datetime
+import os
 import psycopg2
+from datetime import datetime
 from psycopg2.extras import execute_batch
-from pymodbus.client import ModbusTcpClient
+from pymodbus.client.sync import ModbusTcpClient
 from pymodbus.payload import BinaryPayloadDecoder
 from pymodbus.constants import Endian
 
-# --- Configuration ---
-# Modbus Server Configuration
-MODBUS_HOST = 'localhost'
-MODBUS_PORT = 5020
-REGISTERS_PER_WELLHEAD = 50 # Must match the gateway script
+# Config from environment variables
+MODBUS_HOST = os.getenv('MODBUS_HOST')
+MODBUS_PORT = os.getenv('MODBUS_PORT')
+DB_HOST = os.getenv('POSTGRES_HOST')
+DB_PORT = os.getenv('POSTGRES_PORT')
+DB_NAME = os.getenv('POSTGRES_DB')
+DB_USER = os.getenv('POSTGRES_USER')
+DB_PASSWORD = os.getenv('POSTGRES_PASSWORD')
 
-# Database Configuration
-DB_HOST = 'localhost'
-DB_PORT = '5432'
-DB_NAME = 'wellhead_data'
-DB_USER = 'postgres' # Change to your username
-DB_PASSWORD = 'your_password' # Change to your password
-
-# Simulation Configuration
-NUMBER_OF_WELLHEADS = 5 # Must match the simulator script
-POLL_INTERVAL = 30 # seconds
-
-def load_parameter_config(config_file="parameters.json"):
-    """Loads the parameter configuration to ensure consistent data decoding."""
-    try:
-        with open(config_file, 'r') as f:
-            return json.load(f)
-    except FileNotFoundError:
-        print(f"Error: Parameter config file '{config_file}' not found.")
-        exit()
+def get_ingestion_metadata():
+    """Fetches metadata needed for polling and inserting."""
+    conn = psycopg2.connect(host=DB_HOST, port=DB_PORT, dbname=DB_NAME, user=DB_USER, password=DB_PASSWORD)
+    cursor = conn.cursor()
+    
+    query = """
+    SELECT dpm.mapping_id, wh.wellhead_id, pt.parameter_type_id, dpm.modbus_register, pt.data_type
+    FROM deviceParameterMapping dpm
+    JOIN parameterType pt ON dpm.parameter_type_id = pt.parameter_type_id
+    JOIN device d ON dpm.device_id = d.device_id
+    JOIN wellHead wh ON d.device_id = wh.device_id
+    WHERE dpm.active = TRUE ORDER BY dpm.modbus_register;
+    """
+    cursor.execute(query)
+    metadata = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    
+    # Convert list of tuples to a more usable list of dicts
+    ingestion_map = [
+        {"mapping_id": r[0], "wellhead_id": r[1], "param_type_id": r[2], "register": r[3], "type": r[4]}
+        for r in metadata
+    ]
+    return ingestion_map
 
 def main():
-    """Main function to run the polling and ingestion loop."""
     print("Starting Database Ingestion Service...")
-    
-    parameter_config = load_parameter_config()
-    
-    # Create a Modbus client
+    print("Waiting for dependent services to start...")
+    time.sleep(15) # Wait for DB and Modbus server to be fully up
+
+    try:
+        ingestion_map = get_ingestion_metadata()
+        if not ingestion_map:
+            print("Error: No ingestion metadata found in database.")
+            return
+        print(f"Loaded {len(ingestion_map)} parameter mappings for ingestion.")
+    except psycopg2.OperationalError as e:
+        print(f"Database connection failed: {e}")
+        return
+
     client = ModbusTcpClient(MODBUS_HOST, port=MODBUS_PORT)
     
-    # Construct the SQL INSERT statement dynamically
-    # This makes it robust to parameter changes
-    column_names = [p['name'].replace(' ', '_').lower() for p in parameter_config]
-    sql_columns = ", ".join(column_names)
-    sql_placeholders = ", ".join(["%s"] * len(column_names))
-    insert_sql = f"""
-        INSERT INTO wellhead_readings (time, wellhead_id, {sql_columns})
-        VALUES (%s, %s, {sql_placeholders})
+    insert_sql = """
+        INSERT INTO parameterReading (timestamp_utc, wellhead_id, parameter_type_id, mapping_id, raw_value)
+        VALUES (%s, %s, %s, %s, %s)
     """
 
     while True:
         try:
-            # Connect to the database
-            conn = psycopg2.connect(
-                host=DB_HOST,
-                port=DB_PORT,
-                dbname=DB_NAME,
-                user=DB_USER,
-                password=DB_PASSWORD
-            )
+            conn = psycopg2.connect(host=DB_HOST, port=DB_PORT, dbname=DB_NAME, user=DB_USER, password=DB_PASSWORD)
             cursor = conn.cursor()
-            print("Successfully connected to the database.")
-
             client.connect()
-            print("Successfully connected to the Modbus gateway.")
 
             while True:
                 start_time = time.time()
-                
                 records_to_insert = []
                 current_timestamp = datetime.utcnow()
 
-                for i in range(NUMBER_OF_WELLHEADS):
-                    wellhead_index = i
-                    wellhead_id = f"WH-{str(i+1).zfill(3)}"
-                    base_address = wellhead_index * REGISTERS_PER_WELLHEAD
+                for item in ingestion_map:
+                    # Each parameter is 2 registers (32-bit)
+                    result = client.read_holding_registers(item['register'], 2, slave=1)
                     
-                    # Read the block of holding registers for the current wellhead
-                    result = client.read_holding_registers(base_address, len(parameter_config) * 2, slave=1)
-                    
-                    if result.isError():
-                        print(f"Modbus Error reading {wellhead_id}: {result}")
-                        continue
-
-                    # Decode the registers back into data
-                    decoder = BinaryPayloadDecoder.fromRegisters(result.registers, byteorder=Endian.Big, wordorder=Endian.Little)
-                    
-                    decoded_data = {}
-                    for param in parameter_config:
-                        param_name = param['name']
-                        param_type = param['type']
-                        sql_col_name = param_name.replace(' ', '_').lower()
-
-                        if param_type == 'float':
-                            decoded_data[sql_col_name] = decoder.decode_32bit_float()
-                        elif param_type in ['integer', 'boolean']:
-                            val = decoder.decode_32bit_int()
-                            if param_type == 'boolean':
-                                decoded_data[sql_col_name] = bool(val)
-                            else:
-                                decoded_data[sql_col_name] = val
-                    
-                    # Prepare the record for batch insertion
-                    record_values = [decoded_data[col] for col in column_names]
-                    records_to_insert.append((current_timestamp, wellhead_id) + tuple(record_values))
-
-                # Insert all records for this poll cycle in a single transaction
+                    if not result.isError():
+                        decoder = BinaryPayloadDecoder.fromRegisters(result.registers, byteorder=Endian.Big, wordorder=Endian.Little)
+                        value = None
+                        if item['type'] == 'float':
+                            value = decoder.decode_32bit_float()
+                        elif item['type'] in ['integer', 'boolean']:
+                            value = float(decoder.decode_32bit_int())
+                        
+                        if value is not None:
+                            records_to_insert.append((
+                                current_timestamp,
+                                item['wellhead_id'],
+                                item['param_type_id'],
+                                item['mapping_id'],
+                                value
+                            ))
+                
                 if records_to_insert:
                     execute_batch(cursor, insert_sql, records_to_insert)
                     conn.commit()
-                    print(f"[{datetime.now()}] Inserted {len(records_to_insert)} records into the database.")
+                    print(f"[{datetime.now()}] Inserted {len(records_to_insert)} records.")
 
-                # Wait for the next poll cycle
                 time_to_wait = POLL_INTERVAL - (time.time() - start_time)
                 if time_to_wait > 0:
                     time.sleep(time_to_wait)
 
         except Exception as e:
             print(f"An error occurred: {e}. Reconnecting in 10 seconds...")
-            if 'client' in locals() and client.is_socket_open():
-                client.close()
-            if 'conn' in locals() and not conn.closed:
-                conn.close()
+            if client.is_socket_open(): client.close()
+            if 'conn' in locals() and not conn.closed: conn.close()
             time.sleep(10)
 
 if __name__ == "__main__":
