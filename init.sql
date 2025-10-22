@@ -87,7 +87,7 @@ CREATE TABLE alarmRule (
 
 
 CREATE TABLE alarmEvent (
-  event_id BIGSERIAL PRIMARY KEY,
+  event_id BIGSERIAL NOT NULL,
   alarm_rule_id INT NOT NULL REFERENCES alarmRule(alarm_rule_id) ON DELETE CASCADE,
   
   parameter_reading_id BIGINT NOT NULL,
@@ -97,8 +97,7 @@ CREATE TABLE alarmEvent (
   cleared_at TIMESTAMPTZ,
   severity_level VARCHAR(50) NOT NULL,
   triggered_value FLOAT NOT NULL,
- 
-  FOREIGN KEY (parameter_reading_id, timestamp_utc) REFERENCES parameterReading (parameter_reading_id, timestamp_utc) ON DELETE CASCADE
+  PRIMARY KEY (event_id, triggered_at)
 );
 
 SELECT create_hypertable('alarmEvent', 'triggered_at');
@@ -216,8 +215,8 @@ BEGIN
             
             -- If condition is met and no alarm is active, create a new alarm event
             IF NOT is_active THEN
-                INSERT INTO alarmEvent (alarm_rule_id, parameter_reading_id, wellhead_id, triggered_at, severity_level, triggered_value)
-                VALUES (rule.alarm_rule_id, NEW.parameter_reading_id, NEW.wellhead_id, NEW.timestamp_utc, rule.severity_level, NEW.raw_value);
+                INSERT INTO alarmEvent (alarm_rule_id, parameter_reading_id, wellhead_id, timestamp_utc, triggered_at, severity_level, triggered_value)
+                VALUES (rule.alarm_rule_id, NEW.parameter_reading_id, NEW.wellhead_id, NEW.timestamp_utc, NEW.timestamp_utc, rule.severity_level, NEW.raw_value);
             END IF;
         ELSE
             -- If condition is NOT met but an alarm IS active, clear it
