@@ -45,12 +45,6 @@ services:
         condition: service_healthy
     env_file:
       - .env
-    # environment:
-      # - DB_HOST=db
-      # - DB_PORT=5432
-      # - DB_NAME=${POSTGRES_DB}
-      # - DB_USER=${POSTGRES_USER}
-      # - DB_PASSWORD=${POSTGRES_PASSWORD}
     networks:
       - wellnet
 
@@ -78,13 +72,6 @@ services:
         condition: service_started
     env_file:
       - .env
-    # environment:
-    #   - DB_HOST=db
-    #   - DB_PORT=5432
-    #   - DB_NAME=${POSTGRES_DB}
-    #   - DB_USER=${POSTGRES_USER}
-    #   - DB_PASSWORD=${POSTGRES_PASSWORD}
-    #   - MODBUS_HOST=modbus
     networks:
       - wellnet
 
