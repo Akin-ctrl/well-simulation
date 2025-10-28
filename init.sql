@@ -7,13 +7,13 @@
 CREATE EXTENSION IF NOT EXISTS timescaledb;
 
 -- Asset Metadata
-CREATE TABLE field (
+CREATE TABLE IF NOT EXISTS field (
     field_id SERIAL PRIMARY KEY,
     name VARCHAR(255) NOT NULL UNIQUE,
     description TEXT
 );
 
-CREATE TABLE location (
+CREATE TABLE IF NOT EXISTS location (
     location_id SERIAL PRIMARY KEY,
     field_id INT NOT NULL REFERENCES field(field_id) ON DELETE CASCADE,
     name VARCHAR(255) NOT NULL,
@@ -22,14 +22,14 @@ CREATE TABLE location (
     longitude FLOAT
 );
 
-CREATE TABLE device (
+CREATE TABLE IF NOT EXISTS device (
     device_id SERIAL PRIMARY KEY,
     name VARCHAR(255) NOT NULL UNIQUE,
     modbus_unit_id INT NOT NULL,
     status VARCHAR(50) DEFAULT 'active'
 );
 
-CREATE TABLE wellHead (
+CREATE TABLE IF NOT EXISTS wellHead (
     wellhead_id SERIAL PRIMARY KEY,
     location_id INT NOT NULL REFERENCES location(location_id) ON DELETE CASCADE,
     device_id INT UNIQUE NOT NULL REFERENCES device(device_id) ON DELETE CASCADE,
@@ -39,7 +39,7 @@ CREATE TABLE wellHead (
 );
 
 -- Parameter Metadata
-CREATE TABLE parameterType (
+CREATE TABLE IF NOT EXISTS parameterType (
     parameter_type_id SERIAL PRIMARY KEY,
     code VARCHAR(100) NOT NULL UNIQUE, -- e.g., 'tubing_pressure'
     display_name VARCHAR(255) NOT NULL,
@@ -49,7 +49,7 @@ CREATE TABLE parameterType (
     normal_max FLOAT
 );
 
-CREATE TABLE deviceParameterMapping (
+CREATE TABLE IF NOT EXISTS deviceParameterMapping (
     mapping_id SERIAL PRIMARY KEY,
     device_id INT NOT NULL REFERENCES device(device_id) ON DELETE CASCADE,
     parameter_type_id INT NOT NULL REFERENCES parameterType(parameter_type_id) ON DELETE CASCADE,
@@ -61,7 +61,7 @@ CREATE TABLE deviceParameterMapping (
 );
 
 -- Time-Series Data (Hypertables)
-CREATE TABLE parameterReading (
+CREATE TABLE IF NOT EXISTS parameterReading (
     parameter_reading_id BIGSERIAL,
     timestamp_utc TIMESTAMPTZ NOT NULL,
     wellhead_id INT NOT NULL REFERENCES wellHead(wellhead_id) ON DELETE CASCADE,
@@ -75,7 +75,7 @@ CREATE TABLE parameterReading (
 SELECT create_hypertable('parameterReading', 'timestamp_utc');
 
 -- Derived Data (Alarms)
-CREATE TABLE alarmRule (
+CREATE TABLE IF NOT EXISTS alarmRule (
     alarm_rule_id SERIAL PRIMARY KEY,
     parameter_type_id INT NOT NULL REFERENCES parameterType(parameter_type_id) ON DELETE CASCADE,
     severity_level VARCHAR(50) NOT NULL, -- e.g., 'CRITICAL', 'WARNING'
@@ -86,7 +86,7 @@ CREATE TABLE alarmRule (
 );
 
 
-CREATE TABLE alarmEvent (
+CREATE TABLE IF NOT EXISTS alarmEvent (
   event_id BIGSERIAL NOT NULL,
   alarm_rule_id INT NOT NULL REFERENCES alarmRule(alarm_rule_id) ON DELETE CASCADE,
   
