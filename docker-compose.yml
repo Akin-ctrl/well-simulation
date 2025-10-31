@@ -12,8 +12,8 @@ services:
       - "5432:5432"
     volumes:
       - timescaledb_data:/var/lib/postgresql/data
-      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
-      - ./views.sql:/docker-entrypoint-initdb.d/views.sql
+      - ./sql/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./sql/views.sql:/docker-entrypoint-initdb.d/views.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 5s
@@ -38,7 +38,7 @@ services:
       - wellnet
 
   simulator:
-    build: .
+    build: ./src
     container_name: wellhead_simulator
     command: python wellhead_simulator.py
     depends_on:
@@ -50,7 +50,7 @@ services:
       - wellnet
 
   modbus:
-    build: .
+    build: ./src
     container_name: modbus_gateway
     command: python modbus_gateway.py
     ports:
@@ -63,7 +63,7 @@ services:
       - .env
 
   ingestion:
-    build: .
+    build: ./src
     container_name: database_ingestion
     command: python database_ingestion.py
     depends_on:
