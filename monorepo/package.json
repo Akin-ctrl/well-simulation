@@ -2,7 +2,8 @@
   "name": "corsight",
   "private": true,
   "scripts": {
-    "web": "dotenv -- turbo run dev --filter=@corsight/website",
+    "web": "dotenv -- turbo run dev --filter=@corsight/website --filter=@corsight/api",
+    "server": "dotenv -- turbo run dev --filter=@corsight/api",
     "build": "turbo run build",
     "dev": "turbo run dev",
     "lint": "turbo run lint",

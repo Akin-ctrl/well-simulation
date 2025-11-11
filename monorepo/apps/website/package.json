@@ -13,6 +13,7 @@
     "@corsight/dto": "workspace:*",
     "@corsight/ui": "workspace:*",
     "@corsight/utils": "workspace:*",
+    "@corsight/api": "workspace:*",
     "@react-router/fs-routes": "^7.9.5",
     "@react-router/node": "^7.9.5",
     "@react-router/serve": "^7.9.5",

@@ -1,17 +1,30 @@
 import { Input } from '@corsight/ui/input';
 import { Button } from '@corsight/ui/button';
-import { Link, useFetcher } from 'react-router';
+import { Link, redirect, useFetcher } from 'react-router';
 import { routes } from '../config/routes';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { registerSchema } from '@corsight/dto/req/auth';
 import { type SToType } from '@corsight/dto';
 import type { Route } from './+types/_auth.register';
+import { client, fetchFn } from '../utils/api';
+import type { ApiError } from '@corsight/dto/error';
+import { toast } from '@corsight/ui/toast';
+import { Password } from '@corsight/ui/password';
 
 export async function clientAction(args: Route.ClientActionArgs) {
-  const formData = await args.request.json();
+  const formData = (await args.request.json()) as SToType<
+    typeof registerSchema
+  >;
   try {
-  } catch (error) {}
+    await fetchFn(client.auth.register.$post({ json: formData }));
+    return redirect(routes.dashboard.overview);
+  } catch (err) {
+    const error = err as ApiError;
+    const msg = error.msg ?? 'Registration failed';
+    toast.error(msg);
+    return { error: true, msg: msg };
+  }
 }
 
 export default function Register() {
@@ -47,13 +60,14 @@ export default function Register() {
           {...form.register('email')}
           placeholder='Enter email'
           error={form.getFieldState('email').invalid}
+          type='email'
         />
-        <Input
+        <Password
           {...form.register('password')}
           placeholder='Enter password'
           error={form.getFieldState('password').invalid}
         />
-        <Input
+        <Password
           {...form.register('confirmPassword')}
           placeholder='Confirm password'
           error={form.getFieldState('confirmPassword').invalid}

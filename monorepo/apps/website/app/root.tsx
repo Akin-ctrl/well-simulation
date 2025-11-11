@@ -62,16 +62,14 @@ export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <Toaster
-        position='top-center'
+        position='bottom-right'
         toastOptions={{
           classNames: {
-            toast:
-              '!bg-black/80 !backdrop-blur-md !border-white/20 !rounded-[14px] !drop-shadow-xs !top-[6vh] py-3 px-5 !text-sans',
-            title: '!text-white ml-5 !text-sans',
+            title: 'ml-5 !text-sans',
             description: '!text-white/80 !text-sans',
             success: '!text-white',
             loader: '!text-white fill-white stroke-white',
-            error: '!text-white/80',
+            error: '!text-red-600',
             warning: '!text-white/70',
           },
         }}

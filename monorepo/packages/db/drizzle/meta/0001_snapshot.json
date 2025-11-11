@@ -1,0 +1,1448 @@
+{
+  "id": "51ef20c7-76d6-4a10-8df3-12b520e8ef0d",
+  "prevId": "00000000-0000-0000-0000-000000000000",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "public.alarmevent": {
+      "name": "alarmevent",
+      "schema": "",
+      "columns": {
+        "event_id": {
+          "name": "event_id",
+          "type": "bigserial",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "alarm_rule_id": {
+          "name": "alarm_rule_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "parameter_reading_id": {
+          "name": "parameter_reading_id",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "timestamp_utc": {
+          "name": "timestamp_utc",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "wellhead_id": {
+          "name": "wellhead_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "triggered_at": {
+          "name": "triggered_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "cleared_at": {
+          "name": "cleared_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "severity_level": {
+          "name": "severity_level",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "triggered_value": {
+          "name": "triggered_value",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "alarmevent_triggered_at_idx": {
+          "name": "alarmevent_triggered_at_idx",
+          "columns": [
+            {
+              "expression": "triggered_at",
+              "isExpression": false,
+              "asc": false,
+              "nulls": "first",
+              "opclass": "timestamptz_ops"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "alarmevent_alarm_rule_id_fkey": {
+          "name": "alarmevent_alarm_rule_id_fkey",
+          "tableFrom": "alarmevent",
+          "tableTo": "alarmrule",
+          "columnsFrom": [
+            "alarm_rule_id"
+          ],
+          "columnsTo": [
+            "alarm_rule_id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "alarmevent_wellhead_id_fkey": {
+          "name": "alarmevent_wellhead_id_fkey",
+          "tableFrom": "alarmevent",
+          "tableTo": "wellhead",
+          "columnsFrom": [
+            "wellhead_id"
+          ],
+          "columnsTo": [
+            "wellhead_id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "alarmevent_pkey": {
+          "name": "alarmevent_pkey",
+          "columns": [
+            "event_id",
+            "triggered_at"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.alarmrule": {
+      "name": "alarmrule",
+      "schema": "",
+      "columns": {
+        "alarm_rule_id": {
+          "name": "alarm_rule_id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "parameter_type_id": {
+          "name": "parameter_type_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "severity_level": {
+          "name": "severity_level",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "operator": {
+          "name": "operator",
+          "type": "varchar(10)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "threshold_value": {
+          "name": "threshold_value",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "active": {
+          "name": "active",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "alarmrule_parameter_type_id_fkey": {
+          "name": "alarmrule_parameter_type_id_fkey",
+          "tableFrom": "alarmrule",
+          "tableTo": "parametertype",
+          "columnsFrom": [
+            "parameter_type_id"
+          ],
+          "columnsTo": [
+            "parameter_type_id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.device": {
+      "name": "device",
+      "schema": "",
+      "columns": {
+        "device_id": {
+          "name": "device_id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "modbus_unit_id": {
+          "name": "modbus_unit_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "'active'"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "device_name_key": {
+          "name": "device_name_key",
+          "nullsNotDistinct": false,
+          "columns": [
+            "name"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.deviceparametermapping": {
+      "name": "deviceparametermapping",
+      "schema": "",
+      "columns": {
+        "mapping_id": {
+          "name": "mapping_id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "device_id": {
+          "name": "device_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "parameter_type_id": {
+          "name": "parameter_type_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "modbus_register": {
+          "name": "modbus_register",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "function_code": {
+          "name": "function_code",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "register_type": {
+          "name": "register_type",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "active": {
+          "name": "active",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "deviceparametermapping_device_id_fkey": {
+          "name": "deviceparametermapping_device_id_fkey",
+          "tableFrom": "deviceparametermapping",
+          "tableTo": "device",
+          "columnsFrom": [
+            "device_id"
+          ],
+          "columnsTo": [
+            "device_id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "deviceparametermapping_parameter_type_id_fkey": {
+          "name": "deviceparametermapping_parameter_type_id_fkey",
+          "tableFrom": "deviceparametermapping",
+          "tableTo": "parametertype",
+          "columnsFrom": [
+            "parameter_type_id"
+          ],
+          "columnsTo": [
+            "parameter_type_id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "deviceparametermapping_device_id_modbus_register_key": {
+          "name": "deviceparametermapping_device_id_modbus_register_key",
+          "nullsNotDistinct": false,
+          "columns": [
+            "device_id",
+            "modbus_register"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.field": {
+      "name": "field",
+      "schema": "",
+      "columns": {
+        "field_id": {
+          "name": "field_id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "field_name_key": {
+          "name": "field_name_key",
+          "nullsNotDistinct": false,
+          "columns": [
+            "name"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.location": {
+      "name": "location",
+      "schema": "",
+      "columns": {
+        "location_id": {
+          "name": "location_id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "field_id": {
+          "name": "field_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "address": {
+          "name": "address",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "latitude": {
+          "name": "latitude",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "longitude": {
+          "name": "longitude",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "location_field_id_fkey": {
+          "name": "location_field_id_fkey",
+          "tableFrom": "location",
+          "tableTo": "field",
+          "columnsFrom": [
+            "field_id"
+          ],
+          "columnsTo": [
+            "field_id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.parameterreading": {
+      "name": "parameterreading",
+      "schema": "",
+      "columns": {
+        "parameter_reading_id": {
+          "name": "parameter_reading_id",
+          "type": "bigserial",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "timestamp_utc": {
+          "name": "timestamp_utc",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "wellhead_id": {
+          "name": "wellhead_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "parameter_type_id": {
+          "name": "parameter_type_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "mapping_id": {
+          "name": "mapping_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "raw_value": {
+          "name": "raw_value",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "inserted_at": {
+          "name": "inserted_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "parameterreading_timestamp_utc_idx": {
+          "name": "parameterreading_timestamp_utc_idx",
+          "columns": [
+            {
+              "expression": "timestamp_utc",
+              "isExpression": false,
+              "asc": false,
+              "nulls": "first",
+              "opclass": "timestamptz_ops"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "parameterreading_mapping_id_fkey": {
+          "name": "parameterreading_mapping_id_fkey",
+          "tableFrom": "parameterreading",
+          "tableTo": "deviceparametermapping",
+          "columnsFrom": [
+            "mapping_id"
+          ],
+          "columnsTo": [
+            "mapping_id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "parameterreading_parameter_type_id_fkey": {
+          "name": "parameterreading_parameter_type_id_fkey",
+          "tableFrom": "parameterreading",
+          "tableTo": "parametertype",
+          "columnsFrom": [
+            "parameter_type_id"
+          ],
+          "columnsTo": [
+            "parameter_type_id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "parameterreading_wellhead_id_fkey": {
+          "name": "parameterreading_wellhead_id_fkey",
+          "tableFrom": "parameterreading",
+          "tableTo": "wellhead",
+          "columnsFrom": [
+            "wellhead_id"
+          ],
+          "columnsTo": [
+            "wellhead_id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "parameterreading_pkey": {
+          "name": "parameterreading_pkey",
+          "columns": [
+            "parameter_reading_id",
+            "timestamp_utc"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.parametertype": {
+      "name": "parametertype",
+      "schema": "",
+      "columns": {
+        "parameter_type_id": {
+          "name": "parameter_type_id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "code": {
+          "name": "code",
+          "type": "varchar(100)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "display_name": {
+          "name": "display_name",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "canonical_unit": {
+          "name": "canonical_unit",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "data_type": {
+          "name": "data_type",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "normal_min": {
+          "name": "normal_min",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "normal_max": {
+          "name": "normal_max",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "parametertype_code_key": {
+          "name": "parametertype_code_key",
+          "nullsNotDistinct": false,
+          "columns": [
+            "code"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.wellhead": {
+      "name": "wellhead",
+      "schema": "",
+      "columns": {
+        "wellhead_id": {
+          "name": "wellhead_id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "location_id": {
+          "name": "location_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "device_id": {
+          "name": "device_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "type": {
+          "name": "type",
+          "type": "varchar(100)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status": {
+          "name": "status",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "'active'"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "wellhead_device_id_fkey": {
+          "name": "wellhead_device_id_fkey",
+          "tableFrom": "wellhead",
+          "tableTo": "device",
+          "columnsFrom": [
+            "device_id"
+          ],
+          "columnsTo": [
+            "device_id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "wellhead_location_id_fkey": {
+          "name": "wellhead_location_id_fkey",
+          "tableFrom": "wellhead",
+          "tableTo": "location",
+          "columnsFrom": [
+            "location_id"
+          ],
+          "columnsTo": [
+            "location_id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "wellhead_device_id_key": {
+          "name": "wellhead_device_id_key",
+          "nullsNotDistinct": false,
+          "columns": [
+            "device_id"
+          ]
+        },
+        "wellhead_name_key": {
+          "name": "wellhead_name_key",
+          "nullsNotDistinct": false,
+          "columns": [
+            "name"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.users": {
+      "name": "users",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "email": {
+          "name": "email",
+          "type": "varchar(256)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "first_name": {
+          "name": "first_name",
+          "type": "varchar(256)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "last_name": {
+          "name": "last_name",
+          "type": "varchar(256)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "user_name": {
+          "name": "user_name",
+          "type": "varchar(256)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "phone_number": {
+          "name": "phone_number",
+          "type": "varchar(256)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "bio": {
+          "name": "bio",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "image": {
+          "name": "image",
+          "type": "varchar(256)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "role": {
+          "name": "role",
+          "type": "role",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "status": {
+          "name": "status",
+          "type": "status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "'ACTIVE'"
+        },
+        "deleted": {
+          "name": "deleted",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "deleted_at": {
+          "name": "deleted_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "encrypted_password": {
+          "name": "encrypted_password",
+          "type": "varchar(256)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "last_signed_in": {
+          "name": "last_signed_in",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "users_email_unique": {
+          "name": "users_email_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "email"
+          ]
+        },
+        "users_user_name_unique": {
+          "name": "users_user_name_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "user_name"
+          ]
+        },
+        "users_phone_number_unique": {
+          "name": "users_phone_number_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "phone_number"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    }
+  },
+  "enums": {
+    "public.status": {
+      "name": "status",
+      "schema": "public",
+      "values": [
+        "ACTIVE",
+        "DISABLED"
+      ]
+    },
+    "public.role": {
+      "name": "role",
+      "schema": "public",
+      "values": [
+        "USER",
+        "ADMIN",
+        "OPERATIONS"
+      ]
+    }
+  },
+  "schemas": {},
+  "sequences": {},
+  "roles": {},
+  "policies": {},
+  "views": {
+    "public.mv_daily_alarm_counts": {
+      "columns": {
+        "bucket_day": {
+          "name": "bucket_day",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "wellhead_id": {
+          "name": "wellhead_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "wellhead_name": {
+          "name": "wellhead_name",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "location_name": {
+          "name": "location_name",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "parameter_display_name": {
+          "name": "parameter_display_name",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "severity_level": {
+          "name": "severity_level",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "total_alarms_triggered": {
+          "name": "total_alarms_triggered",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "definition": "SELECT _materialized_hypertable_7.bucket_day, _materialized_hypertable_7.wellhead_id, _materialized_hypertable_7.wellhead_name, _materialized_hypertable_7.location_name, _materialized_hypertable_7.parameter_display_name, _materialized_hypertable_7.severity_level, _materialized_hypertable_7.total_alarms_triggered FROM _timescaledb_internal._materialized_hypertable_7",
+      "name": "mv_daily_alarm_counts",
+      "schema": "public",
+      "isExisting": false,
+      "materialized": false
+    },
+    "public.mv_daily_all_parameter_summary": {
+      "columns": {
+        "bucket_day": {
+          "name": "bucket_day",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "wellhead_id": {
+          "name": "wellhead_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "wellhead_name": {
+          "name": "wellhead_name",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "location_name": {
+          "name": "location_name",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "field_name": {
+          "name": "field_name",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "parameter_code": {
+          "name": "parameter_code",
+          "type": "varchar(100)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "parameter_display_name": {
+          "name": "parameter_display_name",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "canonical_unit": {
+          "name": "canonical_unit",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "daily_avg_value": {
+          "name": "daily_avg_value",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "daily_min_value": {
+          "name": "daily_min_value",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "daily_max_value": {
+          "name": "daily_max_value",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "daily_stddev_value": {
+          "name": "daily_stddev_value",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "reading_count": {
+          "name": "reading_count",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "definition": "SELECT _materialized_hypertable_6.bucket_day, _materialized_hypertable_6.wellhead_id, _materialized_hypertable_6.wellhead_name, _materialized_hypertable_6.location_name, _materialized_hypertable_6.field_name, _materialized_hypertable_6.parameter_code, _materialized_hypertable_6.parameter_display_name, _materialized_hypertable_6.canonical_unit, _materialized_hypertable_6.daily_avg_value, _materialized_hypertable_6.daily_min_value, _materialized_hypertable_6.daily_max_value, _materialized_hypertable_6.daily_stddev_value, _materialized_hypertable_6.reading_count FROM _timescaledb_internal._materialized_hypertable_6",
+      "name": "mv_daily_all_parameter_summary",
+      "schema": "public",
+      "isExisting": false,
+      "materialized": false
+    },
+    "public.mv_hourly_pressure_trends": {
+      "columns": {
+        "bucket_time": {
+          "name": "bucket_time",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "wellhead_id": {
+          "name": "wellhead_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "wellhead_name": {
+          "name": "wellhead_name",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "location_name": {
+          "name": "location_name",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "field_name": {
+          "name": "field_name",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "parameter_code": {
+          "name": "parameter_code",
+          "type": "varchar(100)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "parameter_display_name": {
+          "name": "parameter_display_name",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "canonical_unit": {
+          "name": "canonical_unit",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "avg_value": {
+          "name": "avg_value",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "min_value": {
+          "name": "min_value",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "max_value": {
+          "name": "max_value",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "reading_count": {
+          "name": "reading_count",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "definition": "SELECT _materialized_hypertable_3.bucket_time, _materialized_hypertable_3.wellhead_id, _materialized_hypertable_3.wellhead_name, _materialized_hypertable_3.location_name, _materialized_hypertable_3.field_name, _materialized_hypertable_3.parameter_code, _materialized_hypertable_3.parameter_display_name, _materialized_hypertable_3.canonical_unit, _materialized_hypertable_3.avg_value, _materialized_hypertable_3.min_value, _materialized_hypertable_3.max_value, _materialized_hypertable_3.reading_count FROM _timescaledb_internal._materialized_hypertable_3",
+      "name": "mv_hourly_pressure_trends",
+      "schema": "public",
+      "isExisting": false,
+      "materialized": false
+    },
+    "public.mv_hourly_temp_flow_trends": {
+      "columns": {
+        "bucket_time": {
+          "name": "bucket_time",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "wellhead_id": {
+          "name": "wellhead_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "wellhead_name": {
+          "name": "wellhead_name",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "location_name": {
+          "name": "location_name",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "field_name": {
+          "name": "field_name",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "parameter_code": {
+          "name": "parameter_code",
+          "type": "varchar(100)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "parameter_display_name": {
+          "name": "parameter_display_name",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "canonical_unit": {
+          "name": "canonical_unit",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "avg_value": {
+          "name": "avg_value",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "min_value": {
+          "name": "min_value",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "max_value": {
+          "name": "max_value",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "reading_count": {
+          "name": "reading_count",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "definition": "SELECT _materialized_hypertable_4.bucket_time, _materialized_hypertable_4.wellhead_id, _materialized_hypertable_4.wellhead_name, _materialized_hypertable_4.location_name, _materialized_hypertable_4.field_name, _materialized_hypertable_4.parameter_code, _materialized_hypertable_4.parameter_display_name, _materialized_hypertable_4.canonical_unit, _materialized_hypertable_4.avg_value, _materialized_hypertable_4.min_value, _materialized_hypertable_4.max_value, _materialized_hypertable_4.reading_count FROM _timescaledb_internal._materialized_hypertable_4",
+      "name": "mv_hourly_temp_flow_trends",
+      "schema": "public",
+      "isExisting": false,
+      "materialized": false
+    },
+    "public.mv_hourly_water_cut_gor_trends": {
+      "columns": {
+        "bucket_time": {
+          "name": "bucket_time",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "wellhead_id": {
+          "name": "wellhead_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "wellhead_name": {
+          "name": "wellhead_name",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "location_name": {
+          "name": "location_name",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "field_name": {
+          "name": "field_name",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "parameter_code": {
+          "name": "parameter_code",
+          "type": "varchar(100)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "parameter_display_name": {
+          "name": "parameter_display_name",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "canonical_unit": {
+          "name": "canonical_unit",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "avg_value": {
+          "name": "avg_value",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "min_value": {
+          "name": "min_value",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "max_value": {
+          "name": "max_value",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "reading_count": {
+          "name": "reading_count",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "definition": "SELECT _materialized_hypertable_5.bucket_time, _materialized_hypertable_5.wellhead_id, _materialized_hypertable_5.wellhead_name, _materialized_hypertable_5.location_name, _materialized_hypertable_5.field_name, _materialized_hypertable_5.parameter_code, _materialized_hypertable_5.parameter_display_name, _materialized_hypertable_5.canonical_unit, _materialized_hypertable_5.avg_value, _materialized_hypertable_5.min_value, _materialized_hypertable_5.max_value, _materialized_hypertable_5.reading_count FROM _timescaledb_internal._materialized_hypertable_5",
+      "name": "mv_hourly_water_cut_gor_trends",
+      "schema": "public",
+      "isExisting": false,
+      "materialized": false
+    },
+    "public.v_active_alarms": {
+      "columns": {
+        "event_id": {
+          "name": "event_id",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "triggered_at": {
+          "name": "triggered_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "severity_level": {
+          "name": "severity_level",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "triggered_value": {
+          "name": "triggered_value",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "wellhead_id": {
+          "name": "wellhead_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "wellhead_name": {
+          "name": "wellhead_name",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "location_name": {
+          "name": "location_name",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "field_name": {
+          "name": "field_name",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "parameter_display_name": {
+          "name": "parameter_display_name",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "operator": {
+          "name": "operator",
+          "type": "varchar(10)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "threshold_value": {
+          "name": "threshold_value",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "alarm_rule_id": {
+          "name": "alarm_rule_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "definition": "SELECT ae.event_id, ae.triggered_at, ae.severity_level, ae.triggered_value, wh.wellhead_id, wh.name AS wellhead_name, loc.name AS location_name, f.name AS field_name, pt.display_name AS parameter_display_name, ar.operator, ar.threshold_value, ar.alarm_rule_id FROM alarmevent ae JOIN wellhead wh ON ae.wellhead_id = wh.wellhead_id JOIN location loc ON wh.location_id = loc.location_id JOIN field f ON loc.field_id = f.field_id JOIN alarmrule ar ON ae.alarm_rule_id = ar.alarm_rule_id JOIN parametertype pt ON ar.parameter_type_id = pt.parameter_type_id WHERE ae.cleared_at IS NULL",
+      "name": "v_active_alarms",
+      "schema": "public",
+      "isExisting": false,
+      "materialized": false
+    },
+    "public.v_wellhead_parameter_readings": {
+      "columns": {
+        "timestamp_utc": {
+          "name": "timestamp_utc",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "raw_value": {
+          "name": "raw_value",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "wellhead_id": {
+          "name": "wellhead_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "wellhead_name": {
+          "name": "wellhead_name",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "wellhead_type": {
+          "name": "wellhead_type",
+          "type": "varchar(100)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "location_id": {
+          "name": "location_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "location_name": {
+          "name": "location_name",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "field_id": {
+          "name": "field_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "field_name": {
+          "name": "field_name",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "parameter_type_id": {
+          "name": "parameter_type_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "parameter_code": {
+          "name": "parameter_code",
+          "type": "varchar(100)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "parameter_display_name": {
+          "name": "parameter_display_name",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "canonical_unit": {
+          "name": "canonical_unit",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "data_type": {
+          "name": "data_type",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "normal_min": {
+          "name": "normal_min",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "normal_max": {
+          "name": "normal_max",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "definition": "SELECT pr.timestamp_utc, pr.raw_value, wh.wellhead_id, wh.name AS wellhead_name, wh.type AS wellhead_type, loc.location_id, loc.name AS location_name, f.field_id, f.name AS field_name, pt.parameter_type_id, pt.code AS parameter_code, pt.display_name AS parameter_display_name, pt.canonical_unit, pt.data_type, pt.normal_min, pt.normal_max FROM parameterreading pr JOIN wellhead wh ON pr.wellhead_id = wh.wellhead_id JOIN location loc ON wh.location_id = loc.location_id JOIN field f ON loc.field_id = f.field_id JOIN parametertype pt ON pr.parameter_type_id = pt.parameter_type_id",
+      "name": "v_wellhead_parameter_readings",
+      "schema": "public",
+      "isExisting": false,
+      "materialized": false
+    }
+  },
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}

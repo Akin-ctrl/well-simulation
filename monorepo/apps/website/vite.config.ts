@@ -5,6 +5,7 @@ import { reactRouterDevTools } from 'react-router-devtools';
 import { defineConfig } from 'vite';
 import svgr from 'vite-plugin-svgr';
 import tsconfigPaths from 'vite-tsconfig-paths';
+import { SERVER_BASE_URL } from '@corsight/utils/configs';
 
 export default defineConfig({
   build: {
@@ -17,4 +18,13 @@ export default defineConfig({
     tsconfigPaths(),
     svgr(),
   ],
+  server: {
+    proxy: {
+      '/api': {
+        target: SERVER_BASE_URL,
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api/, ''),
+      },
+    },
+  },
 });

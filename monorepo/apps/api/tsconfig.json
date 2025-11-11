@@ -1,16 +1,25 @@
 {
+  "extends": "@corsight/tsconfig/base.json",
   "compilerOptions": {
-    "target": "ESNext",
-    "module": "NodeNext",
     "strict": true,
-    "verbatimModuleSyntax": true,
-    "skipLibCheck": true,
-    "types": [
-      "node"
+    "plugins": [
+      {
+        "name": "next"
+      }
     ],
-    "jsx": "react-jsx",
-    "jsxImportSource": "hono/jsx",
-    "outDir": "./dist"
+    "lib": ["dom", "dom.iterable", "esnext", "webworker"],
+    "allowJs": true,
+    "noEmit": true,
+    "incremental": true,
+    "module": "esnext",
+    "resolveJsonModule": true,
+    "jsx": "preserve",
+    "target": "ES2017"
   },
-  "exclude": ["node_modules"]
+  "include": [
+    "next-env.d.ts",
+    "**/*.ts",
+    "**/*.tsx",
+    ".next/types/**/*.ts", ],
+  "exclude": ["node_modules", "public/sw.js"]
 }

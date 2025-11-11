@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "Corsight dto package",
   "main": "index.js",
+  "type": "module",
   "author": "Osayame Emmanuel",
   "license": "MIT",
   "dependencies": {
