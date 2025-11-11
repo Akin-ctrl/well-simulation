@@ -1,0 +1,16 @@
+{
+  "name": "@corsight/dto",
+  "version": "1.0.0",
+  "description": "Corsight dto package",
+  "main": "index.js",
+  "author": "Osayame Emmanuel",
+  "license": "MIT",
+  "dependencies": {
+    "zod": "^4.1.12"
+  },
+  "devDependencies": {
+    "eslint-config-custom": "*",
+    "tsconfig": "*"
+  },
+  "private": true
+}
