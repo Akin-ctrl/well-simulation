@@ -43,17 +43,10 @@ function RenderLinks(
   handleToggle: (index: number) => void,
   expanded: boolean
 ) {
-  const businessLink = '/';
-
   const location = useLocation();
 
   return menuItems.map((item, index) => {
-    function getPathAfterBusinessId(path: string) {
-      const match = path.match(/^\/business\/\d+\/(.+)$/);
-      return '/' + (match ? match[1] : '');
-    }
-
-    const isActive = getPathAfterBusinessId(location.pathname) === item.href;
+    const isActive = location.pathname === item.href;
     const isDropdownOpen = openCollapsible === index;
 
     return (
@@ -75,7 +68,7 @@ function RenderLinks(
                     ? 'bg-control-transparent-bgColor-selected'
                     : ''
                 )}>
-                {item.icon}
+                {item.icon as any}
               </CollapsibleTrigger>
 
               {expanded && (
@@ -111,14 +104,14 @@ function RenderLinks(
                     to={
                       dropdownItem.href?.startsWith('http')
                         ? dropdownItem.href
-                        : businessLink + dropdownItem.href!
+                        : dropdownItem.href!
                     }
                     state={{
-                      prevLink: businessLink + dropdownItem.href!,
+                      prevLink: dropdownItem.href!,
                     }}
                     target={dropdownItem?.new ? '_blank' : '_self'}
                     className={cn(
-                      '!text-body-small !rounded-8px button button-md control-transparent ml-24 mr-1 flex items-center justify-start',
+                      'text-body-small! rounded-8px! button button-md control-transparent ml-24 mr-1 flex items-center justify-start',
                       isChildActive
                         ? 'bg-control-transparent-bgColor-selected font-semibold'
                         : 'text-fgColor-muted hover:text-fgColor-default transition-colors',
@@ -136,44 +129,29 @@ function RenderLinks(
             </CollapsibleContent>
           </Collapsible>
         ) : (
-          <div
+          <Link
+            to={item.href?.startsWith('http') ? item.href : item.href!}
+            prefetch='viewport'
             className={cn(
               'card flex items-center gap-3 mx-3 p-3!',
               expanded ? '' : ''
-            )}>
-            <Link
-              prefetch='viewport'
+            )}
+            state={{
+              prevLink: location.pathname,
+            }}>
+            <span
               className={cn(
-                'button control-transparent button-md text-fgColor-white hover:text- aspect-square w-auto p-0 [&>svg]:size-4',
+                'button control-transparent button-md text-fgColor-white hover:bg-neutral-200 aspect-square w-auto p-0 [&>svg]:size-4',
                 isActive ? 'bg-control-transparent-bgColor-selected' : '',
                 item?.disabled ? 'pointer-events-none opacity-50' : ''
-              )}
-              to={
-                item.href?.startsWith('http')
-                  ? item.href
-                  : businessLink + item.href!
-              }
-              state={{
-                prevLink: 'fff',
-              }}
-              target={item?.new ? '_blank' : '_self'}>
+              )}>
               {item.icon}
-            </Link>
+            </span>
 
             {expanded && (
-              <Link
-                to={
-                  item.href?.startsWith('http')
-                    ? item.href
-                    : businessLink + item.href!
-                }
-                prefetch='viewport'
-                state={{
-                  prevLink: location.pathname,
-                }}
-                target={item?.new ? '_blank' : '_self'}
+              <div
                 className={cn(
-                  'button button-md control-transparent w-full justify-start [&>svg]:data-[state=closed]:rotate-0 [&>svg]:data-[state=open]:rotate-90',
+                  'button button-md w-full justify-start [&>svg]:data-[state=closed]:rotate-0 [&>svg]:data-[state=open]:rotate-90',
                   isActive
                     ? 'bg-control-transparent-bgColor-selected font-semibold'
                     : 'text-fgColor-muted',
@@ -183,9 +161,9 @@ function RenderLinks(
                 {item?.new ? (
                   <ArrowUpRightIcon className='ml-auto size-4' />
                 ) : null}
-              </Link>
+              </div>
             )}
-          </div>
+          </Link>
         )}
       </Fragment>
     );

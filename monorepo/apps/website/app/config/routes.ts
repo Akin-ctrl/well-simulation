@@ -8,5 +8,7 @@ export const routes = {
   dashboard: {
     overview: '/',
     analytics: '/analytics',
+    settings: '/settings',
   },
+  help: '/help',
 };

@@ -18,7 +18,7 @@ export async function clientAction(args: Route.ClientActionArgs) {
   >;
   try {
     await fetchFn(client.auth.register.$post({ json: formData }));
-    return redirect(routes.dashboard.overview);
+    return redirect(routes.auth.login);
   } catch (err) {
     const error = err as ApiError;
     const msg = error.msg ?? 'Registration failed';

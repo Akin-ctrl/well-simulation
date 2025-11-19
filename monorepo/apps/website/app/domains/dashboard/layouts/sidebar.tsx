@@ -40,7 +40,7 @@ export function DesktopNav() {
               'flex gap-1 items-center',
               expanded ? 'pl-5' : 'pl-2'
             )}
-            to={routes.business.dashboard}>
+            to={routes.dashboard.overview}>
             <Logo className='size-7' />
             {expanded && (
               <span className='text-lg font-semibold text-[#023BB5] transition-all duration-300'>

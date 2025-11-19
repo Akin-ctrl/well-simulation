@@ -1,6 +1,7 @@
 import {
   ActivitySquareIcon,
   BotIcon,
+  ChartBarIcon,
   CogIcon,
   HelpCircleIcon,
   Laptop2Icon,
@@ -29,23 +30,23 @@ export type MenuItem = {
 export const menuItems = [
   {
     name: 'Overview',
-    href: '/',
+    href: routes.dashboard.overview,
     icon: <LayoutDashboardIcon />,
   },
   {
     name: 'Analytics',
-    icon: <ScrollTextIcon />,
-    href: '/',
+    icon: <ChartBarIcon />,
+    href: routes.dashboard.analytics,
   },
   {
     name: 'Settings',
-    href: '/',
+    href: routes.dashboard.settings,
     icon: <CogIcon />,
   },
 
   {
     name: 'Help',
-    href: '/',
+    href: routes.help,
     icon: <HelpCircleIcon />,
     disabled: true,
   },

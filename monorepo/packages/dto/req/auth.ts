@@ -15,6 +15,6 @@ export const registerSchema = z
   });
 
 export const loginSchema = z.object({
-  email: z.email({ message: 'Please enter a valid email address' }),
+  emailOrUsername: z.string().min(3, 'Identifier must be at least 3 characters'),
   password: z.string().min(6, 'Password must be at least 6 characters'),
 });

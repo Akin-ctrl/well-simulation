@@ -14,6 +14,9 @@ type Pages = {
   "/": {
     params: {};
   };
+  "/analytics": {
+    params: {};
+  };
   "/register": {
     params: {};
   };
@@ -30,11 +33,15 @@ type Pages = {
 type RouteFiles = {
   "root.tsx": {
     id: "root";
-    page: "/" | "/register" | "/login" | "/*";
+    page: "/" | "/analytics" | "/register" | "/login" | "/*";
   };
   "routes/_dashboard.tsx": {
     id: "routes/_dashboard";
-    page: "/";
+    page: "/analytics" | "/";
+  };
+  "routes/_dashboard.analytics.tsx": {
+    id: "routes/_dashboard.analytics";
+    page: "/analytics";
   };
   "routes/_dashboard._index.tsx": {
     id: "routes/_dashboard._index";
@@ -61,6 +68,7 @@ type RouteFiles = {
 type RouteModules = {
   "root": typeof import("./app/root.tsx");
   "routes/_dashboard": typeof import("./app/routes/_dashboard.tsx");
+  "routes/_dashboard.analytics": typeof import("./app/routes/_dashboard.analytics.tsx");
   "routes/_dashboard._index": typeof import("./app/routes/_dashboard._index.tsx");
   "routes/_auth": typeof import("./app/routes/_auth.tsx");
   "routes/_auth.register": typeof import("./app/routes/_auth.register.tsx");
