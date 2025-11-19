@@ -1,0 +1,14 @@
+{
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["*"]
+    }
+  },
+  "exclude": [
+    "**/deprecated/**",
+    "**/deprecated",
+    "node_modules",
+    "**/node_modules/*"
+  ]
+}

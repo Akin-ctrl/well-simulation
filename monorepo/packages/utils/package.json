@@ -1,0 +1,20 @@
+{
+  "name": "@corsight/utils",
+  "version": "1.0.0",
+  "description": "Corsight utils package",
+  "main": "index.js",
+  "author": "Osayame Emmanuel",
+  "license": "MIT",
+  "dependencies": {
+    "clsx": "^2.1.1",
+    "js-cookie": "^3.0.5",
+    "sonner": "^2.0.7",
+    "tailwind-merge": "^2.6.0"
+  },
+  "devDependencies": {
+    "@types/js-cookie": "^3.0.4",
+    "eslint-config-custom": "*",
+    "tsconfig": "*"
+  },
+  "private": true
+}

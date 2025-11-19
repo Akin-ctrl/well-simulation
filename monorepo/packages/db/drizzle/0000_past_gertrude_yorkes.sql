@@ -1,0 +1,113 @@
+
+-- CREATE TABLE "field" (
+-- 	"field_id" serial PRIMARY KEY NOT NULL,
+-- 	"name" varchar(255) NOT NULL,
+-- 	"description" text,
+-- 	CONSTRAINT "field_name_key" UNIQUE("name")
+-- );
+-- --> statement-breakpoint
+-- CREATE TABLE "location" (
+-- 	"location_id" serial PRIMARY KEY NOT NULL,
+-- 	"field_id" integer NOT NULL,
+-- 	"name" varchar(255) NOT NULL,
+-- 	"address" text,
+-- 	"latitude" double precision,
+-- 	"longitude" double precision
+-- );
+-- --> statement-breakpoint
+-- CREATE TABLE "wellhead" (
+-- 	"wellhead_id" serial PRIMARY KEY NOT NULL,
+-- 	"location_id" integer NOT NULL,
+-- 	"device_id" integer NOT NULL,
+-- 	"name" varchar(255) NOT NULL,
+-- 	"type" varchar(100),
+-- 	"status" varchar(50) DEFAULT 'active',
+-- 	CONSTRAINT "wellhead_device_id_key" UNIQUE("device_id"),
+-- 	CONSTRAINT "wellhead_name_key" UNIQUE("name")
+-- );
+-- --> statement-breakpoint
+-- CREATE TABLE "device" (
+-- 	"device_id" serial PRIMARY KEY NOT NULL,
+-- 	"name" varchar(255) NOT NULL,
+-- 	"modbus_unit_id" integer NOT NULL,
+-- 	"status" varchar(50) DEFAULT 'active',
+-- 	CONSTRAINT "device_name_key" UNIQUE("name")
+-- );
+-- --> statement-breakpoint
+-- CREATE TABLE "deviceparametermapping" (
+-- 	"mapping_id" serial PRIMARY KEY NOT NULL,
+-- 	"device_id" integer NOT NULL,
+-- 	"parameter_type_id" integer NOT NULL,
+-- 	"modbus_register" integer NOT NULL,
+-- 	"function_code" smallint NOT NULL,
+-- 	"register_type" varchar(50) NOT NULL,
+-- 	"active" boolean DEFAULT true,
+-- 	CONSTRAINT "deviceparametermapping_device_id_modbus_register_key" UNIQUE("device_id","modbus_register")
+-- );
+-- --> statement-breakpoint
+-- CREATE TABLE "parametertype" (
+-- 	"parameter_type_id" serial PRIMARY KEY NOT NULL,
+-- 	"code" varchar(100) NOT NULL,
+-- 	"display_name" varchar(255) NOT NULL,
+-- 	"canonical_unit" varchar(50),
+-- 	"data_type" varchar(50) NOT NULL,
+-- 	"normal_min" double precision,
+-- 	"normal_max" double precision,
+-- 	CONSTRAINT "parametertype_code_key" UNIQUE("code")
+-- );
+-- --> statement-breakpoint
+-- CREATE TABLE "alarmrule" (
+-- 	"alarm_rule_id" serial PRIMARY KEY NOT NULL,
+-- 	"parameter_type_id" integer NOT NULL,
+-- 	"severity_level" varchar(50) NOT NULL,
+-- 	"operator" varchar(10) NOT NULL,
+-- 	"threshold_value" double precision NOT NULL,
+-- 	"active" boolean DEFAULT true,
+-- 	"created_at" timestamp with time zone DEFAULT now()
+-- );
+-- --> statement-breakpoint
+-- CREATE TABLE "parameterreading" (
+-- 	"parameter_reading_id" bigserial NOT NULL,
+-- 	"timestamp_utc" timestamp with time zone NOT NULL,
+-- 	"wellhead_id" integer NOT NULL,
+-- 	"parameter_type_id" integer NOT NULL,
+-- 	"mapping_id" integer NOT NULL,
+-- 	"raw_value" double precision NOT NULL,
+-- 	"inserted_at" timestamp with time zone DEFAULT now(),
+-- 	CONSTRAINT "parameterreading_pkey" PRIMARY KEY("parameter_reading_id","timestamp_utc")
+-- );
+-- --> statement-breakpoint
+-- CREATE TABLE "alarmevent" (
+-- 	"event_id" bigserial NOT NULL,
+-- 	"alarm_rule_id" integer NOT NULL,
+-- 	"parameter_reading_id" bigint NOT NULL,
+-- 	"timestamp_utc" timestamp with time zone NOT NULL,
+-- 	"wellhead_id" integer NOT NULL,
+-- 	"triggered_at" timestamp with time zone NOT NULL,
+-- 	"cleared_at" timestamp with time zone,
+-- 	"severity_level" varchar(50) NOT NULL,
+-- 	"triggered_value" double precision NOT NULL,
+-- 	CONSTRAINT "alarmevent_pkey" PRIMARY KEY("event_id","triggered_at")
+-- );
+-- --> statement-breakpoint
+-- ALTER TABLE "location" ADD CONSTRAINT "location_field_id_fkey" FOREIGN KEY ("field_id") REFERENCES "public"."field"("field_id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+-- ALTER TABLE "wellhead" ADD CONSTRAINT "wellhead_device_id_fkey" FOREIGN KEY ("device_id") REFERENCES "public"."device"("device_id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+-- ALTER TABLE "wellhead" ADD CONSTRAINT "wellhead_location_id_fkey" FOREIGN KEY ("location_id") REFERENCES "public"."location"("location_id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+-- ALTER TABLE "deviceparametermapping" ADD CONSTRAINT "deviceparametermapping_device_id_fkey" FOREIGN KEY ("device_id") REFERENCES "public"."device"("device_id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+-- ALTER TABLE "deviceparametermapping" ADD CONSTRAINT "deviceparametermapping_parameter_type_id_fkey" FOREIGN KEY ("parameter_type_id") REFERENCES "public"."parametertype"("parameter_type_id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+-- ALTER TABLE "alarmrule" ADD CONSTRAINT "alarmrule_parameter_type_id_fkey" FOREIGN KEY ("parameter_type_id") REFERENCES "public"."parametertype"("parameter_type_id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+-- ALTER TABLE "parameterreading" ADD CONSTRAINT "parameterreading_mapping_id_fkey" FOREIGN KEY ("mapping_id") REFERENCES "public"."deviceparametermapping"("mapping_id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+-- ALTER TABLE "parameterreading" ADD CONSTRAINT "parameterreading_parameter_type_id_fkey" FOREIGN KEY ("parameter_type_id") REFERENCES "public"."parametertype"("parameter_type_id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+-- ALTER TABLE "parameterreading" ADD CONSTRAINT "parameterreading_wellhead_id_fkey" FOREIGN KEY ("wellhead_id") REFERENCES "public"."wellhead"("wellhead_id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+-- ALTER TABLE "alarmevent" ADD CONSTRAINT "alarmevent_alarm_rule_id_fkey" FOREIGN KEY ("alarm_rule_id") REFERENCES "public"."alarmrule"("alarm_rule_id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+-- ALTER TABLE "alarmevent" ADD CONSTRAINT "alarmevent_wellhead_id_fkey" FOREIGN KEY ("wellhead_id") REFERENCES "public"."wellhead"("wellhead_id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+-- CREATE INDEX "parameterreading_timestamp_utc_idx" ON "parameterreading" USING btree ("timestamp_utc" timestamptz_ops);--> statement-breakpoint
+-- CREATE INDEX "alarmevent_triggered_at_idx" ON "alarmevent" USING btree ("triggered_at" timestamptz_ops);--> statement-breakpoint
+-- CREATE VIEW "public"."v_wellhead_parameter_readings" AS (SELECT pr.timestamp_utc, pr.raw_value, wh.wellhead_id, wh.name AS wellhead_name, wh.type AS wellhead_type, loc.location_id, loc.name AS location_name, f.field_id, f.name AS field_name, pt.parameter_type_id, pt.code AS parameter_code, pt.display_name AS parameter_display_name, pt.canonical_unit, pt.data_type, pt.normal_min, pt.normal_max FROM parameterreading pr JOIN wellhead wh ON pr.wellhead_id = wh.wellhead_id JOIN location loc ON wh.location_id = loc.location_id JOIN field f ON loc.field_id = f.field_id JOIN parametertype pt ON pr.parameter_type_id = pt.parameter_type_id);--> statement-breakpoint
+-- CREATE VIEW "public"."mv_hourly_pressure_trends" AS (SELECT _materialized_hypertable_3.bucket_time, _materialized_hypertable_3.wellhead_id, _materialized_hypertable_3.wellhead_name, _materialized_hypertable_3.location_name, _materialized_hypertable_3.field_name, _materialized_hypertable_3.parameter_code, _materialized_hypertable_3.parameter_display_name, _materialized_hypertable_3.canonical_unit, _materialized_hypertable_3.avg_value, _materialized_hypertable_3.min_value, _materialized_hypertable_3.max_value, _materialized_hypertable_3.reading_count FROM _timescaledb_internal._materialized_hypertable_3);--> statement-breakpoint
+-- CREATE VIEW "public"."mv_hourly_temp_flow_trends" AS (SELECT _materialized_hypertable_4.bucket_time, _materialized_hypertable_4.wellhead_id, _materialized_hypertable_4.wellhead_name, _materialized_hypertable_4.location_name, _materialized_hypertable_4.field_name, _materialized_hypertable_4.parameter_code, _materialized_hypertable_4.parameter_display_name, _materialized_hypertable_4.canonical_unit, _materialized_hypertable_4.avg_value, _materialized_hypertable_4.min_value, _materialized_hypertable_4.max_value, _materialized_hypertable_4.reading_count FROM _timescaledb_internal._materialized_hypertable_4);--> statement-breakpoint
+-- CREATE VIEW "public"."mv_hourly_water_cut_gor_trends" AS (SELECT _materialized_hypertable_5.bucket_time, _materialized_hypertable_5.wellhead_id, _materialized_hypertable_5.wellhead_name, _materialized_hypertable_5.location_name, _materialized_hypertable_5.field_name, _materialized_hypertable_5.parameter_code, _materialized_hypertable_5.parameter_display_name, _materialized_hypertable_5.canonical_unit, _materialized_hypertable_5.avg_value, _materialized_hypertable_5.min_value, _materialized_hypertable_5.max_value, _materialized_hypertable_5.reading_count FROM _timescaledb_internal._materialized_hypertable_5);--> statement-breakpoint
+-- CREATE VIEW "public"."mv_daily_all_parameter_summary" AS (SELECT _materialized_hypertable_6.bucket_day, _materialized_hypertable_6.wellhead_id, _materialized_hypertable_6.wellhead_name, _materialized_hypertable_6.location_name, _materialized_hypertable_6.field_name, _materialized_hypertable_6.parameter_code, _materialized_hypertable_6.parameter_display_name, _materialized_hypertable_6.canonical_unit, _materialized_hypertable_6.daily_avg_value, _materialized_hypertable_6.daily_min_value, _materialized_hypertable_6.daily_max_value, _materialized_hypertable_6.daily_stddev_value, _materialized_hypertable_6.reading_count FROM _timescaledb_internal._materialized_hypertable_6);--> statement-breakpoint
+-- CREATE VIEW "public"."v_active_alarms" AS (SELECT ae.event_id, ae.triggered_at, ae.severity_level, ae.triggered_value, wh.wellhead_id, wh.name AS wellhead_name, loc.name AS location_name, f.name AS field_name, pt.display_name AS parameter_display_name, ar.operator, ar.threshold_value, ar.alarm_rule_id FROM alarmevent ae JOIN wellhead wh ON ae.wellhead_id = wh.wellhead_id JOIN location loc ON wh.location_id = loc.location_id JOIN field f ON loc.field_id = f.field_id JOIN alarmrule ar ON ae.alarm_rule_id = ar.alarm_rule_id JOIN parametertype pt ON ar.parameter_type_id = pt.parameter_type_id WHERE ae.cleared_at IS NULL);--> statement-breakpoint
+-- CREATE VIEW "public"."mv_daily_alarm_counts" AS (SELECT _materialized_hypertable_7.bucket_day, _materialized_hypertable_7.wellhead_id, _materialized_hypertable_7.wellhead_name, _materialized_hypertable_7.location_name, _materialized_hypertable_7.parameter_display_name, _materialized_hypertable_7.severity_level, _materialized_hypertable_7.total_alarms_triggered FROM _timescaledb_internal._materialized_hypertable_7);
+-- */
