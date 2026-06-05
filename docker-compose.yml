@@ -1,0 +1,116 @@
+services:
+  db:
+    image: timescale/timescaledb:latest-pg14
+    container_name: wellhead_db
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+    ports:
+      - "5434:5432"
+    volumes:
+      - timescaledb_data:/var/lib/postgresql/data
+      - ./data/sql/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./data/sql/views.sql:/docker-entrypoint-initdb.d/views.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - wellnet
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: wellhead_pgadmin
+    environment:
+      - PGADMIN_DEFAULT_EMAIL=${PGADMIN_DEFAULT_EMAIL}
+      - PGADMIN_DEFAULT_PASSWORD=${PGADMIN_DEFAULT_PASSWORD}
+    ports:
+      - "5050:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - wellnet
+
+  modbus:
+    build: ./data/src
+    container_name: modbus_gateway
+    command: python modbus_gateway.py
+    ports:
+      - "5020:5020"
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - wellnet
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_HOST: db
+      POSTGRES_PORT: "5432"
+      MODBUS_PORT: ${MODBUS_PORT}
+      MODBUS_BIND_HOST: "0.0.0.0"
+
+  ingestion:
+    build: ./data/src
+    container_name: database_ingestion
+    command: python database_ingestion.py
+    depends_on:
+      db:
+        condition: service_healthy
+      modbus:
+        condition: service_started
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_HOST: db
+      POSTGRES_PORT: "5432"
+      MODBUS_HOST: modbus
+      MODBUS_PORT: ${MODBUS_PORT}
+
+    networks:
+      - wellnet
+
+  api:
+    build:
+      context: ./monorepo
+      dockerfile: apps/api/Dockerfile
+    container_name: corsight_api
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      JWT_SECRET: ${JWT_SECRET}
+    ports:
+      - "3000:3000"
+    networks:
+      - wellnet
+
+  dashboard:
+    build:
+      context: ./monorepo
+      dockerfile: apps/website/Dockerfile
+    container_name: corsight_dashboard
+    depends_on:
+      - api
+    ports:
+      - "8082:80"
+    restart: unless-stopped
+    networks:
+      - wellnet
+
+volumes:
+  timescaledb_data:
+  pgadmin_data:
+
+networks:
+  wellnet:
+    name: wellnet
+    driver: bridge
