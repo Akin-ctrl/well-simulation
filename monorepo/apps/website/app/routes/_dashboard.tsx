@@ -1,11 +1,34 @@
-import { useNavigation, useOutlet } from 'react-router';
+import { redirect, useLoaderData, useNavigation, useOutlet } from 'react-router';
 import { DesktopNav } from '../domains/dashboard/layouts/sidebar';
 import Header from '../domains/dashboard/layouts/header';
 import { cn } from '@corsight/utils/cn';
 import { motion } from 'motion/react';
+import { client, fetchFn } from '../utils/api';
+import { routes } from '../config/routes';
 
-export default function AuthLayout() {
+type DashboardUser = {
+  firstName?: string | null;
+  lastName?: string | null;
+  userName?: string | null;
+  email?: string | null;
+};
+
+type CurrentUserData = {
+  user: DashboardUser;
+};
+
+export async function clientLoader() {
+  try {
+    const response = await fetchFn<CurrentUserData>(client.auth.me.$get());
+    return { user: response.data.user };
+  } catch {
+    return redirect(routes.auth.login);
+  }
+}
+
+export default function DashboardLayout() {
   const outlet = useOutlet();
+  const data = useLoaderData() as CurrentUserData;
 
   const navigation = useNavigation();
   const isNavigating = Boolean(navigation.location);
@@ -15,7 +38,7 @@ export default function AuthLayout() {
       <DesktopNav />
 
       <div className='min-h-dvh grow h-full'>
-        <Header />
+        <Header user={data.user} />
         <motion.main
           className={cn(
             'ease-[cubic-bezier(0.645, 0.045, 0.355, 1)] mx-auto flex justify-center gap-4 transition-opacity duration-150',

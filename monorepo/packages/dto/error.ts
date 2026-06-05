@@ -1,22 +1,33 @@
 export class ApiError extends Error {
   public msg: string;
-  public data?: any;
-  public originalError: any;
+  public data?: unknown;
+  public originalError: unknown;
   public statusCode?: number;
-  public issues?: any[];
+  public issues?: unknown[];
 
   constructor(
-    originalError: any,
+    originalError: unknown,
     msg?: string,
     statusCode?: number,
-    data?: any,
-    issues?: any[]
+    data?: unknown,
+    issues?: unknown[]
   ) {
+    const originalMessage =
+      originalError &&
+      typeof originalError === 'object' &&
+      'message' in originalError &&
+      typeof originalError.message === 'string'
+        ? originalError.message
+        : undefined;
+    const originalApiMessage =
+      originalError &&
+      typeof originalError === 'object' &&
+      'msg' in originalError &&
+      typeof originalError.msg === 'string'
+        ? originalError.msg
+        : undefined;
     const resolvedMsg =
-      msg ||
-      originalError?.msg ||
-      originalError?.message ||
-      'Something went wrong!';
+      msg || originalApiMessage || originalMessage || 'Something went wrong!';
 
     super(resolvedMsg);
 

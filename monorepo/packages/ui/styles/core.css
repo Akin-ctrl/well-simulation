@@ -109,9 +109,6 @@
   @apply rounded-lg border border-[var(--borderColor-default)] bg-[var(--bgColor-default)] p-1;
 }
 
-.popover-item {
-}
-
 .dialog-overlay {
   @apply fixed inset-0 z-30 bg-white/30 dark:bg-black/30;
 }

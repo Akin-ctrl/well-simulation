@@ -2,11 +2,12 @@ import type { MiddlewareHandler } from 'hono';
 import { deleteCookie, getCookie } from 'hono/cookie';
 import { verify } from 'hono/jwt';
 
-const publicRoutes: string[] = ['/auth/*'];
+const publicRoutes: string[] = ['/auth/login', '/auth/register', '/auth/logout'];
 
 export const authMiddleware: MiddlewareHandler = async (c, next) => {
   const cookieToken = getCookie(c, 'auth_token');
   const token = cookieToken ?? c.req.header('Authorization')?.split(' ')[1];
+  const jwtSecret = process.env.JWT_SECRET;
 
   const url = new URL(c.req.url);
   const pathname = url.pathname ?? '';
@@ -25,13 +26,19 @@ export const authMiddleware: MiddlewareHandler = async (c, next) => {
 
   if (token) {
     try {
-      const payload = await verify(token, process.env.JWT_SECRET!);
+      if (!jwtSecret) {
+        return c.json({ msg: 'Authentication is not configured' }, 500);
+      }
+      const payload = await verify(token, jwtSecret);
       c.set('session', payload);
     } catch (e) {
       deleteCookie(c, 'auth_token');
+      if (isPublic) {
+        return next();
+      }
       return c.json({ msg: 'Unauthorized: Invalid or expired token' }, 401);
     }
   }
 
-  await next();
+  return next();
 };

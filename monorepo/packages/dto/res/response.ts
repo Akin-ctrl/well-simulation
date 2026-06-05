@@ -1,6 +1,6 @@
-import { ContentfulStatusCode } from 'hono/utils/http-status';
+import type { ContentfulStatusCode } from 'hono/utils/http-status';
 
-export type ApiRes<T = any> = {
+export type ApiRes<T = unknown> = {
   data: T;
   msg?: string;
   status: ContentfulStatusCode | undefined;

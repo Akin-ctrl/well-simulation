@@ -49,6 +49,10 @@ function RenderLinks(
     const isActive = location.pathname === item.href;
     const isDropdownOpen = openCollapsible === index;
 
+    if (!item.dropdownItems && !item.href) {
+      return null;
+    }
+
     return (
       <Fragment key={index}>
         {item?.dropdownItems ? (
@@ -68,7 +72,7 @@ function RenderLinks(
                     ? 'bg-control-transparent-bgColor-selected'
                     : ''
                 )}>
-                {item.icon as any}
+                {item.icon}
               </CollapsibleTrigger>
 
               {expanded && (
@@ -93,21 +97,19 @@ function RenderLinks(
 
             <CollapsibleContent className='grid h-full gap-1 py-2'>
               {item?.dropdownItems?.map((dropdownItem, idx) => {
-                const isChildActive = location.pathname.includes(
-                  dropdownItem?.href as string
-                );
+                const dropdownHref = dropdownItem.href;
+                if (!dropdownHref) {
+                  return null;
+                }
+                const isChildActive = location.pathname.includes(dropdownHref);
 
                 return (
                   <Link
                     prefetch='viewport'
                     key={idx}
-                    to={
-                      dropdownItem.href?.startsWith('http')
-                        ? dropdownItem.href
-                        : dropdownItem.href!
-                    }
+                    to={dropdownHref}
                     state={{
-                      prevLink: dropdownItem.href!,
+                      prevLink: dropdownHref,
                     }}
                     target={dropdownItem?.new ? '_blank' : '_self'}
                     className={cn(
@@ -130,7 +132,7 @@ function RenderLinks(
           </Collapsible>
         ) : (
           <Link
-            to={item.href?.startsWith('http') ? item.href : item.href!}
+            to={item.href ?? '#'}
             prefetch='viewport'
             className={cn(
               'card flex items-center gap-3 mx-3 p-3!',

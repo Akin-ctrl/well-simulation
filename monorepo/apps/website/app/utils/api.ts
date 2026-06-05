@@ -10,7 +10,7 @@ const isServer = typeof window === 'undefined';
 const baseUrl = isServer ? SERVER_BASE_URL : '/api';
 
 const client = hc<AppType>(baseUrl, {
-  fetch: (input: any, init: any) => {
+  fetch: (input: RequestInfo | URL, init?: RequestInit) => {
     return fetch(input, { ...init, credentials: 'include' });
   },
   async headers() {
@@ -20,12 +20,48 @@ const client = hc<AppType>(baseUrl, {
   },
 });
 
+type ValidationIssue = {
+  path?: Array<string | number>;
+  message: string;
+};
+
+type ErrorResponseBody = Omit<Partial<ApiErr>, 'error'> & {
+  data?: unknown;
+  error?: unknown;
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function isValidationError(error: unknown): error is { issues?: ValidationIssue[] } {
+  return (
+    isRecord(error) &&
+    error.name === 'ZodError' &&
+    (error.issues === undefined || Array.isArray(error.issues))
+  );
+}
+
+function parseErrorBody(value: unknown): ErrorResponseBody {
+  return isRecord(value) ? value : { error: value };
+}
+
+function getErrorMessage(error: unknown): string | undefined {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  if (isRecord(error) && typeof error.message === 'string') {
+    return error.message;
+  }
+  return undefined;
+}
+
 async function fetchFn<T>(
   call: Promise<ClientResponse<ApiRes<T> | ApiErr>>
 ): Promise<ApiRes<T>> {
   try {
     const response = await call;
-    let responseBody: any = null;
+    let responseBody: unknown = null;
 
     try {
       responseBody = await response.json();
@@ -46,40 +82,46 @@ async function fetchFn<T>(
     }
 
     if (!response.ok) {
-      if (responseBody?.error?.name === 'ZodError') {
-        const issues = responseBody.error.issues;
+      const errorBody = parseErrorBody(responseBody);
+      if (isValidationError(errorBody.error)) {
+        const issues = errorBody.error.issues;
         const msg = `Validation Error: ${
           issues
-            ?.map((issue: any) => `${issue.path?.join('.')}: ${issue.message}`)
+            ?.map((issue) => `${issue.path?.join('.')}: ${issue.message}`)
             .join(', ') || 'Invalid input provided'
         }`;
         throw new ApiError(
-          responseBody.error,
+          errorBody.error,
           msg,
           response.status,
-          responseBody.data,
+          errorBody.data,
           issues
         );
       }
       throw new ApiError(
-        responseBody?.error || responseBody, // Pass the most relevant error object
-        responseBody?.msg || response.statusText || 'Server error',
+        errorBody.error || responseBody,
+        errorBody.msg || response.statusText || 'Server error',
         response.status,
-        responseBody?.data
+        errorBody.data
       );
     }
 
-    if (responseBody?.error) {
+    const successfulBody = responseBody as ApiRes<T> | ErrorResponseBody;
+    if (
+      isRecord(successfulBody) &&
+      'error' in successfulBody &&
+      successfulBody.error
+    ) {
       throw new ApiError(
-        responseBody.error,
-        responseBody.msg || 'API returned an error',
+        successfulBody.error,
+        successfulBody.msg || 'API returned an error',
         response.status,
-        responseBody.data
+        successfulBody.data
       );
     }
 
-    return responseBody;
-  } catch (err: any) {
+    return successfulBody as ApiRes<T>;
+  } catch (err: unknown) {
     if (err instanceof ApiError) {
       if (err.msg?.toLowerCase()?.includes('invalid or expired token')) {
         // await client.auth.logout.$post();
@@ -87,7 +129,7 @@ async function fetchFn<T>(
       throw err;
     }
 
-    const errorMessage = err?.message ?? 'An unexpected error occurred!';
+    const errorMessage = getErrorMessage(err) ?? 'An unexpected error occurred!';
     if (errorMessage?.toLowerCase()?.includes('invalid or expired token')) {
       // state.hardLogout();
     }

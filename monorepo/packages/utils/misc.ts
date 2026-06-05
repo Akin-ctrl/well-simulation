@@ -18,7 +18,7 @@ export const formatCurrency = (value?: number | null, currency = '₦') => {
   );
 };
 
-export const removeUndefined = (obj: { [key: string]: any }) => {
+export const removeUndefined = <T extends Record<string, unknown>>(obj: T) => {
   for (const key of Object.keys(obj)) {
     if (obj[key] === undefined) {
       delete obj[key];

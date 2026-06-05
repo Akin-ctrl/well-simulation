@@ -1,8 +1,8 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
-import React, { useCallback, useState } from 'react';
+import { useCallback, useState } from 'react';
+import type React from 'react';
 
-type InputFocusEvent = React.FocusEvent<any>;
-type InputMouseEvent = React.MouseEvent<any, MouseEvent>;
+type InputFocusEvent = React.FocusEvent<HTMLInputElement>;
+type InputMouseEvent = React.MouseEvent<HTMLDivElement>;
 
 type InteractiveEventTypes = {
   readOnly?: boolean;
@@ -24,9 +24,9 @@ export function useInteractiveEvent({
 
   const handleOnFocus = useCallback(
     (e: InputFocusEvent) => {
-      if (readOnly === true) return false;
+      if (readOnly === true) return;
       setIsFocus((prevState) => !prevState);
-      onFocus && onFocus(e);
+      onFocus?.(e);
       return;
     },
     [readOnly, onFocus]
@@ -34,9 +34,9 @@ export function useInteractiveEvent({
 
   const handleOnBlur = useCallback(
     (e: InputFocusEvent) => {
-      if (readOnly === true) return false;
+      if (readOnly === true) return;
       setIsFocus(() => false);
-      onBlur && onBlur(e);
+      onBlur?.(e);
       return;
     },
     [readOnly, onBlur]
@@ -44,24 +44,22 @@ export function useInteractiveEvent({
 
   const handleOnMouseEnter = useCallback(
     (e: InputMouseEvent) => {
-      if (readOnly === true) return false;
+      if (readOnly === true) return;
       setIsHover(() => true);
-      onMouseEnter && onMouseEnter(e);
+      onMouseEnter?.(e);
       return;
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [readOnly]
+    [readOnly, onMouseEnter]
   );
 
   const handleOnMouseLeave = useCallback(
     (e: InputMouseEvent) => {
-      if (readOnly === true) return false;
+      if (readOnly === true) return;
       setIsHover(() => false);
-      onMouseLeave && onMouseLeave(e);
+      onMouseLeave?.(e);
       return;
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [readOnly]
+    [readOnly, onMouseLeave]
   );
 
   return {

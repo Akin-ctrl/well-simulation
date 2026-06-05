@@ -6,6 +6,35 @@
 -- Enable necessary extensions
 CREATE EXTENSION IF NOT EXISTS timescaledb;
 
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'status') THEN
+        CREATE TYPE "status" AS ENUM ('ACTIVE', 'DISABLED');
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'role') THEN
+        CREATE TYPE "role" AS ENUM ('USER', 'ADMIN', 'OPERATIONS');
+    END IF;
+END $$;
+
+CREATE TABLE IF NOT EXISTS users (
+    id SERIAL PRIMARY KEY,
+    email VARCHAR(256) NOT NULL UNIQUE,
+    first_name VARCHAR(256),
+    last_name VARCHAR(256),
+    user_name VARCHAR(256) NOT NULL UNIQUE,
+    phone_number VARCHAR(256) UNIQUE,
+    bio TEXT,
+    image VARCHAR(256),
+    role "role" DEFAULT 'USER',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    status "status" DEFAULT 'ACTIVE',
+    deleted BOOLEAN DEFAULT FALSE,
+    deleted_at TIMESTAMPTZ,
+    encrypted_password VARCHAR(256) NOT NULL,
+    last_signed_in TIMESTAMPTZ,
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- Asset Metadata
 CREATE TABLE IF NOT EXISTS field (
     field_id SERIAL PRIMARY KEY,

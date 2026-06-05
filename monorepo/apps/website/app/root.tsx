@@ -10,8 +10,9 @@ import {
   ScrollRestoration,
   useOutlet,
 } from 'react-router';
+import type { MetaFunction } from 'react-router';
 
-export const meta = [
+export const meta: MetaFunction = () => [
   {
     title: 'Corsight - Your Scada, Smarter and Simpler',
     description: 'Your Scada, Smarter and Simpler',

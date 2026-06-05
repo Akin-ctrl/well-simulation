@@ -12,6 +12,13 @@ serve(
     port: 3000,
   },
   (info) => {
-    console.log(`Server is running on http://localhost:${info.port}`);
+    console.info(
+      JSON.stringify({
+        level: 'info',
+        service: 'api',
+        event: 'server_started',
+        port: info.port,
+      })
+    );
   }
 );

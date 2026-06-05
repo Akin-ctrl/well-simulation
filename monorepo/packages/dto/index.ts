@@ -1,4 +1,5 @@
-import { z, ZodTypeAny } from 'zod';
+import { z } from 'zod';
+import type { ZodTypeAny } from 'zod';
 
 /**
  * Convert Zod schema to Type

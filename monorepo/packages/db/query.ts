@@ -1,6 +1,8 @@
-import { AnyColumn, sql } from 'drizzle-orm';
+import { sql } from 'drizzle-orm';
+import type { AnyColumn } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
-import { drizzle, NodePgDatabase } from 'drizzle-orm/node-postgres';
+import { drizzle } from 'drizzle-orm/node-postgres';
+import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { schema } from './schemas';
 
 declare global {
@@ -8,14 +10,19 @@ declare global {
 }
 
 let db: NodePgDatabase<typeof schema>;
+const databaseUrl = process.env.DATABASE_URL;
+
+if (!databaseUrl) {
+  throw new Error('DATABASE_URL is required');
+}
 
 if (process.env.NODE_ENV === 'production') {
-  db = drizzle(process.env.DATABASE_URL!, {
+  db = drizzle(databaseUrl, {
     schema,
   });
 } else {
   if (!global._db)
-    global._db = drizzle(process.env.DATABASE_URL!, {
+    global._db = drizzle(databaseUrl, {
       schema,
     });
 

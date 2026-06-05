@@ -1,6 +1,6 @@
-import {MiddlewareHandler} from 'hono';
+import type { MiddlewareHandler } from 'hono';
 
-type RateLimitStore = Map<string, {count: number; resetTime: number}>;
+type RateLimitStore = Map<string, { count: number; resetTime: number }>;
 
 const rateLimitStore: RateLimitStore = new Map();
 
@@ -39,7 +39,7 @@ export function customRateLimit(props?: {
     let entry = rateLimitStore.get(ip);
 
     if (!entry || now > entry.resetTime) {
-      entry = {count: 1, resetTime: now + windowMs};
+      entry = { count: 1, resetTime: now + windowMs };
       rateLimitStore.set(ip, entry);
     } else {
       entry.count++;
@@ -49,6 +49,6 @@ export function customRateLimit(props?: {
       return c.text(message ?? 'Too many requests', 429);
     }
 
-    await next();
+    return next();
   };
 }

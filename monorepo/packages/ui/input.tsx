@@ -1,5 +1,6 @@
 import * as React from 'react';
-import { cva, VariantProps } from 'class-variance-authority';
+import { cva } from 'class-variance-authority';
+import type { VariantProps } from 'class-variance-authority';
 import { isValidElementType } from 'react-is';
 
 import { cn } from '@corsight/utils/cn';
@@ -126,7 +127,6 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
               'prefix whitespace-nowrap leading-normal',
               prefixClassName
             )}>
-            {/* @ts-expect-error fjffjj */}
             {typeof PrefixComponent !== 'string' &&
             isValidElementType(PrefixComponent) ? (
               <PrefixComponent className={cn(`icon-${size}`)} />
@@ -167,7 +167,6 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
               'suffix inline-grid place-content-center whitespace-nowrap',
               suffixClassName
             )}>
-            {/* @ts-expect-error fjffjj */}
             {typeof SuffixComponent !== 'string' &&
             isValidElementType(SuffixComponent) ? (
               <SuffixComponent className={cn(`icon-${size}`)} />

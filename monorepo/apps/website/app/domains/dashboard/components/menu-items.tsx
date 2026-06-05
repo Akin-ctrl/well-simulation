@@ -1,18 +1,8 @@
 import {
-  ActivitySquareIcon,
-  BotIcon,
   ChartBarIcon,
   CogIcon,
   HelpCircleIcon,
-  Laptop2Icon,
-  LayersIcon,
   LayoutDashboardIcon,
-  LinkIcon,
-  PackageCheckIcon,
-  PrinterIcon,
-  ScrollTextIcon,
-  SettingsIcon,
-  ShoppingBagIcon,
 } from 'lucide-react';
 
 import { routes } from '~/config/routes';

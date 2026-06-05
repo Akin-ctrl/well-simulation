@@ -9,6 +9,12 @@ import { dashboardRouter } from './routers/dashboard';
 const app = new Hono();
 
 app.use('/.well-known/*', async (c) => c.text('OK', 200));
+app.get('/health', async (c) =>
+  c.json({ status: 'ok', service: 'api', timestamp: new Date().toISOString() })
+);
+app.get('/ready', async (c) =>
+  c.json({ status: 'ready', service: 'api', timestamp: new Date().toISOString() })
+);
 
 app.use(logger());
 

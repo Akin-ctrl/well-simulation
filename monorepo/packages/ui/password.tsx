@@ -1,6 +1,7 @@
 import React from 'react';
 
-import { Input, InputProps } from './input';
+import { Input } from './input';
+import type { InputProps } from './input';
 import { cn } from '@corsight/utils/cn';
 
 export interface PasswordProps extends Omit<InputProps, 'type' | 'size'> {
@@ -23,9 +24,6 @@ const Password = React.forwardRef<HTMLInputElement, PasswordProps>(
     ref
   ) => {
     const [visible, setVisible] = React.useState(false);
-
-    // @ts-expect-error type issue
-    const { type: _, ...otherProps } = props;
 
     return (
       <Input
@@ -53,7 +51,7 @@ const Password = React.forwardRef<HTMLInputElement, PasswordProps>(
             )}
           </button>
         }
-        {...otherProps}
+        {...props}
       />
     );
   }
@@ -79,6 +77,8 @@ interface PasswordToggleIconProps {
 function PasswordToggleIcon({ iconSize, isVisible }: PasswordToggleIconProps) {
   return (
     <svg
+      aria-hidden='true'
+      focusable='false'
       xmlns='http://www.w3.org/2000/svg'
       fill='none'
       viewBox='0 0 24 24'

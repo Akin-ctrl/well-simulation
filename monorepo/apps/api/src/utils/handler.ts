@@ -1,6 +1,64 @@
-import { ApiErr, ApiRes } from '@corsight/dto/res/response';
-import { Context } from 'hono';
-import { ContentfulStatusCode } from 'hono/utils/http-status';
+import type { ApiErr, ApiRes } from '@corsight/dto/res/response';
+import type { Context } from 'hono';
+import type { ContentfulStatusCode } from 'hono/utils/http-status';
+
+type ErrorLike = {
+  name?: string;
+  code?: string;
+  message?: string;
+  status?: ContentfulStatusCode;
+  isAxiosError?: boolean;
+  response?: {
+    data?: unknown;
+  };
+};
+
+function logError(event: string, error: unknown) {
+  const errorValue = error instanceof Error ? error.message : String(error);
+  console.error(
+    JSON.stringify({
+      level: 'error',
+      service: 'api',
+      event,
+      error: errorValue,
+    })
+  );
+}
+
+function asErrorLike(error: unknown): ErrorLike | null {
+  if (!error || typeof error !== 'object') {
+    return null;
+  }
+  return error as ErrorLike;
+}
+
+function stringifyErrorDetail(value: unknown): string {
+  if (typeof value === 'string') {
+    return value;
+  }
+  if (value === undefined || value === null) {
+    return '';
+  }
+  return String(value);
+}
+
+function readResponseMessage(data: unknown): string {
+  if (!data || typeof data !== 'object') {
+    return stringifyErrorDetail(data);
+  }
+  const responseData = data as Record<string, unknown>;
+  const nestedError = responseData.error;
+  if (nestedError && typeof nestedError === 'object') {
+    const nested = nestedError as Record<string, unknown>;
+    if (typeof nested.message === 'string') return nested.message;
+  }
+  for (const key of ['message', 'error', 'msg']) {
+    if (typeof responseData[key] === 'string') {
+      return responseData[key];
+    }
+  }
+  return stringifyErrorDetail(data);
+}
 
 export const serverResponse = <T>(
   data: T,
@@ -32,18 +90,19 @@ export const serverResponseHandler = async <T>(
   );
 };
 
-function isSensitiveError(error: any) {
+function isSensitiveError(error: unknown) {
   if (!error) return false;
-  if (typeof error === 'object') {
+  const errorLike = asErrorLike(error);
+  if (errorLike) {
     if (
-      error.name === 'PostgresError' ||
-      error.isAxiosError ||
-      error.code === 'ECONNREFUSED' ||
-      error.code === 'ECONNRESET' ||
-      error.code === 'ENOTFOUND' ||
-      error.code === 'EAI_AGAIN' ||
-      error.message?.toLowerCase().includes('database') ||
-      error.message?.toLowerCase().includes('internal')
+      errorLike.name === 'PostgresError' ||
+      errorLike.isAxiosError ||
+      errorLike.code === 'ECONNREFUSED' ||
+      errorLike.code === 'ECONNRESET' ||
+      errorLike.code === 'ENOTFOUND' ||
+      errorLike.code === 'EAI_AGAIN' ||
+      errorLike.message?.toLowerCase().includes('database') ||
+      errorLike.message?.toLowerCase().includes('internal')
     ) {
       return true;
     }
@@ -59,12 +118,13 @@ function isSensitiveError(error: any) {
   return false;
 }
 
-function isTransactionError(error: any) {
+function isTransactionError(error: unknown) {
   if (!error) return false;
-  if (typeof error === 'object') {
+  const errorLike = asErrorLike(error);
+  if (errorLike) {
     if (
-      error.message?.toLowerCase().includes('purchase') ||
-      error.message?.toLowerCase().includes('transaction')
+      errorLike.message?.toLowerCase().includes('purchase') ||
+      errorLike.message?.toLowerCase().includes('transaction')
     ) {
       return true;
     }
@@ -81,38 +141,27 @@ function isTransactionError(error: any) {
 }
 
 export const serverError = (
-  error: any,
+  error: unknown,
   status?: ContentfulStatusCode
 ): ApiErr => {
   let msg = 'Something went wrong';
   let errorDetail = '';
   let hint = undefined;
+  const errorLike = asErrorLike(error);
+  const effectiveStatus = status ?? errorLike?.status;
 
-  // Postgres error detection
-  if (error && typeof error === 'object' && error.name === 'PostgresError') {
+  if (errorLike?.name === 'PostgresError') {
     msg = 'A database error occurred';
-    errorDetail = error.message || '';
-    if (typeof errorDetail !== 'string') errorDetail = String(errorDetail);
-    if (error.code) errorDetail += ` (code: ${error.code})`;
+    errorDetail = errorLike.message || '';
+    if (errorLike.code) errorDetail += ` (code: ${errorLike.code})`;
     hint = 'Please try again later or contact support.';
-  }
-  // Axios error detection
-  else if (error && typeof error === 'object') {
+  } else if (errorLike?.status) {
+    msg = errorLike.message || msg;
+  } else if (errorLike) {
     msg = 'A network or API error occurred';
     errorDetail =
-      error?.response?.data?.error?.message ||
-      error?.response?.data?.message ||
-      error?.response?.data?.error ||
-      error?.response?.data?.msg ||
-      error?.response?.data ||
-      error?.message ||
-      '';
-    if (typeof errorDetail !== 'string') errorDetail = String(errorDetail);
+      readResponseMessage(errorLike.response?.data) || errorLike.message || '';
     hint = 'Please check your network connection or try again.';
-  } else if (error && typeof error === 'object') {
-    msg = error.message || msg;
-    errorDetail = error.message || '';
-    if (typeof errorDetail !== 'string') errorDetail = String(errorDetail);
   } else if (typeof error === 'string') {
     msg = error;
     errorDetail = error;
@@ -125,18 +174,23 @@ export const serverError = (
   }
 
   if (isTransactionError(error)) {
-    console.log('[TRANSACTION ERROR]', error);
+    logError('transaction_error', error);
     msg = 'Transaction failed.';
     hint = 'Please check your transaction details or try again.';
     errorDetail = '';
   }
 
-  return { msg, status, error: errorDetail, ...(hint ? { hint } : {}) };
+  return {
+    msg,
+    status: effectiveStatus,
+    error: errorDetail,
+    ...(hint ? { hint } : {}),
+  };
 };
 
 export const serverErrorHandler = async (
   c: Context,
-  error: any,
+  error: unknown,
   code: ContentfulStatusCode | undefined
 ) => {
   return c.json(serverError(error, code), code ?? 500);
@@ -163,8 +217,8 @@ export const responseHandler = <T, C extends Context>(
         )
       );
     } catch (err) {
-      console.log('ERR', err);
-      const res = serverError(err as any);
+      logError('request_handler_error', err);
+      const res = serverError(err);
       return c.json(res, res.status ?? 500);
     }
   };
