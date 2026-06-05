@@ -1,0 +1,559 @@
+openapi: 3.1.0
+info:
+  title: Wellhead Monitoring Public API
+  version: 0.1.0
+  summary: Dashboard-facing API for the wellhead monitoring simulation.
+  description: |
+    This contract documents the public API exposed by the TypeScript/Hono service.
+    It covers the currently implemented dashboard/auth surface and keeps the
+    digital-twin evolution honest: twin-core endpoints belong in the internal
+    contract until they are implemented.
+servers:
+  - url: /api
+    description: Dashboard reverse-proxy path.
+  - url: http://localhost:3000
+    description: Local API service.
+tags:
+  - name: Health
+  - name: Auth
+  - name: Dashboard
+paths:
+  /health:
+    get:
+      tags: [Health]
+      summary: Liveness check.
+      operationId: getHealth
+      security: []
+      responses:
+        "200":
+          description: API process is running.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+  /ready:
+    get:
+      tags: [Health]
+      summary: Readiness check.
+      operationId: getReadiness
+      security: []
+      responses:
+        "200":
+          description: API process is ready to accept traffic.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReadinessResponse"
+  /auth/register:
+    post:
+      tags: [Auth]
+      summary: Register a dashboard user.
+      operationId: registerUser
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterRequest"
+      responses:
+        "200":
+          description: User registered.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthUserResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "500":
+          $ref: "#/components/responses/ServerError"
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Authenticate a dashboard user.
+      operationId: loginUser
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Login succeeded and an HTTP-only session cookie was issued.
+          headers:
+            Set-Cookie:
+              description: HTTP-only `auth_token` session cookie.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthUserResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/ServerError"
+  /auth/me:
+    get:
+      tags: [Auth]
+      summary: Return the current authenticated user.
+      operationId: getCurrentUser
+      security:
+        - cookieAuth: []
+      responses:
+        "200":
+          description: Current session is valid.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthUserResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/ServerError"
+  /auth/logout:
+    post:
+      tags: [Auth]
+      summary: Clear the current session cookie.
+      operationId: logoutUser
+      security: []
+      responses:
+        "200":
+          description: Logout succeeded. The session cookie is cleared.
+          headers:
+            Set-Cookie:
+              description: Expired `auth_token` cookie.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LogoutResponse"
+        "500":
+          $ref: "#/components/responses/ServerError"
+  /dashboard/overview:
+    get:
+      tags: [Dashboard]
+      summary: Return dashboard summary, recent readings, and active alarms.
+      operationId: getDashboardOverview
+      security:
+        - cookieAuth: []
+      responses:
+        "200":
+          description: Recent readings from the historian view.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardOverviewResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/ServerError"
+  /dashboard/latest-readings:
+    get:
+      tags: [Dashboard]
+      summary: Return recent wellhead parameter readings.
+      operationId: getLatestReadings
+      security:
+        - cookieAuth: []
+      responses:
+        "200":
+          description: Latest historian readings.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LatestReadingsResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/ServerError"
+  /dashboard/active-alarms:
+    get:
+      tags: [Dashboard]
+      summary: Return active alarm events.
+      operationId: getActiveAlarms
+      security:
+        - cookieAuth: []
+      responses:
+        "200":
+          description: Active alarm events.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActiveAlarmsResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/ServerError"
+  /dashboard/analytics:
+    get:
+      tags: [Dashboard]
+      summary: Return aggregate trend data for analytics charts.
+      operationId: getDashboardAnalytics
+      security:
+        - cookieAuth: []
+      responses:
+        "200":
+          description: Hourly and daily aggregate trend data.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardAnalyticsResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/ServerError"
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: auth_token
+  responses:
+    Unauthorized:
+      description: Missing, invalid, or expired session token.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    ValidationError:
+      description: Request validation failed.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    ServerError:
+      description: Unexpected server-side error. Secrets and raw stack traces are not returned.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+  schemas:
+    HealthResponse:
+      type: object
+      required: [status, service, timestamp]
+      properties:
+        status:
+          type: string
+          const: ok
+        service:
+          type: string
+          const: api
+        timestamp:
+          type: string
+          format: date-time
+    ReadinessResponse:
+      type: object
+      required: [status, service, timestamp]
+      properties:
+        status:
+          type: string
+          const: ready
+        service:
+          type: string
+          const: api
+        timestamp:
+          type: string
+          format: date-time
+    RegisterRequest:
+      type: object
+      required: [username, email, password, confirmPassword]
+      properties:
+        firstName:
+          type: string
+        lastName:
+          type: string
+        username:
+          type: string
+          minLength: 3
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 6
+          writeOnly: true
+        confirmPassword:
+          type: string
+          minLength: 6
+          writeOnly: true
+    LoginRequest:
+      type: object
+      required: [emailOrUsername, password]
+      properties:
+        emailOrUsername:
+          type: string
+          minLength: 3
+        password:
+          type: string
+          minLength: 6
+          writeOnly: true
+    AuthUserResponse:
+      type: object
+      required: [msg, data, status]
+      properties:
+        msg:
+          type: string
+        status:
+          type: integer
+        data:
+          type: object
+          required: [user]
+          properties:
+            user:
+              $ref: "#/components/schemas/PublicUser"
+    LogoutResponse:
+      type: object
+      required: [msg, data, status]
+      properties:
+        msg:
+          type: string
+          const: Logged out
+        status:
+          type: integer
+        data:
+          type: object
+          required: [authenticated]
+          properties:
+            authenticated:
+              type: boolean
+              const: false
+    PublicUser:
+      type: object
+      description: User object with password hash intentionally omitted.
+      properties:
+        id:
+          type: integer
+        firstName:
+          type: [string, "null"]
+        lastName:
+          type: [string, "null"]
+        userName:
+          type: string
+        email:
+          type: string
+          format: email
+        role:
+          type: string
+        status:
+          type: string
+        createdAt:
+          type: [string, "null"]
+          format: date-time
+        updatedAt:
+          type: [string, "null"]
+          format: date-time
+    DashboardOverviewResponse:
+      type: object
+      required: [msg, data, status]
+      properties:
+        msg:
+          type: string
+        status:
+          type: integer
+        data:
+          $ref: "#/components/schemas/DashboardOverviewData"
+    DashboardOverviewData:
+      type: object
+      required: [summary, latestReadings, activeAlarms]
+      properties:
+        summary:
+          $ref: "#/components/schemas/DashboardSummary"
+        latestReadings:
+          type: array
+          items:
+            $ref: "#/components/schemas/WellheadReading"
+        activeAlarms:
+          type: array
+          items:
+            $ref: "#/components/schemas/ActiveAlarm"
+    LatestReadingsResponse:
+      type: object
+      required: [msg, data, status]
+      properties:
+        msg:
+          type: string
+        status:
+          type: integer
+        data:
+          type: object
+          required: [readings]
+          properties:
+            readings:
+              type: array
+              items:
+                $ref: "#/components/schemas/WellheadReading"
+    ActiveAlarmsResponse:
+      type: object
+      required: [msg, data, status]
+      properties:
+        msg:
+          type: string
+        status:
+          type: integer
+        data:
+          type: object
+          required: [alarms]
+          properties:
+            alarms:
+              type: array
+              items:
+                $ref: "#/components/schemas/ActiveAlarm"
+    DashboardAnalyticsResponse:
+      type: object
+      required: [msg, data, status]
+      properties:
+        msg:
+          type: string
+        status:
+          type: integer
+        data:
+          type: object
+          required:
+            - pressureTrend
+            - temperatureFlowTrend
+            - waterCutGorTrend
+            - dailyAlarmCounts
+          properties:
+            pressureTrend:
+              type: array
+              items:
+                $ref: "#/components/schemas/AggregateTrendPoint"
+            temperatureFlowTrend:
+              type: array
+              items:
+                $ref: "#/components/schemas/AggregateTrendPoint"
+            waterCutGorTrend:
+              type: array
+              items:
+                $ref: "#/components/schemas/AggregateTrendPoint"
+            dailyAlarmCounts:
+              type: array
+              items:
+                $ref: "#/components/schemas/DailyAlarmCount"
+    DashboardSummary:
+      type: object
+      required: [totalWellheads, parametersTracked, activeAlarms, latestReadingAt]
+      properties:
+        totalWellheads:
+          type: integer
+        parametersTracked:
+          type: integer
+        activeAlarms:
+          type: integer
+        latestReadingAt:
+          type: [string, "null"]
+          format: date-time
+    WellheadReading:
+      type: object
+      description: Row returned from the wellhead parameter readings view.
+      properties:
+        timestampUtc:
+          type: [string, "null"]
+          format: date-time
+        rawValue:
+          type: [number, "null"]
+        wellheadId:
+          type: [integer, "null"]
+        wellheadName:
+          type: string
+        wellheadType:
+          type: [string, "null"]
+        locationName:
+          type: [string, "null"]
+        fieldName:
+          type: [string, "null"]
+        parameterCode:
+          type: [string, "null"]
+        parameterDisplayName:
+          type: string
+        canonicalUnit:
+          type: [string, "null"]
+        dataType:
+          type: [string, "null"]
+        normalMin:
+          type: [number, "null"]
+        normalMax:
+          type: [number, "null"]
+    ActiveAlarm:
+      type: object
+      description: Active alarm event from the alarm view.
+      properties:
+        eventId:
+          type: [integer, "null"]
+        triggeredAt:
+          type: [string, "null"]
+          format: date-time
+        severityLevel:
+          type: [string, "null"]
+        triggeredValue:
+          type: [number, "null"]
+        wellheadId:
+          type: [integer, "null"]
+        wellheadName:
+          type: [string, "null"]
+        locationName:
+          type: [string, "null"]
+        fieldName:
+          type: [string, "null"]
+        parameterDisplayName:
+          type: [string, "null"]
+        operator:
+          type: [string, "null"]
+        thresholdValue:
+          type: [number, "null"]
+        alarmRuleId:
+          type: [integer, "null"]
+    AggregateTrendPoint:
+      type: object
+      description: Hourly aggregate trend point from a TimescaleDB aggregate view.
+      properties:
+        bucketTime:
+          type: [string, "null"]
+          format: date-time
+        parameterCode:
+          type: [string, "null"]
+        parameterDisplayName:
+          type: [string, "null"]
+        canonicalUnit:
+          type: [string, "null"]
+        avgValue:
+          type: [number, "null"]
+        minValue:
+          type: [number, "null"]
+        maxValue:
+          type: [number, "null"]
+        readingCount:
+          type: [integer, "null"]
+    DailyAlarmCount:
+      type: object
+      description: Daily alarm count grouped by wellhead, parameter, and severity.
+      properties:
+        bucketDay:
+          type: [string, "null"]
+          format: date-time
+        wellheadId:
+          type: [integer, "null"]
+        wellheadName:
+          type: [string, "null"]
+        locationName:
+          type: [string, "null"]
+        parameterDisplayName:
+          type: [string, "null"]
+        severityLevel:
+          type: [string, "null"]
+        totalAlarmsTriggered:
+          type: [integer, "null"]
+    ErrorResponse:
+      type: object
+      properties:
+        msg:
+          type: string
+        status:
+          type: integer
+        error:
+          type: string
+        hint:
+          type: string
