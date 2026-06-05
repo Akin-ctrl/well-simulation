@@ -1,135 +1,88 @@
-# Turborepo starter
+# Corsight Web Monorepo
 
-This Turborepo starter is maintained by the Turborepo core team.
+This monorepo contains the TypeScript web/API layer for the Wellhead Monitoring Simulation.
 
-## Using this example
+The wider repository is evolving toward a lightweight wellhead digital twin, but this monorepo is not the twin core. Its role is to provide the operator-facing dashboard, API boundary, shared contracts, database access layer, and reusable UI components that make the telemetry simulation understandable and demoable.
 
-Run the following command:
+## What Lives Here
+
+| Path | Purpose |
+| --- | --- |
+| `apps/api` | Hono API used by the dashboard. Handles auth, dashboard reads, health, and readiness endpoints. |
+| `apps/website` | React Router/Vite dashboard served behind Nginx in Docker Compose. |
+| `packages/db` | Drizzle database schema, query helper, and migration tooling. |
+| `packages/dto` | Shared request/response DTOs and validation schemas. |
+| `packages/ui` | Shared React UI primitives used by the dashboard. |
+| `packages/utils` | Shared utility functions and runtime configuration helpers. |
+| `packages/tsconfig` | Shared TypeScript configuration. |
+
+## Current Runtime Shape
+
+```text
+Browser
+  |
+  v
+Nginx dashboard container
+  |-- serves React assets
+  |-- proxies /api/* to apps/api
+  v
+Hono API
+  |
+  v
+PostgreSQL/TimescaleDB historian
+```
+
+Telemetry still originates from the Python simulator and Modbus ingestion services under `../data`. The future `twin-core` service will live outside this monorepo unless a later ADR changes that boundary.
+
+## API Contracts
+
+Committed API contracts live in `../docs/openapi`:
+
+- `../docs/openapi/public-api.yaml` documents the dashboard-facing API implemented by `apps/api`.
+- `../docs/openapi/twin-core-internal-api.yaml` documents the planned internal API for the future Python twin-core service.
+
+These contracts are intentionally lightweight. They are designed to support portfolio review, implementation planning, and future CI validation without pretending that the project already has a complete industrial control API.
+
+## Local Development
+
+From `monorepo/`:
 
 ```sh
-npx create-turbo@latest
+npx --yes pnpm@10.11.1 install
+npx --yes pnpm@10.11.1 --filter @corsight/api dev
+npx --yes pnpm@10.11.1 --filter @corsight/website dev
 ```
 
-## What's inside?
+For the full stack, prefer the root Docker Compose file:
 
-This Turborepo includes the following packages/apps:
-
-### Apps and Packages
-
-- `docs`: a [Next.js](https://nextjs.org/) app
-- `web`: another [Next.js](https://nextjs.org/) app
-- `@repo/ui`: a stub React component library shared by both `web` and `docs` applications
-- `@repo/eslint-config`: `eslint` configurations (includes `eslint-config-next` and `eslint-config-prettier`)
-- `@repo/typescript-config`: `tsconfig.json`s used throughout the monorepo
-
-Each package/app is 100% [TypeScript](https://www.typescriptlang.org/).
-
-### Utilities
-
-This Turborepo has some additional tools already setup for you:
-
-- [TypeScript](https://www.typescriptlang.org/) for static type checking
-- [ESLint](https://eslint.org/) for code linting
-- [Prettier](https://prettier.io) for code formatting
-
-### Build
-
-To build all apps and packages, run the following command:
-
-```
-cd my-turborepo
-
-# With [global `turbo`](https://turborepo.com/docs/getting-started/installation#global-installation) installed (recommended)
-turbo build
-
-# Without [global `turbo`](https://turborepo.com/docs/getting-started/installation#global-installation), use your package manager
-npx turbo build
-yarn dlx turbo build
-pnpm exec turbo build
+```sh
+cd ..
+docker compose up --build
 ```
 
-You can build a specific package by using a [filter](https://turborepo.com/docs/crafting-your-repository/running-tasks#using-filters):
+## Validation
 
-```
-# With [global `turbo`](https://turborepo.com/docs/getting-started/installation#global-installation) installed (recommended)
-turbo build --filter=docs
+Targeted checks used during this standards pass:
 
-# Without [global `turbo`](https://turborepo.com/docs/getting-started/installation#global-installation), use your package manager
-npx turbo build --filter=docs
-yarn exec turbo build --filter=docs
-pnpm exec turbo build --filter=docs
-```
-
-### Develop
-
-To develop all apps and packages, run the following command:
-
-```
-cd my-turborepo
-
-# With [global `turbo`](https://turborepo.com/docs/getting-started/installation#global-installation) installed (recommended)
-turbo dev
-
-# Without [global `turbo`](https://turborepo.com/docs/getting-started/installation#global-installation), use your package manager
-npx turbo dev
-yarn exec turbo dev
-pnpm exec turbo dev
+```sh
+./node_modules/.bin/tsc -p apps/api/tsconfig.json --noEmit
+./node_modules/.bin/tsc -p apps/website/tsconfig.json --noEmit
+cd apps/website && ../../node_modules/.bin/eslint .
+cd packages/ui && ../../node_modules/.bin/biome lint . && ../../node_modules/.bin/tsc --noEmit
 ```
 
-You can develop a specific package by using a [filter](https://turborepo.com/docs/crafting-your-repository/running-tasks#using-filters):
+## Production-Grade Expectations
 
-```
-# With [global `turbo`](https://turborepo.com/docs/getting-started/installation#global-installation) installed (recommended)
-turbo dev --filter=web
+- Keep API responses free of secrets and password hashes.
+- Keep runtime configuration explicit and validated.
+- Prefer typed shared DTOs over ad-hoc payload shapes.
+- Keep generated framework files out of lint targets.
+- Keep dashboard data access behind documented API endpoints.
+- Keep twin simulation logic out of the React dashboard.
 
-# Without [global `turbo`](https://turborepo.com/docs/getting-started/installation#global-installation), use your package manager
-npx turbo dev --filter=web
-yarn exec turbo dev --filter=web
-pnpm exec turbo dev --filter=web
-```
+## Known Gaps
 
-### Remote Caching
-
-> [!TIP]
-> Vercel Remote Cache is free for all plans. Get started today at [vercel.com](https://vercel.com/signup?/signup?utm_source=remote-cache-sdk&utm_campaign=free_remote_cache).
-
-Turborepo can use a technique known as [Remote Caching](https://turborepo.com/docs/core-concepts/remote-caching) to share cache artifacts across machines, enabling you to share build caches with your team and CI/CD pipelines.
-
-By default, Turborepo will cache locally. To enable Remote Caching you will need an account with Vercel. If you don't have an account you can [create one](https://vercel.com/signup?utm_source=turborepo-examples), then enter the following commands:
-
-```
-cd my-turborepo
-
-# With [global `turbo`](https://turborepo.com/docs/getting-started/installation#global-installation) installed (recommended)
-turbo login
-
-# Without [global `turbo`](https://turborepo.com/docs/getting-started/installation#global-installation), use your package manager
-npx turbo login
-yarn exec turbo login
-pnpm exec turbo login
-```
-
-This will authenticate the Turborepo CLI with your [Vercel account](https://vercel.com/docs/concepts/personal-accounts/overview).
-
-Next, you can link your Turborepo to your Remote Cache by running the following command from the root of your Turborepo:
-
-```
-# With [global `turbo`](https://turborepo.com/docs/getting-started/installation#global-installation) installed (recommended)
-turbo link
-
-# Without [global `turbo`](https://turborepo.com/docs/getting-started/installation#global-installation), use your package manager
-npx turbo link
-yarn exec turbo link
-pnpm exec turbo link
-```
-
-## Useful Links
-
-Learn more about the power of Turborepo:
-
-- [Tasks](https://turborepo.com/docs/crafting-your-repository/running-tasks)
-- [Caching](https://turborepo.com/docs/crafting-your-repository/caching)
-- [Remote Caching](https://turborepo.com/docs/core-concepts/remote-caching)
-- [Filtering](https://turborepo.com/docs/crafting-your-repository/running-tasks#using-filters)
-- [Configuration Options](https://turborepo.com/docs/reference/configuration)
-- [CLI Usage](https://turborepo.com/docs/reference/command-line-reference)
+- The dashboard still contains placeholder views that need live data integration.
+- The API contract is hand-maintained; schema validation in CI is not wired yet.
+- Auth has login/register and secure cookie issuance, but still needs logout and current-user endpoints.
+- The future twin-core service is documented but not implemented yet.
