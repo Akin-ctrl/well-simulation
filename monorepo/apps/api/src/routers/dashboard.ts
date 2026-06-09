@@ -5,6 +5,10 @@ import {
   parametertype,
   wellhead,
 } from '@corsight/db/schemas/schema';
+import type {
+  DashboardAnalyticsResponse,
+  DashboardOverviewResponse,
+} from '@corsight/dto/res/dashboard';
 import {
   mvDailyAlarmCounts,
   mvHourlyPressureTrends,
@@ -138,7 +142,7 @@ export const dashboardRouter = new Hono()
         activeAlarms(),
       ]);
 
-      return {
+      const overview: DashboardOverviewResponse = {
         summary: {
           totalWellheads,
           parametersTracked,
@@ -148,6 +152,8 @@ export const dashboardRouter = new Hono()
         latestReadings: readings,
         activeAlarms: alarms,
       };
+
+      return overview;
     })(c)
   )
   .get('/latest-readings', (c) =>
@@ -170,11 +176,13 @@ export const dashboardRouter = new Hono()
           dailyAlarmCounts(),
         ]);
 
-      return {
+      const analytics: DashboardAnalyticsResponse = {
         pressureTrend: pressure,
         temperatureFlowTrend: temperatureFlow,
         waterCutGorTrend: waterCutGor,
         dailyAlarmCounts: alarmsByDay,
       };
+
+      return analytics;
     })(c)
   );

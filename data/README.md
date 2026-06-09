@@ -97,24 +97,9 @@ Docker Compose
 
 ### 1. Configuration
 
-The project uses a .env file to manage configuration and secrets. Create a file named .env in the root of the project and paste the following content:
-
-
-```env
-# PostgreSQL/TimescaleDB Configuration
-POSTGRES_USER=admin
-POSTGRES_PASSWORD=supersecretpassword
-POSTGRES_DB=wellhead_data
-POSTGRES_HOST=db
-POSTGRES_PORT=5432
-
-MODBUS_HOST=modbus
-MODBUS_PORT=5020
-
-# pgAdmin Configuration
-PGADMIN_DEFAULT_EMAIL=admin@example.com
-PGADMIN_DEFAULT_PASSWORD=admin
-```
+The project uses a root `.env` file to manage local configuration and secrets.
+Copy `.env.example` to `.env`, then replace placeholder values with local-only
+credentials before starting the stack.
 
 ## 2. Build and Run
 Start docker
@@ -130,7 +115,8 @@ Build the custom Python Docker image.
 
 Pull the official Postgres/TimescaleDB and pgAdmin images.
 
-Create and start all five containers.
+Create and start the database, pgAdmin, Modbus gateway, ingestion service, API,
+and dashboard containers.
 
 Establish a network for the containers to communicate.
 
@@ -140,7 +126,7 @@ You will see logs from all services streaming in your terminal.
 
 Modbus Server: Accessible on localhost:5020.
 
-PostgreSQL Database: Accessible on localhost:5432.
+PostgreSQL Database: Accessible on localhost:5434.
 
 pgAdmin Web UI: Accessible at http://localhost:5050.
 
@@ -148,7 +134,7 @@ pgAdmin Web UI: Accessible at http://localhost:5050.
 
 Navigate to http://localhost:5050 in your browser.
 
-Log in using the credentials from your .env file (admin@example.com / admin).
+Log in using the pgAdmin credentials from your `.env` file.
 
 Click "Add New Server".
 
@@ -162,9 +148,9 @@ Port: 5432
 
 Maintenance database: wellhead_data
 
-Username: admin (from .env)
+Username: the `POSTGRES_USER` value from `.env`.
 
-Password: supersecretpassword (from .env)
+Password: the `POSTGRES_PASSWORD` value from `.env`.
 
 Click "Save".
 
@@ -175,7 +161,7 @@ You can now browse the database, view the schema created by init.sql, and run qu
 Here is a breakdown of each file and its role in the system.
 
 File	Role	Key Responsibilities
-docker-compose.yml:	Orchestrator.	Defines all services (db, simulator, modbus, ingestion, pgadmin), their dependencies, networks, and environment variables.
+docker-compose.yml:	Orchestrator.	Defines the db, pgAdmin, Modbus gateway, ingestion, API, and dashboard services, their dependencies, networks, and environment variables.
 Dockerfile:	Image Builder.	Creates a single, reusable Python image containing all necessary dependencies (pymodbus, psycopg2) for the application services.
 init.sql:	System Brain,	the most critical file. It defines the entire database schema and, crucially, seeds the database with the initial metadata for all 12 wellheads, 18 parameters, their Modbus mappings, and alarm rules.
 wellhead_simulator.py:	Data Source.	On startup, it queries the DB to get a list of wellheads and their parameters. Generates randomised data within normal operating ranges and prints it to stdout as JSON.

@@ -101,7 +101,7 @@ CREATE TABLE IF NOT EXISTS parameterReading (
     inserted_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-SELECT create_hypertable('parameterReading', 'timestamp_utc');
+SELECT create_hypertable('parameterReading', 'timestamp_utc', if_not_exists => TRUE);
 
 -- Derived Data (Alarms)
 CREATE TABLE IF NOT EXISTS alarmRule (
@@ -113,6 +113,9 @@ CREATE TABLE IF NOT EXISTS alarmRule (
     active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_alarm_rule_definition
+ON alarmRule (parameter_type_id, severity_level, operator, threshold_value);
 
 
 CREATE TABLE IF NOT EXISTS alarmEvent (
@@ -129,7 +132,7 @@ CREATE TABLE IF NOT EXISTS alarmEvent (
   PRIMARY KEY (event_id, triggered_at)
 );
 
-SELECT create_hypertable('alarmEvent', 'triggered_at');
+SELECT create_hypertable('alarmEvent', 'triggered_at', if_not_exists => TRUE);
 
 
 -- =================================================================
@@ -138,10 +141,14 @@ SELECT create_hypertable('alarmEvent', 'triggered_at');
 -- =================================================================
 
 -- 1. Create Fields and Locations
-INSERT INTO field (name, description) VALUES ('North Field', 'Primary production field');
-INSERT INTO location (field_id, name, latitude, longitude) VALUES 
-(1, 'Pad A', 60.123, -97.456),
-(1, 'Pad B', 60.125, -97.458);
+INSERT INTO field (field_id, name, description)
+VALUES (1, 'North Field', 'Primary production field')
+ON CONFLICT (field_id) DO NOTHING;
+
+INSERT INTO location (location_id, field_id, name, latitude, longitude) VALUES
+(1, 1, 'Pad A', 60.123, -97.456),
+(2, 1, 'Pad B', 60.125, -97.458)
+ON CONFLICT (location_id) DO NOTHING;
 
 -- 2. Create All 18 Parameter Types
 INSERT INTO parameterType (parameter_type_id, code, display_name, canonical_unit, data_type, normal_min, normal_max) VALUES
@@ -162,7 +169,8 @@ INSERT INTO parameterType (parameter_type_id, code, display_name, canonical_unit
 (15, 'wing_valve_status', 'Wing Valve Status', 'state', 'boolean', 0, 1),
 (16, 'swab_valve_status', 'Swab Valve Status', 'state', 'boolean', 0, 1),
 (17, 'emergency_shutdown', 'Emergency Shutdown', 'state', 'boolean', 0, 1),
-(18, 'pump_status', 'Pump Status', 'state', 'boolean', 0, 1);
+(18, 'pump_status', 'Pump Status', 'state', 'boolean', 0, 1)
+ON CONFLICT (parameter_type_id) DO NOTHING;
 
 -- 3. Create 12 Wellheads and their associated Devices and Mappings
 -- We use a DO block to programmatically create the assets and mappings.
@@ -182,8 +190,13 @@ BEGIN
         END IF;
 
         -- Create Device and Wellhead
-        INSERT INTO device (device_id, name, modbus_unit_id) VALUES (wellhead_index, 'WH-' || LPAD(wellhead_index::text, 3, '0') || '-RTU', 1);
-        INSERT INTO wellHead (wellhead_id, location_id, device_id, name, type) VALUES (wellhead_index, current_location_id, wellhead_index, 'WH-' || LPAD(wellhead_index::text, 3, '0'), 'Oil Producer');
+        INSERT INTO device (device_id, name, modbus_unit_id)
+        VALUES (wellhead_index, 'WH-' || LPAD(wellhead_index::text, 3, '0') || '-RTU', 1)
+        ON CONFLICT (device_id) DO NOTHING;
+
+        INSERT INTO wellHead (wellhead_id, location_id, device_id, name, type)
+        VALUES (wellhead_index, current_location_id, wellhead_index, 'WH-' || LPAD(wellhead_index::text, 3, '0'), 'Oil Producer')
+        ON CONFLICT (wellhead_id) DO NOTHING;
 
         -- Define the base Modbus register for this wellhead to avoid overlap
         -- We allocate 100 registers per wellhead for ample space.
@@ -198,10 +211,17 @@ BEGIN
                 base_register + ((param_index - 1) * 2), -- Each parameter takes 2 registers (32-bit)
                 3,              -- Modbus function code 3 (Read Holding Registers)
                 'holding'       -- Register type
-            );
+            )
+            ON CONFLICT (device_id, modbus_register) DO NOTHING;
         END LOOP;
     END LOOP;
 END $$;
+
+SELECT setval(pg_get_serial_sequence('field', 'field_id'), (SELECT MAX(field_id) FROM field));
+SELECT setval(pg_get_serial_sequence('location', 'location_id'), (SELECT MAX(location_id) FROM location));
+SELECT setval(pg_get_serial_sequence('device', 'device_id'), (SELECT MAX(device_id) FROM device));
+SELECT setval(pg_get_serial_sequence('wellhead', 'wellhead_id'), (SELECT MAX(wellhead_id) FROM wellhead));
+SELECT setval(pg_get_serial_sequence('parametertype', 'parameter_type_id'), (SELECT MAX(parameter_type_id) FROM parameterType));
 
 
 -- 4. Create a comprehensive set of Alarm Rules
@@ -212,7 +232,8 @@ INSERT INTO alarmRule (parameter_type_id, severity_level, operator, threshold_va
 (6, 'WARNING', '>', 4800),  -- High Flow Rate
 (8, 'CRITICAL', '>', 75),   -- High Water Cut
 (11, 'CRITICAL', '>', 40),  -- High H2S Level
-(13, 'WARNING', '>', 4.5);  -- High Vibration
+(13, 'WARNING', '>', 4.5)   -- High Vibration
+ON CONFLICT DO NOTHING;
 
 
 -- =================================================================
@@ -263,6 +284,8 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- Attach the trigger to the readings table
+DROP TRIGGER IF EXISTS wellhead_readings_alarm_trigger ON parameterReading;
+
 CREATE TRIGGER wellhead_readings_alarm_trigger
 AFTER INSERT ON parameterReading
 FOR EACH ROW

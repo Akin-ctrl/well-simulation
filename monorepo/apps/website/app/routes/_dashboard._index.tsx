@@ -6,44 +6,11 @@ import {
   RadioTowerIcon,
 } from 'lucide-react';
 import { useLoaderData } from 'react-router';
+import type {
+  DashboardOverviewResponse,
+  LatestReading,
+} from '@corsight/dto/res/dashboard';
 import { client, fetchFn } from '../utils/api';
-
-type DashboardSummary = {
-  totalWellheads: number;
-  parametersTracked: number;
-  activeAlarms: number;
-  latestReadingAt: string | null;
-};
-
-type LatestReading = {
-  timestampUtc?: string | null;
-  rawValue?: number | null;
-  wellheadId?: number | null;
-  wellheadName?: string | null;
-  locationName?: string | null;
-  fieldName?: string | null;
-  parameterCode?: string | null;
-  parameterDisplayName?: string | null;
-  canonicalUnit?: string | null;
-  normalMin?: number | null;
-  normalMax?: number | null;
-};
-
-type ActiveAlarm = {
-  eventId?: number | null;
-  triggeredAt?: string | null;
-  severityLevel?: string | null;
-  triggeredValue?: number | null;
-  wellheadName?: string | null;
-  parameterDisplayName?: string | null;
-  thresholdValue?: number | null;
-};
-
-type OverviewData = {
-  summary: DashboardSummary;
-  latestReadings: LatestReading[];
-  activeAlarms: ActiveAlarm[];
-};
 
 type WellheadCard = {
   wellheadName: string;
@@ -53,7 +20,7 @@ type WellheadCard = {
 };
 
 export async function clientLoader() {
-  const response = await fetchFn<OverviewData>(client.dashboard.overview.$get());
+  const response = await fetchFn<DashboardOverviewResponse>(client.dashboard.overview.$get());
   return response.data;
 }
 
@@ -67,7 +34,7 @@ function formatNumber(value: number | null | undefined) {
   }).format(value);
 }
 
-function formatDate(value: string | null | undefined) {
+function formatDate(value: string | Date | null | undefined) {
   if (!value) {
     return 'No readings yet';
   }
@@ -123,7 +90,7 @@ function wellheadCards(readings: LatestReading[]) {
 }
 
 function Overview() {
-  const data = useLoaderData() as OverviewData;
+  const data = useLoaderData() as DashboardOverviewResponse;
   const cards = wellheadCards(data.latestReadings);
   const summaryCards = [
     {

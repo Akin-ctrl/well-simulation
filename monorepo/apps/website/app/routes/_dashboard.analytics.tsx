@@ -10,32 +10,13 @@ import {
   YAxis,
 } from 'recharts';
 import { useLoaderData } from 'react-router';
+import type {
+  DailyAlarmCount,
+  DashboardAnalyticsResponse,
+  TrendPoint,
+} from '@corsight/dto/res/dashboard';
 import { Title } from '../domains/dashboard/components/misc';
 import { client, fetchFn } from '../utils/api';
-
-type TrendPoint = {
-  bucketTime?: string | null;
-  parameterCode?: string | null;
-  parameterDisplayName?: string | null;
-  canonicalUnit?: string | null;
-  avgValue?: number | null;
-  minValue?: number | null;
-  maxValue?: number | null;
-  readingCount?: number | null;
-};
-
-type DailyAlarmCount = {
-  bucketDay?: string | null;
-  severityLevel?: string | null;
-  totalAlarmsTriggered?: number | null;
-};
-
-type AnalyticsData = {
-  pressureTrend: TrendPoint[];
-  temperatureFlowTrend: TrendPoint[];
-  waterCutGorTrend: TrendPoint[];
-  dailyAlarmCounts: DailyAlarmCount[];
-};
 
 type ChartPoint = {
   date: string;
@@ -75,11 +56,11 @@ const SEVERITY_COLORS: Record<string, string> = {
 };
 
 export async function clientLoader() {
-  const response = await fetchFn<AnalyticsData>(client.dashboard.analytics.$get());
+  const response = await fetchFn<DashboardAnalyticsResponse>(client.dashboard.analytics.$get());
   return response.data;
 }
 
-function formatDate(value: string | null | undefined) {
+function formatDate(value: string | Date | null | undefined) {
   if (!value) {
     return 'n/a';
   }
@@ -238,7 +219,7 @@ function MultiMetricChart({
 }
 
 function Analytics() {
-  const data = useLoaderData() as AnalyticsData;
+  const data = useLoaderData() as DashboardAnalyticsResponse;
   const pressureData = singleSeries(data.pressureTrend);
   const temperatureFlowData = multiSeries(data.temperatureFlowTrend, [
     'wellhead_temperature',

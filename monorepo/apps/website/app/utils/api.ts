@@ -123,16 +123,10 @@ async function fetchFn<T>(
     return successfulBody as ApiRes<T>;
   } catch (err: unknown) {
     if (err instanceof ApiError) {
-      if (err.msg?.toLowerCase()?.includes('invalid or expired token')) {
-        // await client.auth.logout.$post();
-      }
       throw err;
     }
 
     const errorMessage = getErrorMessage(err) ?? 'An unexpected error occurred!';
-    if (errorMessage?.toLowerCase()?.includes('invalid or expired token')) {
-      // state.hardLogout();
-    }
     throw new ApiError(err, errorMessage);
   }
 }

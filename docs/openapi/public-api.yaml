@@ -39,7 +39,13 @@ paths:
       security: []
       responses:
         "200":
-          description: API process is ready to accept traffic.
+          description: API process and required dependencies are ready.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReadinessResponse"
+        "503":
+          description: API process is running, but at least one required dependency is unavailable.
           content:
             application/json:
               schema:
@@ -246,14 +252,21 @@ components:
           format: date-time
     ReadinessResponse:
       type: object
-      required: [status, service, timestamp]
+      required: [status, service, dependencies, timestamp]
       properties:
         status:
           type: string
-          const: ready
+          enum: [ready, not_ready]
         service:
           type: string
           const: api
+        dependencies:
+          type: object
+          required: [database]
+          properties:
+            database:
+              type: string
+              enum: [ready, unavailable]
         timestamp:
           type: string
           format: date-time
@@ -273,11 +286,11 @@ components:
           format: email
         password:
           type: string
-          minLength: 6
+          minLength: 12
           writeOnly: true
         confirmPassword:
           type: string
-          minLength: 6
+          minLength: 12
           writeOnly: true
     LoginRequest:
       type: object
@@ -288,7 +301,7 @@ components:
           minLength: 3
         password:
           type: string
-          minLength: 6
+          minLength: 12
           writeOnly: true
     AuthUserResponse:
       type: object

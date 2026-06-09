@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { logger } from 'hono/logger';
 import { prettyJSON } from 'hono/pretty-json';
+import { db, sql } from '@corsight/db/query';
 import { authMiddleware } from './middleware/auth';
 import { authRouter } from './routers/auth';
 import { customRateLimit } from './middleware/rate-limiter';
@@ -12,9 +13,27 @@ app.use('/.well-known/*', async (c) => c.text('OK', 200));
 app.get('/health', async (c) =>
   c.json({ status: 'ok', service: 'api', timestamp: new Date().toISOString() })
 );
-app.get('/ready', async (c) =>
-  c.json({ status: 'ready', service: 'api', timestamp: new Date().toISOString() })
-);
+app.get('/ready', async (c) => {
+  try {
+    await db.execute(sql`select 1`);
+    return c.json({
+      status: 'ready',
+      service: 'api',
+      dependencies: { database: 'ready' },
+      timestamp: new Date().toISOString(),
+    });
+  } catch {
+    return c.json(
+      {
+        status: 'not_ready',
+        service: 'api',
+        dependencies: { database: 'unavailable' },
+        timestamp: new Date().toISOString(),
+      },
+      503
+    );
+  }
+});
 
 app.use(logger());
 

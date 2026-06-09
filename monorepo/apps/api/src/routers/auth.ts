@@ -1,6 +1,5 @@
 import { Hono, type Context } from 'hono';
 import { db } from '@corsight/db/query';
-import { vWellheadParameterReadings } from '@corsight/db/schemas/views';
 import { users } from '@corsight/db/schemas/user';
 import { zValidator } from '@hono/zod-validator';
 import { loginSchema, registerSchema } from '@corsight/dto/req/auth';
@@ -68,10 +67,6 @@ async function issueSession(c: Context, user: UserRecord) {
 }
 
 export const authRouter = new Hono()
-  .get('/', async (c) => {
-    const data = await db.select().from(vWellheadParameterReadings).limit(10);
-    return c.json({ message: 'Auth route', data });
-  })
   .post(
     '/register',
     zValidator('json', registerSchema),

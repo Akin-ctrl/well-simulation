@@ -6,7 +6,7 @@ const publicRoutes: string[] = ['/auth/login', '/auth/register', '/auth/logout']
 
 export const authMiddleware: MiddlewareHandler = async (c, next) => {
   const cookieToken = getCookie(c, 'auth_token');
-  const token = cookieToken ?? c.req.header('Authorization')?.split(' ')[1];
+  const token = cookieToken;
   const jwtSecret = process.env.JWT_SECRET;
 
   const url = new URL(c.req.url);

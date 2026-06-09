@@ -9,6 +9,7 @@
     "lint": "turbo run lint",
     "format": "prettier --write \"**/*.{ts,tsx,md}\"",
     "check-types": "turbo run check-types",
+    "test:dto": "vitest run packages/dto/**/*.test.ts",
     "validate:openapi": "python3 ../scripts/validate_openapi.py"
   },
   "devDependencies": {
