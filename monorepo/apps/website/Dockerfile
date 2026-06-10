@@ -24,11 +24,12 @@ RUN pnpm install --frozen-lockfile
 
 # Copy remaining source files and build only the dashboard app.
 COPY . .
-RUN pnpm --filter @corsight/website exec vite build
+RUN pnpm --filter @corsight/website exec react-router build
 
 FROM nginx:1.27-alpine AS runner
 
 COPY apps/website/nginx.conf /etc/nginx/conf.d/default.conf
+RUN rm -rf /usr/share/nginx/html/*
 COPY --from=builder /app/apps/website/build/client /usr/share/nginx/html
 
 EXPOSE 80
