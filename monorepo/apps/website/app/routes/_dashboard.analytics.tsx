@@ -18,11 +18,6 @@ import type {
 import { Title } from '../domains/dashboard/components/misc';
 import { client, fetchFn } from '../utils/api';
 
-type ChartPoint = {
-  date: string;
-  amount: number;
-};
-
 type MultiMetricPoint = {
   date: string;
   [metricCode: string]: string | number;
@@ -35,6 +30,9 @@ type AlarmSegment = {
 };
 
 const METRIC_LABELS: Record<string, string> = {
+  tubing_pressure: 'Tubing Pressure',
+  casing_pressure: 'Casing Pressure',
+  annulus_pressure: 'Annulus Pressure',
   wellhead_temperature: 'Temperature',
   flow_rate: 'Flow Rate',
   water_cut: 'Water Cut',
@@ -42,6 +40,9 @@ const METRIC_LABELS: Record<string, string> = {
 };
 
 const METRIC_COLORS: Record<string, string> = {
+  tubing_pressure: '#553AFE',
+  casing_pressure: '#01C0F6',
+  annulus_pressure: '#10B981',
   wellhead_temperature: '#F97316',
   flow_rate: '#553AFE',
   water_cut: '#01C0F6',
@@ -51,6 +52,7 @@ const METRIC_COLORS: Record<string, string> = {
 const SEVERITY_COLORS: Record<string, string> = {
   critical: '#DC2626',
   high: '#F97316',
+  warning: '#F59E0B',
   medium: '#EAB308',
   low: '#01C0F6',
 };
@@ -80,15 +82,6 @@ function formatNumber(value: number | null | undefined) {
   return new Intl.NumberFormat('en', {
     maximumFractionDigits: 1,
   }).format(value);
-}
-
-function singleSeries(points: TrendPoint[]): ChartPoint[] {
-  return [...points]
-    .reverse()
-    .map((point) => ({
-      date: formatDate(point.bucketTime),
-      amount: point.avgValue ?? 0,
-    }));
 }
 
 function multiSeries(points: TrendPoint[], metricCodes: string[]): MultiMetricPoint[] {
@@ -144,42 +137,6 @@ function EmptyChart({ message }: { message: string }) {
   );
 }
 
-function SingleMetricChart({
-  data,
-  stroke,
-  unit,
-}: {
-  data: ChartPoint[];
-  stroke: string;
-  unit: string;
-}) {
-  if (!data.length) {
-    return <EmptyChart message='No trend data available yet.' />;
-  }
-
-  return (
-    <ResponsiveContainer width='100%' height={260}>
-      <LineChart data={data}>
-        <XAxis dataKey='date' stroke='#636c76' tickLine={false} axisLine={false} />
-        <YAxis
-          stroke='#636c76'
-          axisLine={false}
-          tickLine={false}
-          tickFormatter={(value: number) => formatNumber(value)}
-        />
-        <Tooltip formatter={(value: number) => [`${formatNumber(value)} ${unit}`, 'Average']} />
-        <Line
-          type='monotone'
-          dataKey='amount'
-          stroke={stroke}
-          strokeWidth={2}
-          dot={false}
-        />
-      </LineChart>
-    </ResponsiveContainer>
-  );
-}
-
 function MultiMetricChart({
   data,
   metricCodes,
@@ -220,7 +177,11 @@ function MultiMetricChart({
 
 function Analytics() {
   const data = useLoaderData() as DashboardAnalyticsResponse;
-  const pressureData = singleSeries(data.pressureTrend);
+  const pressureData = multiSeries(data.pressureTrend, [
+    'tubing_pressure',
+    'casing_pressure',
+    'annulus_pressure',
+  ]);
   const temperatureFlowData = multiSeries(data.temperatureFlowTrend, [
     'wellhead_temperature',
     'flow_rate',
@@ -237,23 +198,30 @@ function Analytics() {
       <div>
         <Title>Analytics</Title>
         <p className='text-fg-muted'>
-          Aggregate wellhead trends from TimescaleDB materialized views.
+          Two-minute aggregate trends from TimescaleDB continuous aggregates.
         </p>
       </div>
 
       <div className='grid grid-cols-1 gap-4 xl:grid-cols-5'>
         <div className='card xl:col-span-2'>
           <div className='mb-4'>
-            <h2 className='font-semibold'>Hourly Pressure Trend</h2>
-            <p className='text-sm text-fgColor-muted'>Average pressure across wellheads.</p>
+            <h2 className='font-semibold'>Pressure Trends</h2>
+            <p className='text-sm text-fgColor-muted'>
+              Tubing, casing, and annulus pressure averages across wells.
+            </p>
           </div>
-          <SingleMetricChart data={pressureData} stroke='#553AFE' unit='psi' />
+          <MultiMetricChart
+            data={pressureData}
+            metricCodes={['tubing_pressure', 'casing_pressure', 'annulus_pressure']}
+          />
         </div>
 
         <div className='card xl:col-span-2'>
           <div className='mb-4'>
             <h2 className='font-semibold'>Temperature / Flow</h2>
-            <p className='text-sm text-fgColor-muted'>Hourly temperature and production flow.</p>
+            <p className='text-sm text-fgColor-muted'>
+              Two-minute averages; values use their native units.
+            </p>
           </div>
           <MultiMetricChart
             data={temperatureFlowData}
@@ -264,7 +232,7 @@ function Analytics() {
         <div className='card'>
           <div className='mb-4'>
             <h2 className='font-semibold'>Alarm Severity</h2>
-            <p className='text-sm text-fgColor-muted'>Daily alarm counts by severity.</p>
+            <p className='text-sm text-fgColor-muted'>Five-minute alarm counts by severity.</p>
           </div>
           <div className='relative h-56'>
             <ResponsiveContainer>
@@ -298,7 +266,9 @@ function Analytics() {
         <div className='card xl:col-span-3'>
           <div className='mb-4'>
             <h2 className='font-semibold'>Water Cut / Gas-Oil Ratio</h2>
-            <p className='text-sm text-fgColor-muted'>Hourly fluid composition indicators.</p>
+            <p className='text-sm text-fgColor-muted'>
+              Two-minute averages; values use their native units.
+            </p>
           </div>
           <MultiMetricChart
             data={waterCutGorData}

@@ -64,6 +64,27 @@ function readingStatus(reading: LatestReading) {
   return 'normal';
 }
 
+function readingStatusClass(status: string) {
+  if (status === 'out of range') {
+    return 'text-red-600';
+  }
+  if (status === 'unknown') {
+    return 'text-fgColor-muted';
+  }
+  return 'text-green-700';
+}
+
+function alarmSeverityClass(severity: string | null | undefined) {
+  const normalized = severity?.toLowerCase();
+  if (normalized === 'critical') {
+    return 'text-red-600';
+  }
+  if (normalized === 'warning') {
+    return 'text-amber-600';
+  }
+  return 'text-fgColor-muted';
+}
+
 function wellheadCards(readings: LatestReading[]) {
   const cards = new Map<string, WellheadCard>();
 
@@ -86,7 +107,7 @@ function wellheadCards(readings: LatestReading[]) {
     });
   }
 
-  return [...cards.values()].slice(0, 6);
+  return [...cards.values()];
 }
 
 function Overview() {
@@ -141,7 +162,8 @@ function Overview() {
           <div>
             <h2 className='text-lg font-semibold'>Wellhead Snapshot</h2>
             <p className='text-sm text-fgColor-muted'>
-              Latest readings grouped by wellhead from the historian view.
+              Latest complete historian snapshot across {cards.length} of{' '}
+              {data.summary.totalWellheads} wells.
             </p>
           </div>
 
@@ -174,7 +196,9 @@ function Overview() {
                             {formatNumber(reading.rawValue)} {reading.canonicalUnit}
                           </p>
                           <p className='text-xs capitalize text-fgColor-muted'>
-                            {readingStatus(reading)}
+                            <span className={readingStatusClass(readingStatus(reading))}>
+                              {readingStatus(reading)}
+                            </span>
                           </p>
                         </div>
                       </div>
@@ -209,7 +233,7 @@ function Overview() {
                   <p className='text-sm text-fgColor-muted'>
                     {alarm.parameterDisplayName} {formatNumber(alarm.triggeredValue)}
                   </p>
-                  <p className='text-xs uppercase text-red-600'>
+                  <p className={`text-xs uppercase ${alarmSeverityClass(alarm.severityLevel)}`}>
                     {alarm.severityLevel ?? 'severity unknown'}
                   </p>
                 </div>

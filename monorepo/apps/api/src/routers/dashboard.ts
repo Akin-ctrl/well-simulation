@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { db, desc, sql } from '@corsight/db/query';
+import { asc, db, desc, eq, sql } from '@corsight/db/query';
 import {
   parameterreading,
   parametertype,
@@ -21,7 +21,7 @@ import { responseHandler } from '../utils/handler';
 
 const RECENT_READING_LIMIT = 24;
 const ACTIVE_ALARM_LIMIT = 12;
-const ANALYTICS_TREND_LIMIT = 48;
+const ANALYTICS_TREND_LIMIT = 144;
 
 async function countRows(
   table: typeof wellhead | typeof parametertype | typeof vActiveAlarms
@@ -49,6 +49,21 @@ async function latestReadings(limit = RECENT_READING_LIMIT) {
     .limit(limit);
 }
 
+async function latestSnapshotReadings(timestampUtc: string | null) {
+  if (!timestampUtc) {
+    return [];
+  }
+
+  return db
+    .select()
+    .from(vWellheadParameterReadings)
+    .where(eq(vWellheadParameterReadings.timestampUtc, timestampUtc))
+    .orderBy(
+      asc(vWellheadParameterReadings.wellheadId),
+      asc(vWellheadParameterReadings.parameterTypeId)
+    );
+}
+
 async function activeAlarms(limit = ACTIVE_ALARM_LIMIT) {
   return db
     .select()
@@ -61,13 +76,21 @@ async function pressureTrend() {
   return db
     .select({
       bucketTime: mvHourlyPressureTrends.bucketTime,
+      parameterCode: mvHourlyPressureTrends.parameterCode,
+      parameterDisplayName: mvHourlyPressureTrends.parameterDisplayName,
+      canonicalUnit: mvHourlyPressureTrends.canonicalUnit,
       avgValue: sql<number>`avg(${mvHourlyPressureTrends.avgValue})::float`,
       minValue: sql<number>`min(${mvHourlyPressureTrends.minValue})::float`,
       maxValue: sql<number>`max(${mvHourlyPressureTrends.maxValue})::float`,
       readingCount: sql<number>`sum(${mvHourlyPressureTrends.readingCount})::int`,
     })
     .from(mvHourlyPressureTrends)
-    .groupBy(mvHourlyPressureTrends.bucketTime)
+    .groupBy(
+      mvHourlyPressureTrends.bucketTime,
+      mvHourlyPressureTrends.parameterCode,
+      mvHourlyPressureTrends.parameterDisplayName,
+      mvHourlyPressureTrends.canonicalUnit
+    )
     .orderBy(desc(mvHourlyPressureTrends.bucketTime))
     .limit(ANALYTICS_TREND_LIMIT);
 }
@@ -138,7 +161,7 @@ export const dashboardRouter = new Hono()
         ]);
 
       const [readings, alarms] = await Promise.all([
-        latestReadings(),
+        latestSnapshotReadings(latestAt),
         activeAlarms(),
       ]);
 

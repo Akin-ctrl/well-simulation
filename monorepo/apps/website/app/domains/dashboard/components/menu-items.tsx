@@ -32,6 +32,7 @@ export const menuItems = [
     name: 'Settings',
     href: routes.dashboard.settings,
     icon: <CogIcon />,
+    disabled: true,
   },
 
   {

@@ -130,6 +130,30 @@ function RenderLinks(
               })}
             </CollapsibleContent>
           </Collapsible>
+        ) : item.disabled ? (
+          <div
+            aria-disabled='true'
+            className={cn(
+              'card flex items-center gap-3 mx-3 p-3! cursor-not-allowed opacity-50',
+              expanded ? '' : ''
+            )}>
+            <span
+              className={cn(
+                'button control-transparent button-md text-fgColor-white aspect-square w-auto p-0 [&>svg]:size-4'
+              )}>
+              {item.icon}
+            </span>
+
+            {expanded && (
+              <div
+                className={cn(
+                  'button button-md w-full justify-start [&>svg]:data-[state=closed]:rotate-0 [&>svg]:data-[state=open]:rotate-90',
+                  'text-fgColor-muted'
+                )}>
+                {item.name}
+              </div>
+            )}
+          </div>
         ) : (
           <Link
             to={item.href ?? '#'}
@@ -144,8 +168,7 @@ function RenderLinks(
             <span
               className={cn(
                 'button control-transparent button-md text-fgColor-white hover:bg-neutral-200 aspect-square w-auto p-0 [&>svg]:size-4',
-                isActive ? 'bg-control-transparent-bgColor-selected' : '',
-                item?.disabled ? 'pointer-events-none opacity-50' : ''
+                isActive ? 'bg-control-transparent-bgColor-selected' : ''
               )}>
               {item.icon}
             </span>
@@ -156,8 +179,7 @@ function RenderLinks(
                   'button button-md w-full justify-start [&>svg]:data-[state=closed]:rotate-0 [&>svg]:data-[state=open]:rotate-90',
                   isActive
                     ? 'bg-control-transparent-bgColor-selected font-semibold'
-                    : 'text-fgColor-muted',
-                  item?.disabled ? 'pointer-events-none opacity-50' : ''
+                    : 'text-fgColor-muted'
                 )}>
                 {item.name}
                 {item?.new ? (

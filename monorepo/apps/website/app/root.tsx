@@ -22,19 +22,6 @@ export const meta: MetaFunction = () => [
 export const links = () => [
   { rel: 'stylesheet', href: globalStylsheet },
   { rel: 'canonical', href: 'https://corsight.com' },
-  { rel: 'icon', type: 'image/x-icon', href: '/favicon.ico' },
-  {
-    rel: 'apple-touch-icon',
-    sizes: '192x192',
-    href: '/android-chrome-192x192.png',
-  },
-  {
-    rel: 'icon',
-    type: 'image/png',
-    sizes: '512x512',
-    href: '/android-chrome-512x512.png',
-  },
-  // {rel: 'manifest', href: '/manifest.json'},
 ];
 
 export function Layout({ children }: { children: React.ReactNode }) {
