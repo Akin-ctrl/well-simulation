@@ -193,6 +193,35 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "500":
           $ref: "#/components/responses/ServerError"
+  /dashboard/wellheads/{wellheadId}:
+    get:
+      tags: [Dashboard]
+      summary: Return one wellhead with current readings, active alarms, and per-well trends.
+      operationId: getWellheadDetail
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: wellheadId
+          in: path
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+      responses:
+        "200":
+          description: Wellhead detail data.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WellheadDetailResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/ServerError"
+        "500":
+          $ref: "#/components/responses/ServerError"
   /dashboard/analytics:
     get:
       tags: [Dashboard]
@@ -446,6 +475,76 @@ components:
               type: array
               items:
                 $ref: "#/components/schemas/DailyAlarmCount"
+    WellheadDetailResponse:
+      type: object
+      required: [msg, data, status]
+      properties:
+        msg:
+          type: string
+        status:
+          type: integer
+        data:
+          type: object
+          required:
+            - wellhead
+            - latestReadingAt
+            - latestReadings
+            - activeAlarms
+            - pressureTrend
+            - temperatureFlowTrend
+            - waterCutGorTrend
+          properties:
+            wellhead:
+              $ref: "#/components/schemas/WellheadAsset"
+            latestReadingAt:
+              type: [string, "null"]
+              format: date-time
+            latestReadings:
+              type: array
+              items:
+                $ref: "#/components/schemas/WellheadReading"
+            activeAlarms:
+              type: array
+              items:
+                $ref: "#/components/schemas/ActiveAlarm"
+            pressureTrend:
+              type: array
+              items:
+                $ref: "#/components/schemas/AggregateTrendPoint"
+            temperatureFlowTrend:
+              type: array
+              items:
+                $ref: "#/components/schemas/AggregateTrendPoint"
+            waterCutGorTrend:
+              type: array
+              items:
+                $ref: "#/components/schemas/AggregateTrendPoint"
+    WellheadAsset:
+      type: object
+      required:
+        - wellheadId
+        - wellheadName
+        - locationId
+        - locationName
+        - fieldId
+        - fieldName
+      properties:
+        wellheadId:
+          type: integer
+        wellheadName:
+          type: string
+        wellheadType:
+          type: [string, "null"]
+        status:
+          type: [string, "null"]
+        locationId:
+          type: integer
+        locationName:
+          type: string
+        fieldId:
+          type: integer
+        fieldName:
+          type: string
     DashboardSummary:
       type: object
       required: [totalWellheads, parametersTracked, activeAlarms, latestReadingAt]

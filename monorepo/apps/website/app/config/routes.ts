@@ -8,6 +8,7 @@ export const routes = {
   dashboard: {
     overview: '/',
     analytics: '/analytics',
+    wellhead: (wellheadId: number | string) => `/wellheads/${wellheadId}`,
     settings: '/settings',
   },
   help: '/help',

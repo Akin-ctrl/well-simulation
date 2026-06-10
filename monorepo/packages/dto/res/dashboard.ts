@@ -10,11 +10,16 @@ export type LatestReading = {
   rawValue?: number | null;
   wellheadId?: number | null;
   wellheadName?: string | null;
+  wellheadType?: string | null;
+  locationId?: number | null;
   locationName?: string | null;
+  fieldId?: number | null;
   fieldName?: string | null;
+  parameterTypeId?: number | null;
   parameterCode?: string | null;
   parameterDisplayName?: string | null;
   canonicalUnit?: string | null;
+  dataType?: string | null;
   normalMin?: number | null;
   normalMax?: number | null;
 };
@@ -24,9 +29,14 @@ export type ActiveAlarm = {
   triggeredAt?: string | Date | null;
   severityLevel?: string | null;
   triggeredValue?: number | null;
+  wellheadId?: number | null;
   wellheadName?: string | null;
+  locationName?: string | null;
+  fieldName?: string | null;
   parameterDisplayName?: string | null;
+  operator?: string | null;
   thresholdValue?: number | null;
+  alarmRuleId?: number | null;
 };
 
 export type DashboardOverviewResponse = {
@@ -57,4 +67,25 @@ export type DashboardAnalyticsResponse = {
   temperatureFlowTrend: TrendPoint[];
   waterCutGorTrend: TrendPoint[];
   dailyAlarmCounts: DailyAlarmCount[];
+};
+
+export type WellheadAsset = {
+  wellheadId: number;
+  wellheadName: string;
+  wellheadType: string | null;
+  status: string | null;
+  locationId: number;
+  locationName: string;
+  fieldId: number;
+  fieldName: string;
+};
+
+export type WellheadDetailResponse = {
+  wellhead: WellheadAsset;
+  latestReadingAt: string | null;
+  latestReadings: LatestReading[];
+  activeAlarms: ActiveAlarm[];
+  pressureTrend: TrendPoint[];
+  temperatureFlowTrend: TrendPoint[];
+  waterCutGorTrend: TrendPoint[];
 };

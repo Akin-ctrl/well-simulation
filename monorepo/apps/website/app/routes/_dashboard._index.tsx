@@ -5,14 +5,16 @@ import {
   GridIcon,
   RadioTowerIcon,
 } from 'lucide-react';
-import { useLoaderData } from 'react-router';
+import { Link, useLoaderData } from 'react-router';
 import type {
   DashboardOverviewResponse,
   LatestReading,
 } from '@corsight/dto/res/dashboard';
 import { client, fetchFn } from '../utils/api';
+import { routes } from '../config/routes';
 
 type WellheadCard = {
+  wellheadId: number | null;
   wellheadName: string;
   locationName: string;
   fieldName: string;
@@ -100,6 +102,7 @@ function wellheadCards(readings: LatestReading[]) {
     }
 
     cards.set(key, {
+      wellheadId: reading.wellheadId ?? null,
       wellheadName: key,
       locationName: reading.locationName ?? 'Unknown location',
       fieldName: reading.fieldName ?? 'Unknown field',
@@ -172,7 +175,15 @@ function Overview() {
               {cards.map((wellhead) => (
                 <div className='card gap-4 flex flex-col' key={wellhead.wellheadName}>
                   <div>
-                    <p className='font-semibold'>{wellhead.wellheadName}</p>
+                    {wellhead.wellheadId ? (
+                      <Link
+                        to={routes.dashboard.wellhead(wellhead.wellheadId)}
+                        className='font-semibold hover:underline'>
+                        {wellhead.wellheadName}
+                      </Link>
+                    ) : (
+                      <p className='font-semibold'>{wellhead.wellheadName}</p>
+                    )}
                     <p className='text-sm text-fgColor-muted'>
                       {wellhead.fieldName} · {wellhead.locationName}
                     </p>
