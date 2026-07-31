@@ -28,34 +28,48 @@ Show that the project is an industrial wellhead monitoring simulation evolving i
    - water cut
    - valve/pump status
 
-4. Inspect active alarms:
+4. Inspect the current implemented dashboard:
+
+   - fleet overview
+   - analytics charts
+   - per-wellhead detail page
+   - active alarms on affected wellheads
+
+5. Inspect active alarms:
 
    - high pressure
    - high temperature
    - high water cut
    - high vibration or degradation indicators
 
-5. Run or inspect a what-if scenario:
+6. Explain the next implementation slice:
+
+   ```text
+   The next dashboard page is an Alarm Center for active alarms, severity summaries,
+   threshold context, alarm age, and links back to wellhead details.
+   ```
+
+7. Explain the target what-if scenario:
 
    ```text
    Close choke on WH-001 from 80% to 50%.
    ```
 
-6. Expected behavior:
+8. Expected future behavior:
 
    - flow rate decreases
    - tubing pressure rises
    - forecast confidence may decrease if operating state becomes unstable
    - alarms may trigger if thresholds are crossed
 
-7. Inspect the data layer:
+9. Inspect the data layer:
 
    - raw readings in TimescaleDB
-   - model state snapshots
-   - forecast/scenario outputs
    - alarm events
+   - future model state snapshots
+   - future forecast/scenario outputs
 
-8. Inspect architecture decisions:
+10. Inspect architecture decisions:
 
    ```text
    docs/adr/
@@ -63,5 +77,4 @@ Show that the project is an industrial wellhead monitoring simulation evolving i
 
 ## Current Status
 
-This is the target demo flow. Some pieces still need implementation and integration before the full flow works end-to-end.
-
+The overview, analytics, per-wellhead detail pages, live telemetry, and active alarm data are implemented. The Alarm Center is the next dashboard feature. Stateful twin behavior, predictions, and what-if scenarios are still target capabilities, not current implementation.

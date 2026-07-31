@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "description": "Corsight utils package",
   "main": "index.js",
+  "scripts": {
+    "check-types": "tsc --noEmit"
+  },
   "author": "Osayame Emmanuel",
   "license": "MIT",
   "dependencies": {
@@ -12,9 +15,7 @@
     "tailwind-merge": "^2.6.0"
   },
   "devDependencies": {
-    "@types/js-cookie": "^3.0.4",
-    "eslint-config-custom": "*",
-    "tsconfig": "*"
+    "@types/js-cookie": "^3.0.4"
   },
   "private": true
 }

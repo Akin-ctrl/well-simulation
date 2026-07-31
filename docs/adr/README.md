@@ -50,3 +50,4 @@ Each ADR should answer:
 - `0029-metrics-stack.md` — expose Prometheus-compatible metrics with optional observability stack.
 - `0030-portfolio-deployment-scope.md` — target a self-contained portfolio deployment.
 - `0031-portfolio-demo-narrative.md` — optimize the demo for fast reviewer understanding.
+- `0032-alarm-center-scope.md` — implement active alarm inspection before alarm lifecycle workflows.

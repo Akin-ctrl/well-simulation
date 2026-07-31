@@ -15,6 +15,18 @@ Wellhead simulator
 
 The current simulator generates synthetic telemetry. It does not yet maintain a physics-aware or behavior-aware model of the wellhead.
 
+## Current Dashboard Layer
+
+The dashboard currently exposes the monitoring foundation:
+
+- fleet-level overview for all simulated wellheads
+- latest complete telemetry snapshots
+- active alarms from database alarm evaluation
+- analytics charts for pressure, temperature, flow, water cut, and GOR
+- per-wellhead detail pages with current readings, alarms, and trends
+
+The next planned dashboard capability is a dedicated Alarm Center. It should present active alarms as operational evidence: severity, affected wellhead, parameter, value, threshold, trigger time, age, and a link to the relevant wellhead detail page.
+
 ## Target Lightweight Digital Twin
 
 The target architecture adds a twin core between asset metadata and telemetry output:
@@ -39,7 +51,17 @@ Asset metadata
 - **Scenario API**: runs what-if simulations without mutating live state.
 - **Dashboard**: shows live state, historical trends, alarms, predictions, and scenario outputs.
 
+## Digital Twin Evolution Path
+
+The project becomes a credible lightweight digital twin by adding capabilities in this order:
+
+1. **Explainable monitoring**: overview, detail pages, alarm center, trend explorer, and data freshness.
+2. **Stateful process model**: deterministic wellhead state that evolves over fixed timesteps.
+3. **Observed vs simulated comparison**: store both measured telemetry and model-estimated state.
+4. **Divergence detection**: flag when observed readings move away from expected model behavior.
+5. **Forecasting**: short-horizon predictions with confidence and clear assumptions.
+6. **What-if scenarios**: cloned-state simulations that do not mutate live state.
+
 ## Key Boundary
 
 The project should not claim to be a high-fidelity reservoir simulator. The target is a **lightweight operational digital twin**: useful for demonstrating state, causality, prediction, alarms, and decision support.
-

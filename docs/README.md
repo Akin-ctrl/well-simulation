@@ -8,6 +8,21 @@ This project should currently be described as a **wellhead monitoring simulation
 
 It should not yet be described as a full digital twin. It becomes a digital twin when it includes a stateful process model, control inputs, prediction, calibration, and what-if simulation.
 
+## Current Product State
+
+The implemented system now supports:
+
+- synthetic wellhead telemetry
+- Modbus-style ingestion
+- PostgreSQL/TimescaleDB historian storage
+- SQL alarm evaluation
+- public TypeScript API
+- React dashboard overview
+- dashboard analytics
+- per-wellhead detail pages
+
+The next product slice is the **Alarm Center**. It should make active alarms inspectable and explainable without adding fake acknowledge/shelve behavior before the data model supports it.
+
 ## Contents
 
 - `architecture/overview.md` — current architecture and target digital twin architecture.
@@ -15,6 +30,14 @@ It should not yet be described as a full digital twin. It becomes a digital twin
 - `adr/README.md` — ADR format and index.
 - `demo/demo-script.md` — intended portfolio-review demo flow.
 - `openapi/README.md` — API contract index and rules.
+
+## Near-Term Documentation Backlog
+
+- Keep README language aligned with the current implementation.
+- Add ADRs before introducing major digital-twin behavior.
+- Update OpenAPI specs with every public API change.
+- Document simulator assumptions before presenting twin predictions.
+- Keep demo instructions realistic: show implemented behavior first, then target behavior.
 
 ## Documentation Principles
 

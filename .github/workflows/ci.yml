@@ -1,0 +1,79 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Cancel superseded runs on the same ref.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  web:
+    name: Web (types, lint, tests)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: monorepo
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.11.1
+
+      - name: Install Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: monorepo/.nvmrc
+          cache: pnpm
+          cache-dependency-path: monorepo/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Type check
+        run: pnpm turbo run check-types
+
+      - name: Lint
+        run: pnpm turbo run lint
+
+      - name: Unit tests
+        run: pnpm test:dto
+
+  contracts:
+    name: API contracts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install script dependencies
+        run: pip install -r scripts/requirements.txt
+
+      - name: Validate OpenAPI specifications
+        run: python3 scripts/validate_openapi.py
+
+  images:
+    name: Container images
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Compose interpolates these at config-parse time even for `build`.
+      # The example values are non-secret placeholders.
+      - name: Provide placeholder environment
+        run: cp .env.example .env
+
+      - name: Build all service images
+        run: docker compose build

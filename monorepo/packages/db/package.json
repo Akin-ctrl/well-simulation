@@ -6,6 +6,7 @@
     "generate": "drizzle-kit generate",
     "migrate": "dotenv -e ../../.env -- drizzle-kit migrate",
     "studio": "bunx drizzle-kit studio --port 3002",
+    "check-types": "tsc --noEmit",
     "format": "biome format",
     "lint": "biome lint"
   },

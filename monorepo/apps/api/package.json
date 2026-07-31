@@ -4,6 +4,7 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
+    "check-types": "tsc --noEmit",
     "start": "tsx src/index.ts"
   },
   "dependencies": {

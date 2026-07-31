@@ -1,0 +1,4 @@
+# Tooling dependencies for repository scripts.
+# Used by scripts/validate_openapi.py, which is invoked via the
+# monorepo `validate:openapi` script and by CI.
+PyYAML==6.0.2

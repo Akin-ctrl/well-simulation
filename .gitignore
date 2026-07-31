@@ -3,8 +3,6 @@
 venv/
 __pycache__/
 *.py[cod]
-CODING_STANDARDS_COMMITMENT.md
-docs/roadmap.md
 
 # Dependencies
 node_modules
