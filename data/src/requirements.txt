@@ -1,2 +1,5 @@
-pymodbus == 2.5.3
-psycopg2-binary
+# pymodbus 3.11.x is the newest line that still exposes a synchronous
+# datastore. 3.12+ moved ModbusDeviceContext to async-only accessors, which
+# the threaded gateway would need restructuring to use.
+pymodbus == 3.11.4
+psycopg2-binary == 2.9.10

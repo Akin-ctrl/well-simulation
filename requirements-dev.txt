@@ -1,0 +1,18 @@
+# Development and CI tooling for the Python services and repository scripts.
+# These are the controls that make CODING_STANDARDS_COMMITMENT.md checkable.
+#
+#   ruff check .          lint (Standards 1, 4, 7, 10)
+#   ruff format --check   formatting (Standard 1)
+#   mypy                  strict typing (Standard 7)
+#   pytest                behaviour (Standard 8)
+
+-r data/src/requirements.txt
+-r scripts/requirements.txt
+
+ruff == 0.14.4
+mypy == 1.18.2
+pytest == 8.4.2
+
+# Stubs so strict typing checks our code rather than reporting library gaps.
+types-psycopg2 == 2.9.21.20250915
+types-PyYAML == 6.0.12.20250915

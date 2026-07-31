@@ -19,26 +19,29 @@ services:
       retries: 5
     networks:
       - wellnet
-  pgadmin:
-    image: dpage/pgadmin4
-    container_name: wellhead_pgadmin
-    environment:
-      - PGADMIN_DEFAULT_EMAIL=${PGADMIN_DEFAULT_EMAIL}
-      - PGADMIN_DEFAULT_PASSWORD=${PGADMIN_DEFAULT_PASSWORD}
-    ports:
-      - "5050:80"
-    volumes:
-      - pgadmin_data:/var/lib/pgadmin
-    depends_on:
-      db:
-        condition: service_healthy
-    networks:
-      - wellnet
+  # pgadmin:
+  #   image: dpage/pgadmin4
+  #   container_name: wellhead_pgadmin
+  #   environment:
+  #     - PGADMIN_DEFAULT_EMAIL=${PGADMIN_DEFAULT_EMAIL}
+  #     - PGADMIN_DEFAULT_PASSWORD=${PGADMIN_DEFAULT_PASSWORD}
+  #   ports:
+  #     - "5050:80"
+  #   volumes:
+  #     - pgadmin_data:/var/lib/pgadmin
+  #   depends_on:
+  #     db:
+  #       condition: service_healthy
+  #   networks:
+  #     - wellnet
 
   modbus:
     build: ./data/src
     container_name: modbus_gateway
     command: python modbus_gateway.py
+    # The gateway exits when its telemetry source stops, rather than serving
+    # stale registers. Restarting is how it recovers.
+    restart: unless-stopped
     ports:
       - "5020:5020"
     depends_on:
@@ -54,11 +57,13 @@ services:
       POSTGRES_PORT: "5432"
       MODBUS_PORT: ${MODBUS_PORT}
       MODBUS_BIND_HOST: "0.0.0.0"
+      TELEMETRY_INTERVAL_SECONDS: ${TELEMETRY_INTERVAL_SECONDS:-5}
 
   ingestion:
     build: ./data/src
     container_name: database_ingestion
     command: python database_ingestion.py
+    restart: unless-stopped
     depends_on:
       db:
         condition: service_healthy
@@ -72,6 +77,7 @@ services:
       POSTGRES_PORT: "5432"
       MODBUS_HOST: modbus
       MODBUS_PORT: ${MODBUS_PORT}
+      TELEMETRY_INTERVAL_SECONDS: ${TELEMETRY_INTERVAL_SECONDS:-5}
 
     networks:
       - wellnet
@@ -101,7 +107,7 @@ services:
     depends_on:
       - api
     ports:
-      - "8082:80"
+      - "8090:80"
     restart: unless-stopped
     networks:
       - wellnet
