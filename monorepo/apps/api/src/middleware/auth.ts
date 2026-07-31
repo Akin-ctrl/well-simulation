@@ -31,7 +31,7 @@ export const authMiddleware: MiddlewareHandler = async (c, next) => {
       }
       const payload = await verify(token, jwtSecret);
       c.set('session', payload);
-    } catch (e) {
+    } catch {
       deleteCookie(c, 'auth_token');
       if (isPublic) {
         return next();

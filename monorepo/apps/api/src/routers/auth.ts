@@ -27,7 +27,9 @@ function requireJwtSecret() {
 }
 
 function publicUser(user: UserRecord) {
-  const { encryptedPassword, ...safeUser } = user;
+  // Destructured purely to drop the hash from the response. The underscore
+  // marks it as deliberately unused; removing it would leak the password hash.
+  const { encryptedPassword: _encryptedPassword, ...safeUser } = user;
   return safeUser;
 }
 
