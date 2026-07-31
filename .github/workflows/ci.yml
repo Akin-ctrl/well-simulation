@@ -44,8 +44,8 @@ jobs:
       - name: Unit tests
         run: pnpm test:dto
 
-  contracts:
-    name: API contracts
+  python:
+    name: Python (lint, types, tests)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -54,9 +54,25 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
 
-      - name: Install script dependencies
-        run: pip install -r scripts/requirements.txt
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+
+      # These four are what make CODING_STANDARDS_COMMITMENT.md enforceable
+      # for the Python services rather than advisory.
+      - name: Lint
+        run: ruff check .
+
+      - name: Format check
+        run: ruff format --check .
+
+      - name: Type check
+        run: mypy
+
+      - name: Tests
+        run: pytest
 
       - name: Validate OpenAPI specifications
         run: python3 scripts/validate_openapi.py
