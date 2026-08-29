@@ -107,11 +107,7 @@ async function fetchFn<T>(
     }
 
     const successfulBody = responseBody as ApiRes<T> | ErrorResponseBody;
-    if (
-      isRecord(successfulBody) &&
-      'error' in successfulBody &&
-      successfulBody.error
-    ) {
+    if (isRecord(successfulBody) && 'error' in successfulBody && successfulBody.error) {
       throw new ApiError(
         successfulBody.error,
         successfulBody.msg || 'API returned an error',

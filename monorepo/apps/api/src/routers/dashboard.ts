@@ -13,14 +13,15 @@ import type {
   WellheadDetailResponse,
 } from '@corsight/dto/res/dashboard';
 import {
-  mvDailyAlarmCounts,
-  mvHourlyPressureTrends,
-  mvHourlyTempFlowTrends,
-  mvHourlyWaterCutGorTrends,
+  mv5minAlarmCounts,
+  mv2minPressureTrends,
+  mv2minTempFlowTrends,
+  mv2minWaterCutGorTrends,
   vActiveAlarms,
   vWellheadParameterReadings,
 } from '@corsight/db/schemas/views';
 import { responseHandler } from '../utils/handler';
+import { requireCapability } from '../middleware/authorize';
 import { HTTPException } from 'hono/http-exception';
 
 const RECENT_READING_LIMIT = 24;
@@ -30,9 +31,7 @@ const ANALYTICS_TREND_LIMIT = 144;
 async function countRows(
   table: typeof wellhead | typeof parametertype | typeof vActiveAlarms
 ) {
-  const [row] = await db
-    .select({ value: sql<number>`count(*)::int` })
-    .from(table);
+  const [row] = await db.select({ value: sql<number>`count(*)::int` }).from(table);
 
   return row?.value ?? 0;
 }
@@ -98,10 +97,7 @@ async function latestWellheadReadingTimestamp(wellheadId: number) {
   return row?.value ?? null;
 }
 
-async function latestWellheadReadings(
-  wellheadId: number,
-  timestampUtc: string | null
-) {
+async function latestWellheadReadings(wellheadId: number, timestampUtc: string | null) {
   if (!timestampUtc) {
     return [];
   }
@@ -138,135 +134,138 @@ async function activeAlarmsForWellhead(wellheadId: number) {
 async function pressureTrend() {
   return db
     .select({
-      bucketTime: mvHourlyPressureTrends.bucketTime,
-      parameterCode: mvHourlyPressureTrends.parameterCode,
-      parameterDisplayName: mvHourlyPressureTrends.parameterDisplayName,
-      canonicalUnit: mvHourlyPressureTrends.canonicalUnit,
-      avgValue: sql<number>`avg(${mvHourlyPressureTrends.avgValue})::float`,
-      minValue: sql<number>`min(${mvHourlyPressureTrends.minValue})::float`,
-      maxValue: sql<number>`max(${mvHourlyPressureTrends.maxValue})::float`,
-      readingCount: sql<number>`sum(${mvHourlyPressureTrends.readingCount})::int`,
+      bucketTime: mv2minPressureTrends.bucketTime,
+      parameterCode: mv2minPressureTrends.parameterCode,
+      parameterDisplayName: mv2minPressureTrends.parameterDisplayName,
+      canonicalUnit: mv2minPressureTrends.canonicalUnit,
+      avgValue: sql<number>`avg(${mv2minPressureTrends.avgValue})::float`,
+      minValue: sql<number>`min(${mv2minPressureTrends.minValue})::float`,
+      maxValue: sql<number>`max(${mv2minPressureTrends.maxValue})::float`,
+      readingCount: sql<number>`sum(${mv2minPressureTrends.readingCount})::int`,
     })
-    .from(mvHourlyPressureTrends)
+    .from(mv2minPressureTrends)
     .groupBy(
-      mvHourlyPressureTrends.bucketTime,
-      mvHourlyPressureTrends.parameterCode,
-      mvHourlyPressureTrends.parameterDisplayName,
-      mvHourlyPressureTrends.canonicalUnit
+      mv2minPressureTrends.bucketTime,
+      mv2minPressureTrends.parameterCode,
+      mv2minPressureTrends.parameterDisplayName,
+      mv2minPressureTrends.canonicalUnit
     )
-    .orderBy(desc(mvHourlyPressureTrends.bucketTime))
+    .orderBy(desc(mv2minPressureTrends.bucketTime))
     .limit(ANALYTICS_TREND_LIMIT);
 }
 
 async function pressureTrendForWellhead(wellheadId: number) {
   return db
     .select({
-      bucketTime: mvHourlyPressureTrends.bucketTime,
-      parameterCode: mvHourlyPressureTrends.parameterCode,
-      parameterDisplayName: mvHourlyPressureTrends.parameterDisplayName,
-      canonicalUnit: mvHourlyPressureTrends.canonicalUnit,
-      avgValue: mvHourlyPressureTrends.avgValue,
-      minValue: mvHourlyPressureTrends.minValue,
-      maxValue: mvHourlyPressureTrends.maxValue,
-      readingCount: mvHourlyPressureTrends.readingCount,
+      bucketTime: mv2minPressureTrends.bucketTime,
+      parameterCode: mv2minPressureTrends.parameterCode,
+      parameterDisplayName: mv2minPressureTrends.parameterDisplayName,
+      canonicalUnit: mv2minPressureTrends.canonicalUnit,
+      avgValue: mv2minPressureTrends.avgValue,
+      minValue: mv2minPressureTrends.minValue,
+      maxValue: mv2minPressureTrends.maxValue,
+      readingCount: mv2minPressureTrends.readingCount,
     })
-    .from(mvHourlyPressureTrends)
-    .where(eq(mvHourlyPressureTrends.wellheadId, wellheadId))
-    .orderBy(desc(mvHourlyPressureTrends.bucketTime))
+    .from(mv2minPressureTrends)
+    .where(eq(mv2minPressureTrends.wellheadId, wellheadId))
+    .orderBy(desc(mv2minPressureTrends.bucketTime))
     .limit(ANALYTICS_TREND_LIMIT);
 }
 
 async function tempFlowTrend() {
   return db
     .select({
-      bucketTime: mvHourlyTempFlowTrends.bucketTime,
-      parameterCode: mvHourlyTempFlowTrends.parameterCode,
-      parameterDisplayName: mvHourlyTempFlowTrends.parameterDisplayName,
-      canonicalUnit: mvHourlyTempFlowTrends.canonicalUnit,
-      avgValue: sql<number>`avg(${mvHourlyTempFlowTrends.avgValue})::float`,
-      minValue: sql<number>`min(${mvHourlyTempFlowTrends.minValue})::float`,
-      maxValue: sql<number>`max(${mvHourlyTempFlowTrends.maxValue})::float`,
-      readingCount: sql<number>`sum(${mvHourlyTempFlowTrends.readingCount})::int`,
+      bucketTime: mv2minTempFlowTrends.bucketTime,
+      parameterCode: mv2minTempFlowTrends.parameterCode,
+      parameterDisplayName: mv2minTempFlowTrends.parameterDisplayName,
+      canonicalUnit: mv2minTempFlowTrends.canonicalUnit,
+      avgValue: sql<number>`avg(${mv2minTempFlowTrends.avgValue})::float`,
+      minValue: sql<number>`min(${mv2minTempFlowTrends.minValue})::float`,
+      maxValue: sql<number>`max(${mv2minTempFlowTrends.maxValue})::float`,
+      readingCount: sql<number>`sum(${mv2minTempFlowTrends.readingCount})::int`,
     })
-    .from(mvHourlyTempFlowTrends)
+    .from(mv2minTempFlowTrends)
     .groupBy(
-      mvHourlyTempFlowTrends.bucketTime,
-      mvHourlyTempFlowTrends.parameterCode,
-      mvHourlyTempFlowTrends.parameterDisplayName,
-      mvHourlyTempFlowTrends.canonicalUnit
+      mv2minTempFlowTrends.bucketTime,
+      mv2minTempFlowTrends.parameterCode,
+      mv2minTempFlowTrends.parameterDisplayName,
+      mv2minTempFlowTrends.canonicalUnit
     )
-    .orderBy(desc(mvHourlyTempFlowTrends.bucketTime))
+    .orderBy(desc(mv2minTempFlowTrends.bucketTime))
     .limit(ANALYTICS_TREND_LIMIT);
 }
 
 async function tempFlowTrendForWellhead(wellheadId: number) {
   return db
     .select({
-      bucketTime: mvHourlyTempFlowTrends.bucketTime,
-      parameterCode: mvHourlyTempFlowTrends.parameterCode,
-      parameterDisplayName: mvHourlyTempFlowTrends.parameterDisplayName,
-      canonicalUnit: mvHourlyTempFlowTrends.canonicalUnit,
-      avgValue: mvHourlyTempFlowTrends.avgValue,
-      minValue: mvHourlyTempFlowTrends.minValue,
-      maxValue: mvHourlyTempFlowTrends.maxValue,
-      readingCount: mvHourlyTempFlowTrends.readingCount,
+      bucketTime: mv2minTempFlowTrends.bucketTime,
+      parameterCode: mv2minTempFlowTrends.parameterCode,
+      parameterDisplayName: mv2minTempFlowTrends.parameterDisplayName,
+      canonicalUnit: mv2minTempFlowTrends.canonicalUnit,
+      avgValue: mv2minTempFlowTrends.avgValue,
+      minValue: mv2minTempFlowTrends.minValue,
+      maxValue: mv2minTempFlowTrends.maxValue,
+      readingCount: mv2minTempFlowTrends.readingCount,
     })
-    .from(mvHourlyTempFlowTrends)
-    .where(eq(mvHourlyTempFlowTrends.wellheadId, wellheadId))
-    .orderBy(desc(mvHourlyTempFlowTrends.bucketTime))
+    .from(mv2minTempFlowTrends)
+    .where(eq(mv2minTempFlowTrends.wellheadId, wellheadId))
+    .orderBy(desc(mv2minTempFlowTrends.bucketTime))
     .limit(ANALYTICS_TREND_LIMIT);
 }
 
 async function waterCutGorTrend() {
   return db
     .select({
-      bucketTime: mvHourlyWaterCutGorTrends.bucketTime,
-      parameterCode: mvHourlyWaterCutGorTrends.parameterCode,
-      parameterDisplayName: mvHourlyWaterCutGorTrends.parameterDisplayName,
-      canonicalUnit: mvHourlyWaterCutGorTrends.canonicalUnit,
-      avgValue: sql<number>`avg(${mvHourlyWaterCutGorTrends.avgValue})::float`,
-      minValue: sql<number>`min(${mvHourlyWaterCutGorTrends.minValue})::float`,
-      maxValue: sql<number>`max(${mvHourlyWaterCutGorTrends.maxValue})::float`,
-      readingCount: sql<number>`sum(${mvHourlyWaterCutGorTrends.readingCount})::int`,
+      bucketTime: mv2minWaterCutGorTrends.bucketTime,
+      parameterCode: mv2minWaterCutGorTrends.parameterCode,
+      parameterDisplayName: mv2minWaterCutGorTrends.parameterDisplayName,
+      canonicalUnit: mv2minWaterCutGorTrends.canonicalUnit,
+      avgValue: sql<number>`avg(${mv2minWaterCutGorTrends.avgValue})::float`,
+      minValue: sql<number>`min(${mv2minWaterCutGorTrends.minValue})::float`,
+      maxValue: sql<number>`max(${mv2minWaterCutGorTrends.maxValue})::float`,
+      readingCount: sql<number>`sum(${mv2minWaterCutGorTrends.readingCount})::int`,
     })
-    .from(mvHourlyWaterCutGorTrends)
+    .from(mv2minWaterCutGorTrends)
     .groupBy(
-      mvHourlyWaterCutGorTrends.bucketTime,
-      mvHourlyWaterCutGorTrends.parameterCode,
-      mvHourlyWaterCutGorTrends.parameterDisplayName,
-      mvHourlyWaterCutGorTrends.canonicalUnit
+      mv2minWaterCutGorTrends.bucketTime,
+      mv2minWaterCutGorTrends.parameterCode,
+      mv2minWaterCutGorTrends.parameterDisplayName,
+      mv2minWaterCutGorTrends.canonicalUnit
     )
-    .orderBy(desc(mvHourlyWaterCutGorTrends.bucketTime))
+    .orderBy(desc(mv2minWaterCutGorTrends.bucketTime))
     .limit(ANALYTICS_TREND_LIMIT);
 }
 
 async function waterCutGorTrendForWellhead(wellheadId: number) {
   return db
     .select({
-      bucketTime: mvHourlyWaterCutGorTrends.bucketTime,
-      parameterCode: mvHourlyWaterCutGorTrends.parameterCode,
-      parameterDisplayName: mvHourlyWaterCutGorTrends.parameterDisplayName,
-      canonicalUnit: mvHourlyWaterCutGorTrends.canonicalUnit,
-      avgValue: mvHourlyWaterCutGorTrends.avgValue,
-      minValue: mvHourlyWaterCutGorTrends.minValue,
-      maxValue: mvHourlyWaterCutGorTrends.maxValue,
-      readingCount: mvHourlyWaterCutGorTrends.readingCount,
+      bucketTime: mv2minWaterCutGorTrends.bucketTime,
+      parameterCode: mv2minWaterCutGorTrends.parameterCode,
+      parameterDisplayName: mv2minWaterCutGorTrends.parameterDisplayName,
+      canonicalUnit: mv2minWaterCutGorTrends.canonicalUnit,
+      avgValue: mv2minWaterCutGorTrends.avgValue,
+      minValue: mv2minWaterCutGorTrends.minValue,
+      maxValue: mv2minWaterCutGorTrends.maxValue,
+      readingCount: mv2minWaterCutGorTrends.readingCount,
     })
-    .from(mvHourlyWaterCutGorTrends)
-    .where(eq(mvHourlyWaterCutGorTrends.wellheadId, wellheadId))
-    .orderBy(desc(mvHourlyWaterCutGorTrends.bucketTime))
+    .from(mv2minWaterCutGorTrends)
+    .where(eq(mv2minWaterCutGorTrends.wellheadId, wellheadId))
+    .orderBy(desc(mv2minWaterCutGorTrends.bucketTime))
     .limit(ANALYTICS_TREND_LIMIT);
 }
 
-async function dailyAlarmCounts() {
+async function alarmCounts() {
   return db
     .select()
-    .from(mvDailyAlarmCounts)
-    .orderBy(desc(mvDailyAlarmCounts.bucketDay))
+    .from(mv5minAlarmCounts)
+    .orderBy(desc(mv5minAlarmCounts.bucketTime))
     .limit(ANALYTICS_TREND_LIMIT);
 }
 
 export const dashboardRouter = new Hono()
+  // Every dashboard read declares the capability it needs rather than relying
+  // on authentication alone, so ADR 0033's model governs these routes too.
+  .use('*', requireCapability('dashboard:read'))
   .get('/overview', (c) =>
     responseHandler(async () => {
       const [totalWellheads, parametersTracked, activeAlarmCount, latestAt] =
@@ -320,19 +319,14 @@ export const dashboardRouter = new Hono()
       }
 
       const latestAt = await latestWellheadReadingTimestamp(wellheadId);
-      const [
-        readings,
-        alarms,
-        pressure,
-        temperatureFlow,
-        waterCutGor,
-      ] = await Promise.all([
-        latestWellheadReadings(wellheadId, latestAt),
-        activeAlarmsForWellhead(wellheadId),
-        pressureTrendForWellhead(wellheadId),
-        tempFlowTrendForWellhead(wellheadId),
-        waterCutGorTrendForWellhead(wellheadId),
-      ]);
+      const [readings, alarms, pressure, temperatureFlow, waterCutGor] =
+        await Promise.all([
+          latestWellheadReadings(wellheadId, latestAt),
+          activeAlarmsForWellhead(wellheadId),
+          pressureTrendForWellhead(wellheadId),
+          tempFlowTrendForWellhead(wellheadId),
+          waterCutGorTrendForWellhead(wellheadId),
+        ]);
 
       const detail: WellheadDetailResponse = {
         wellhead: asset,
@@ -349,19 +343,19 @@ export const dashboardRouter = new Hono()
   )
   .get('/analytics', (c) =>
     responseHandler(async () => {
-      const [pressure, temperatureFlow, waterCutGor, alarmsByDay] =
+      const [pressure, temperatureFlow, waterCutGor, alarmsByBucket] =
         await Promise.all([
           pressureTrend(),
           tempFlowTrend(),
           waterCutGorTrend(),
-          dailyAlarmCounts(),
+          alarmCounts(),
         ]);
 
       const analytics: DashboardAnalyticsResponse = {
         pressureTrend: pressure,
         temperatureFlowTrend: temperatureFlow,
         waterCutGorTrend: waterCutGor,
-        dailyAlarmCounts: alarmsByDay,
+        alarmCounts: alarmsByBucket,
       };
 
       return analytics;

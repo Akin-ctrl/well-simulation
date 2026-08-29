@@ -1,17 +1,97 @@
-import type { MiddlewareHandler } from 'hono';
+import type { Context, MiddlewareHandler } from 'hono';
+import { getConnInfo } from '@hono/node-server/conninfo';
 
-type RateLimitStore = Map<string, { count: number; resetTime: number }>;
+/**
+ * Fixed-window rate limiting keyed on client address.
+ *
+ * The previous implementation read `x-forwarded-for` unconditionally, so any
+ * caller could spoof the header per request and never be limited. Everything
+ * without the header shared a single `'unknown-ip'` bucket, so genuine direct
+ * traffic throttled itself collectively.
+ *
+ * The header is now honoured only when the immediate peer is a configured
+ * trusted proxy, which in this deployment is the nginx container that serves
+ * the dashboard and proxies `/api`.
+ *
+ * State is per-process and in memory. That is sufficient for a single API
+ * container; running more than one would need a shared store.
+ */
 
-const rateLimitStore: RateLimitStore = new Map();
+type Bucket = { count: number; resetAt: number };
 
-setInterval(() => {
+const WINDOW_MS = 60_000;
+const DEFAULT_LIMIT = 100;
+/** Credential endpoints get a tighter budget than dashboard reads. */
+const AUTH_LIMIT = 10;
+const SWEEP_INTERVAL_MS = 60_000;
+
+const buckets = new Map<string, Bucket>();
+
+const sweep = setInterval(() => {
   const now = Date.now();
-  for (const [ip, entry] of rateLimitStore.entries()) {
-    if (now > entry.resetTime) {
-      rateLimitStore.delete(ip);
-    }
+  for (const [key, bucket] of buckets) {
+    if (now > bucket.resetAt) buckets.delete(key);
   }
-}, 60_000);
+}, SWEEP_INTERVAL_MS);
+// Do not hold the process open for a cache sweep.
+sweep.unref?.();
+
+/**
+ * Clear all rate-limit state.
+ *
+ * The store is module-level, so without this the auth budget carries between
+ * test files and unrelated cases start seeing 429. Not used by the running
+ * service.
+ */
+export function resetRateLimits(): void {
+  buckets.clear();
+}
+
+/**
+ * Hosts permitted to speak for their clients via `x-forwarded-for`.
+ *
+ * Defaults to none: trusting a proxy that is not there is how the spoofing
+ * problem arises in the first place.
+ */
+function trustedProxies(): Set<string> {
+  return new Set(
+    (process.env.TRUSTED_PROXY_IPS ?? '')
+      .split(',')
+      .map((value) => value.trim())
+      .filter(Boolean)
+  );
+}
+
+function peerAddress(c: Context): string | undefined {
+  try {
+    return getConnInfo(c).remote.address;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Resolve the address to rate limit.
+ *
+ * Returns the peer address unless that peer is a trusted proxy, in which case
+ * the first entry of `x-forwarded-for` is the real client.
+ */
+export function clientKey(c: Context): string {
+  const peer = peerAddress(c);
+  if (!peer) {
+    // Without a peer address there is nothing trustworthy to key on. Fall back
+    // to a shared bucket, which throttles conservatively rather than not at all.
+    return 'unattributed';
+  }
+
+  if (!trustedProxies().has(peer)) {
+    return peer;
+  }
+
+  const forwarded = c.req.header('x-forwarded-for');
+  const client = forwarded?.split(',')[0]?.trim();
+  return client && client.length > 0 ? client : peer;
+}
 
 export function customRateLimit(props?: {
   windowMs?: number;
@@ -19,34 +99,32 @@ export function customRateLimit(props?: {
   message?: string;
 }): MiddlewareHandler {
   const {
-    windowMs = 60_000,
-    limit = 100,
+    windowMs = WINDOW_MS,
+    limit = DEFAULT_LIMIT,
     message = 'Too many requests',
-  } = props || {
-    windowMs: 60_000,
-    limit: 100,
-    message: 'Too many requests',
-  };
+  } = props ?? {};
 
   return async (c, next) => {
-    const ip =
-      c.req.header('x-forwarded-for') ||
-      c.req.header('cf-connecting-ip') ||
-      c.req.header('x-real-ip') ||
-      'unknown-ip';
+    const pathname = new URL(c.req.url).pathname;
+    const effectiveLimit = pathname.startsWith('/auth/') ? AUTH_LIMIT : limit;
+    const key = `${clientKey(c)}:${pathname.startsWith('/auth/') ? 'auth' : 'api'}`;
     const now = Date.now();
 
-    let entry = rateLimitStore.get(ip);
-
-    if (!entry || now > entry.resetTime) {
-      entry = { count: 1, resetTime: now + windowMs };
-      rateLimitStore.set(ip, entry);
-    } else {
-      entry.count++;
+    let bucket = buckets.get(key);
+    if (!bucket || now > bucket.resetAt) {
+      bucket = { count: 0, resetAt: now + windowMs };
+      buckets.set(key, bucket);
     }
+    bucket.count += 1;
 
-    if (entry.count > limit) {
-      return c.text(message ?? 'Too many requests', 429);
+    const remaining = Math.max(0, effectiveLimit - bucket.count);
+    c.header('RateLimit-Limit', String(effectiveLimit));
+    c.header('RateLimit-Remaining', String(remaining));
+    c.header('RateLimit-Reset', String(Math.ceil((bucket.resetAt - now) / 1000)));
+
+    if (bucket.count > effectiveLimit) {
+      c.header('Retry-After', String(Math.ceil((bucket.resetAt - now) / 1000)));
+      return c.text(message, 429);
     }
 
     return next();

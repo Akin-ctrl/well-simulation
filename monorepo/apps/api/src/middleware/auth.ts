@@ -1,13 +1,21 @@
 import type { MiddlewareHandler } from 'hono';
 import { deleteCookie, getCookie } from 'hono/cookie';
 import { verify } from 'hono/jwt';
+import { HTTPException } from 'hono/http-exception';
 
-const publicRoutes: string[] = ['/auth/login', '/auth/register', '/auth/logout'];
+import { config } from '../config';
+
+/**
+ * Routes reachable without a session.
+ *
+ * `/auth/register` is deliberately absent: ADR 0033 makes creating a user an
+ * administrative action. `/auth/logout` requires a session too, so clearing a
+ * cookie cannot be triggered by an unauthenticated caller.
+ */
+const publicRoutes: string[] = ['/auth/login'];
 
 export const authMiddleware: MiddlewareHandler = async (c, next) => {
-  const cookieToken = getCookie(c, 'auth_token');
-  const token = cookieToken;
-  const jwtSecret = process.env.JWT_SECRET;
+  const token = getCookie(c, 'auth_token');
 
   const url = new URL(c.req.url);
   const pathname = url.pathname ?? '';
@@ -21,22 +29,19 @@ export const authMiddleware: MiddlewareHandler = async (c, next) => {
   });
 
   if (!token && !isPublic) {
-    return c.json({ msg: 'Unauthorized' }, 401);
+    throw new HTTPException(401, { message: 'Unauthorized' });
   }
 
   if (token) {
     try {
-      if (!jwtSecret) {
-        return c.json({ msg: 'Authentication is not configured' }, 500);
-      }
-      const payload = await verify(token, jwtSecret);
+      const payload = await verify(token, config.jwtSecret);
       c.set('session', payload);
     } catch {
       deleteCookie(c, 'auth_token');
       if (isPublic) {
         return next();
       }
-      return c.json({ msg: 'Unauthorized: Invalid or expired token' }, 401);
+      throw new HTTPException(401, { message: 'Unauthorized' });
     }
   }
 

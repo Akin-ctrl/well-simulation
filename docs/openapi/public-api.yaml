@@ -53,9 +53,15 @@ paths:
   /auth/register:
     post:
       tags: [Auth]
-      summary: Register a dashboard user.
+      summary: Create a dashboard user.
+      description: |
+        Requires an authenticated session holding the `user:manage` capability,
+        which only the `ADMIN` role carries. Self-service registration was
+        removed by ADR 0033: an unauthenticated write endpoint on an operations
+        dashboard granted any caller a view of the whole fleet.
+
+        Omitting `role` creates the least-privileged account.
       operationId: registerUser
-      security: []
       requestBody:
         required: true
         content:
@@ -64,13 +70,17 @@ paths:
               $ref: "#/components/schemas/RegisterRequest"
       responses:
         "200":
-          description: User registered.
+          description: User created.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/AuthUserResponse"
         "400":
           $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "500":
           $ref: "#/components/responses/ServerError"
   /auth/login:
@@ -253,6 +263,15 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/ErrorResponse"
+    Forbidden:
+      description: |
+        The session is valid but the role lacks the capability this operation
+        requires. See ADR 0033 for the permission matrix. The response does not
+        state which roles would be permitted.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
     ValidationError:
       description: Request validation failed.
       content:
@@ -321,6 +340,13 @@ components:
           type: string
           minLength: 12
           writeOnly: true
+        role:
+          description: |
+            Role for the new account. Defaults to `USER` when omitted. See
+            ADR 0033: `ADMIN` does not inherit `OPERATIONS`.
+          type: string
+          enum: [USER, OPERATIONS, ADMIN]
+          default: USER
     LoginRequest:
       type: object
       required: [emailOrUsername, password]
