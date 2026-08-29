@@ -12,9 +12,7 @@ import { cn } from '@corsight/utils/cn';
 import { menuItems, type MenuItem } from '../components/menu-items';
 
 export function SidebarMenu({ expanded }: { expanded: boolean }) {
-  const [openCollapsible, setOpenCollapsible] = React.useState<number | null>(
-    null
-  );
+  const [openCollapsible, setOpenCollapsible] = React.useState<number | null>(null);
 
   const firstSlice = React.useMemo(() => menuItems.slice(0, 8), []);
   const secondSlice = React.useMemo(() => menuItems.slice(8, 11), []);
@@ -56,22 +54,20 @@ function RenderLinks(
     return (
       <Fragment key={index}>
         {item?.dropdownItems ? (
-          <Collapsible
-            open={isDropdownOpen}
-            onOpenChange={() => handleToggle(index)}>
+          <Collapsible open={isDropdownOpen} onOpenChange={() => handleToggle(index)}>
             <div
               className={cn(
                 'card flex items-center gap-3 mx-3 p-3!',
                 expanded ? '' : ''
-              )}>
+              )}
+            >
               <CollapsibleTrigger
                 disabled={item.disabled}
                 className={cn(
                   'btn control-transparent text-fgColor-white p-0 [&>svg]:size-4',
-                  isDropdownOpen
-                    ? 'bg-control-transparent-bgColor-selected'
-                    : ''
-                )}>
+                  isDropdownOpen ? 'bg-control-transparent-bgColor-selected' : ''
+                )}
+              >
                 {item.icon}
               </CollapsibleTrigger>
 
@@ -83,7 +79,8 @@ function RenderLinks(
                     isDropdownOpen
                       ? 'bg-control-transparent-bgColor-selected'
                       : 'text-fgColor-muted'
-                  )}>
+                  )}
+                >
                   {item.name}
                   <ChevronDownIcon
                     className='ml-auto size-4.5'
@@ -120,7 +117,8 @@ function RenderLinks(
                       dropdownItem?.disabled
                         ? 'text-fgColor-disabled pointer-events-none'
                         : ''
-                    )}>
+                    )}
+                  >
                     {dropdownItem.name}
                     {dropdownItem?.new ? (
                       <ArrowUpRightIcon className='ml-auto size-4' />
@@ -136,11 +134,13 @@ function RenderLinks(
             className={cn(
               'card flex items-center gap-3 mx-3 p-3! cursor-not-allowed opacity-50',
               expanded ? '' : ''
-            )}>
+            )}
+          >
             <span
               className={cn(
                 'button control-transparent button-md text-fgColor-white aspect-square w-auto p-0 [&>svg]:size-4'
-              )}>
+              )}
+            >
               {item.icon}
             </span>
 
@@ -149,7 +149,8 @@ function RenderLinks(
                 className={cn(
                   'button button-md w-full justify-start [&>svg]:data-[state=closed]:rotate-0 [&>svg]:data-[state=open]:rotate-90',
                   'text-fgColor-muted'
-                )}>
+                )}
+              >
                 {item.name}
               </div>
             )}
@@ -158,18 +159,17 @@ function RenderLinks(
           <Link
             to={item.href ?? '#'}
             prefetch='viewport'
-            className={cn(
-              'card flex items-center gap-3 mx-3 p-3!',
-              expanded ? '' : ''
-            )}
+            className={cn('card flex items-center gap-3 mx-3 p-3!', expanded ? '' : '')}
             state={{
               prevLink: location.pathname,
-            }}>
+            }}
+          >
             <span
               className={cn(
                 'button control-transparent button-md text-fgColor-white hover:bg-neutral-200 aspect-square w-auto p-0 [&>svg]:size-4',
                 isActive ? 'bg-control-transparent-bgColor-selected' : ''
-              )}>
+              )}
+            >
               {item.icon}
             </span>
 
@@ -180,11 +180,10 @@ function RenderLinks(
                   isActive
                     ? 'bg-control-transparent-bgColor-selected font-semibold'
                     : 'text-fgColor-muted'
-                )}>
+                )}
+              >
                 {item.name}
-                {item?.new ? (
-                  <ArrowUpRightIcon className='ml-auto size-4' />
-                ) : null}
+                {item?.new ? <ArrowUpRightIcon className='ml-auto size-4' /> : null}
               </div>
             )}
           </Link>

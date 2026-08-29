@@ -25,6 +25,10 @@
     "server": {
       "persistent": true,
       "cache": false
+    },
+    "test": {
+      "dependsOn": ["^build"],
+      "cache": false
     }
   },
   "globalEnv": ["DATABASE_URL"]

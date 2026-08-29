@@ -44,7 +44,8 @@ export default function DashboardLayout() {
             'ease-[cubic-bezier(0.645, 0.045, 0.355, 1)] mx-auto flex justify-center gap-4 transition-opacity duration-150',
             'container',
             isNavigating ? 'opacity-50' : 'opacity-100'
-          )}>
+          )}
+        >
           <motion.div className='px-5 grow pb-5 pt-8'>{outlet}</motion.div>
         </motion.main>
       </div>

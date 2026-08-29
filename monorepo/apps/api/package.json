@@ -6,7 +6,8 @@
     "build": "tsc",
     "check-types": "tsc --noEmit",
     "start": "tsx src/index.ts",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "test": "vitest run"
   },
   "dependencies": {
     "@corsight/db": "workspace:*",
@@ -18,13 +19,16 @@
   },
   "devDependencies": {
     "@corsight/tsconfig": "workspace:*",
+    "@eslint/js": "^9.36.0",
+    "@repo/eslint-config": "workspace:*",
     "@types/node": "^20.11.17",
+    "@types/pg": "^8.11.10",
+    "eslint": "^9.36.0",
+    "globals": "^16.4.0",
+    "pg": "^8.16.3",
     "tsx": "^4.7.1",
     "typescript": "^5.8.3",
-    "@repo/eslint-config": "workspace:*",
-    "eslint": "^9.36.0",
     "typescript-eslint": "^8.45.0",
-    "@eslint/js": "^9.36.0",
-    "globals": "^16.4.0"
+    "vitest": "^3.2.4"
   }
 }

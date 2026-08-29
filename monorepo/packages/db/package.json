@@ -3,12 +3,9 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "generate": "drizzle-kit generate",
-    "migrate": "dotenv -e ../../.env -- drizzle-kit migrate",
     "studio": "bunx drizzle-kit studio --port 3002",
     "check-types": "tsc --noEmit",
-    "format": "biome format",
-    "lint": "biome lint"
+    "lint": "eslint ."
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.0.0",
@@ -16,10 +13,14 @@
     "pg": "^8.16.3"
   },
   "devDependencies": {
-    "@biomejs/biome": "1.9.4",
     "@corsight/tsconfig": "workspace:*",
+    "@eslint/js": "^9.36.0",
+    "@repo/eslint-config": "workspace:*",
     "@types/node": "^20.17.43",
     "dotenv-cli": "^7.4.4",
-    "drizzle-kit": "^0.31.4"
+    "drizzle-kit": "^0.31.4",
+    "eslint": "^9.36.0",
+    "globals": "^16.4.0",
+    "typescript-eslint": "^8.45.0"
   }
 }

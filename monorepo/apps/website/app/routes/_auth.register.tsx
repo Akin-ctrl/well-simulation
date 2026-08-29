@@ -13,9 +13,7 @@ import { toast } from '@corsight/ui/toast';
 import { Password } from '@corsight/ui/password';
 
 export async function clientAction(args: Route.ClientActionArgs) {
-  const formData = (await args.request.json()) as SToType<
-    typeof registerSchema
-  >;
+  const formData = (await args.request.json()) as SToType<typeof registerSchema>;
   try {
     await fetchFn(client.auth.register.$post({ json: formData }));
     return redirect(routes.auth.login);
@@ -49,7 +47,8 @@ export default function Register() {
             encType: 'application/json',
           });
         })}
-        className='max-w-md flex flex-col gap-3 mt-32 mx-auto w-full'>
+        className='max-w-md flex flex-col gap-3 mt-32 mx-auto w-full'
+      >
         <Input
           {...form.register('username')}
           placeholder='Enter username'

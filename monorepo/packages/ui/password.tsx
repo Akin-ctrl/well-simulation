@@ -43,7 +43,8 @@ const Password = React.forwardRef<HTMLInputElement, PasswordProps>(
               if (disabled) return false;
               setVisible((prevState) => !prevState);
               return;
-            }}>
+            }}
+          >
             {visibilityToggleIcon ? (
               visibilityToggleIcon(visible)
             ) : (
@@ -84,7 +85,8 @@ function PasswordToggleIcon({ iconSize, isVisible }: PasswordToggleIconProps) {
       viewBox='0 0 24 24'
       strokeWidth={1.25}
       stroke='currentColor'
-      className={cn(iconSize && passwordToggleIconClasses.size[iconSize])}>
+      className={cn(iconSize && passwordToggleIconClasses.size[iconSize])}
+    >
       <path
         strokeLinecap='round'
         strokeLinejoin='round'

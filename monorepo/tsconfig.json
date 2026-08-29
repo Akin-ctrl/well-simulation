@@ -5,10 +5,5 @@
       "@/*": ["*"]
     }
   },
-  "exclude": [
-    "**/deprecated/**",
-    "**/deprecated",
-    "node_modules",
-    "**/node_modules/*"
-  ]
+  "exclude": ["**/deprecated/**", "**/deprecated", "node_modules", "**/node_modules/*"]
 }

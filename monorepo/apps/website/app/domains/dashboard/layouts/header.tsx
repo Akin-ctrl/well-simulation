@@ -49,8 +49,7 @@ function Header({ user }: { user: HeaderUser }) {
           </button>
         </div>
 
-        <div
-          className=' flex items-center gap-2 border border-border-default pl-1! pr-3! py-1! rounded-full!'>
+        <div className=' flex items-center gap-2 border border-border-default pl-1! pr-3! py-1! rounded-full!'>
           <div className='p-1.5 rounded-full bg-neutral-200'>
             <UserRoundIcon className='size-4' />
           </div>
@@ -63,7 +62,8 @@ function Header({ user }: { user: HeaderUser }) {
           variant='outline'
           size='sm'
           isLoading={isLoggingOut}
-          onClick={handleLogout}>
+          onClick={handleLogout}
+        >
           <LogOutIcon className='size-4' />
           Logout
         </Button>

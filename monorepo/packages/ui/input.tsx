@@ -120,13 +120,12 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
           isFocus && 'is-focus', // must have is-focus class based on onFocus event
           error && errorStyle,
           SuffixComponent && 'pe-1.5'
-        )}>
+        )}
+      >
         {PrefixComponent ? (
           <span
-            className={cn(
-              'prefix whitespace-nowrap leading-normal',
-              prefixClassName
-            )}>
+            className={cn('prefix whitespace-nowrap leading-normal', prefixClassName)}
+          >
             {typeof PrefixComponent !== 'string' &&
             isValidElementType(PrefixComponent) ? (
               <PrefixComponent className={cn(`icon-${size}`)} />
@@ -166,7 +165,8 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
             className={cn(
               'suffix inline-grid place-content-center whitespace-nowrap',
               suffixClassName
-            )}>
+            )}
+          >
             {typeof SuffixComponent !== 'string' &&
             isValidElementType(SuffixComponent) ? (
               <SuffixComponent className={cn(`icon-${size}`)} />

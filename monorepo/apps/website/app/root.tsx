@@ -3,13 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from '@corsight/ui/toast';
 import { CheckIcon, XIcon } from 'lucide-react';
 import globalStylsheet from './styles/global.css?url';
-import {
-  Links,
-  Meta,
-  Scripts,
-  ScrollRestoration,
-  useOutlet,
-} from 'react-router';
+import { Links, Meta, Scripts, ScrollRestoration, useOutlet } from 'react-router';
 import type { MetaFunction } from 'react-router';
 
 export const meta: MetaFunction = () => [

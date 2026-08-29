@@ -45,7 +45,8 @@ export default function Login() {
             encType: 'application/json',
           });
         })}
-        className='max-w-md flex flex-col gap-3 mt-32 mx-auto w-full'>
+        className='max-w-md flex flex-col gap-3 mt-32 mx-auto w-full'
+      >
         <Input
           {...form.register('emailOrUsername')}
           placeholder='Enter email or username'
