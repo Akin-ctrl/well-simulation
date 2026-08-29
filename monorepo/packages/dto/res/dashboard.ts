@@ -56,17 +56,17 @@ export type TrendPoint = {
   readingCount?: number | null;
 };
 
-export type DailyAlarmCount = {
-  bucketDay?: string | Date | null;
+export type AlarmCount = {
+  bucketTime?: string | Date | null;
   severityLevel?: string | null;
-  totalAlarmsTriggered?: number | null;
+  alarmsTriggered?: number | null;
 };
 
 export type DashboardAnalyticsResponse = {
   pressureTrend: TrendPoint[];
   temperatureFlowTrend: TrendPoint[];
   waterCutGorTrend: TrendPoint[];
-  dailyAlarmCounts: DailyAlarmCount[];
+  alarmCounts: AlarmCount[];
 };
 
 export type WellheadAsset = {

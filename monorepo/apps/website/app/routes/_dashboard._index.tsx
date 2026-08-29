@@ -22,7 +22,9 @@ type WellheadCard = {
 };
 
 export async function clientLoader() {
-  const response = await fetchFn<DashboardOverviewResponse>(client.dashboard.overview.$get());
+  const response = await fetchFn<DashboardOverviewResponse>(
+    client.dashboard.overview.$get()
+  );
   return response.data;
 }
 
@@ -178,7 +180,8 @@ function Overview() {
                     {wellhead.wellheadId ? (
                       <Link
                         to={routes.dashboard.wellhead(wellhead.wellheadId)}
-                        className='font-semibold hover:underline'>
+                        className='font-semibold hover:underline'
+                      >
                         {wellhead.wellheadName}
                       </Link>
                     ) : (
@@ -193,7 +196,8 @@ function Overview() {
                     {wellhead.readings.map((reading) => (
                       <div
                         key={`${reading.wellheadName}-${reading.parameterCode}-${reading.timestampUtc}`}
-                        className='bg-neutral-100 p-3 rounded-lg flex items-center justify-between gap-3'>
+                        className='bg-neutral-100 p-3 rounded-lg flex items-center justify-between gap-3'
+                      >
                         <div>
                           <p className='text-sm font-medium'>
                             {reading.parameterDisplayName ?? reading.parameterCode}
@@ -207,7 +211,9 @@ function Overview() {
                             {formatNumber(reading.rawValue)} {reading.canonicalUnit}
                           </p>
                           <p className='text-xs capitalize text-fgColor-muted'>
-                            <span className={readingStatusClass(readingStatus(reading))}>
+                            <span
+                              className={readingStatusClass(readingStatus(reading))}
+                            >
                               {readingStatus(reading)}
                             </span>
                           </p>
@@ -220,7 +226,8 @@ function Overview() {
             </div>
           ) : (
             <div className='card p-6! text-sm text-fgColor-muted'>
-              No readings have been ingested yet. Start the simulator and ingestion services.
+              No readings have been ingested yet. Start the simulator and ingestion
+              services.
             </div>
           )}
         </section>
@@ -228,7 +235,9 @@ function Overview() {
         <section className='space-y-4'>
           <div>
             <h2 className='text-lg font-semibold'>Active Alarms</h2>
-            <p className='text-sm text-fgColor-muted'>Open alarm events from the database.</p>
+            <p className='text-sm text-fgColor-muted'>
+              Open alarm events from the database.
+            </p>
           </div>
 
           <div className='card flex flex-col gap-3'>
@@ -236,15 +245,20 @@ function Overview() {
               data.activeAlarms.map((alarm) => (
                 <div
                   key={alarm.eventId ?? `${alarm.wellheadName}-${alarm.triggeredAt}`}
-                  className='border-b border-b-neutral-200 pb-3 last:border-b-0 last:pb-0'>
+                  className='border-b border-b-neutral-200 pb-3 last:border-b-0 last:pb-0'
+                >
                   <div className='flex items-center gap-2'>
                     <ActivityIcon className='size-4 text-red-600' />
-                    <p className='font-medium'>{alarm.wellheadName ?? 'Unknown wellhead'}</p>
+                    <p className='font-medium'>
+                      {alarm.wellheadName ?? 'Unknown wellhead'}
+                    </p>
                   </div>
                   <p className='text-sm text-fgColor-muted'>
                     {alarm.parameterDisplayName} {formatNumber(alarm.triggeredValue)}
                   </p>
-                  <p className={`text-xs uppercase ${alarmSeverityClass(alarm.severityLevel)}`}>
+                  <p
+                    className={`text-xs uppercase ${alarmSeverityClass(alarm.severityLevel)}`}
+                  >
                     {alarm.severityLevel ?? 'severity unknown'}
                   </p>
                 </div>

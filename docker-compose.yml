@@ -8,10 +8,12 @@ services:
       - POSTGRES_DB=${POSTGRES_DB}
     ports:
       - "5434:5432"
+    # Schema is applied by the migrator service, not by mounting SQL into
+    # /docker-entrypoint-initdb.d. That directory runs only on first
+    # initialisation of the volume, so every schema change previously required
+    # `docker compose down -v` and destroyed the historian.
     volumes:
       - timescaledb_data:/var/lib/postgresql/data
-      - ./data/sql/init.sql:/docker-entrypoint-initdb.d/init.sql
-      - ./data/sql/views.sql:/docker-entrypoint-initdb.d/views.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 5s
@@ -35,6 +37,27 @@ services:
   #   networks:
   #     - wellnet
 
+  # Applies the ordered SQL migrations, then exits. Every service that reads or
+  # writes the schema waits for it to finish successfully.
+  migrator:
+    build: ./data/src
+    container_name: wellhead_migrator
+    command: python schema.py
+    restart: "no"
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./data/sql:/sql:ro
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_HOST: db
+      POSTGRES_PORT: "5432"
+    networks:
+      - wellnet
+
   modbus:
     build: ./data/src
     container_name: modbus_gateway
@@ -47,6 +70,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      migrator:
+        condition: service_completed_successfully
     networks:
       - wellnet
     environment:
@@ -67,6 +92,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      migrator:
+        condition: service_completed_successfully
       modbus:
         condition: service_started
     environment:
@@ -90,12 +117,20 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      migrator:
+        condition: service_completed_successfully
     environment:
       NODE_ENV: production
       DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
       JWT_SECRET: ${JWT_SECRET}
-    ports:
-      - "3000:3000"
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      # The dashboard's nginx is the only thing that should speak for a client.
+      TRUSTED_PROXY_IPS: ${TRUSTED_PROXY_IPS:-}
+    # Port 3000 is deliberately not published: the dashboard proxies /api, and
+    # exposing the API directly bypasses that proxy and the rate limiter's
+    # trusted-proxy handling. Add a compose override for direct local access.
+    expose:
+      - "3000"
     networks:
       - wellnet
 
