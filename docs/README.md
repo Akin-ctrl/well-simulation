@@ -1,48 +1,55 @@
 # Documentation
 
-This directory is the project control room: product framing, architecture notes, production-readiness criteria, and architecture decision records.
+Product framing, architecture notes, the production readiness checklist, and the
+architecture decision records.
 
-## Project Framing
+## What to call this project
 
-This project should currently be described as a **wellhead monitoring simulation** or **SCADA-style industrial telemetry platform**.
+Call it a wellhead monitoring simulation, or a SCADA-style industrial telemetry
+platform.
 
-It should not yet be described as a full digital twin. It becomes a digital twin when it includes a stateful process model, control inputs, prediction, calibration, and what-if simulation.
+Do not call it a digital twin yet. It becomes one when it has a stateful process
+model, control inputs, prediction, calibration, and what-if simulation. It has
+none of those.
 
-## Current Product State
+## What is built
 
-The implemented system now supports:
+- Synthetic wellhead telemetry
+- Modbus ingestion
+- A PostgreSQL and TimescaleDB historian
+- Alarm evaluation in SQL
+- A public TypeScript API
+- A React dashboard with an overview, analytics, and per-wellhead detail pages
 
-- synthetic wellhead telemetry
-- Modbus-style ingestion
-- PostgreSQL/TimescaleDB historian storage
-- SQL alarm evaluation
-- public TypeScript API
-- React dashboard overview
-- dashboard analytics
-- per-wellhead detail pages
-
-The next product slice is the **Alarm Center**. It should make active alarms inspectable and explainable without adding fake acknowledge/shelve behavior before the data model supports it.
+The next piece of work is the Alarm Center. It should make active alarms
+inspectable and explainable. It should not add acknowledge or shelve buttons
+until the data model can store those states, because a button that pretends to
+do something is worse than no button.
 
 ## Contents
 
-- `architecture/overview.md` — current architecture and target digital twin architecture.
-- `architecture/production-readiness.md` — engineering checklist for production-grade quality.
-- `adr/README.md` — ADR format and index.
-- `demo/demo-script.md` — intended portfolio-review demo flow.
-- `openapi/README.md` — API contract index and rules.
+- `architecture/overview.md`: the current architecture and the target one
+- `architecture/production-readiness.md`: what production-grade means here
+- `adr/README.md`: the ADR format and the index
+- `demo/demo-script.md`: the demo flow for a portfolio review
+- `openapi/README.md`: the API contracts and the rules for changing them
+- `remediation-roadmap.md`: the plan for fixing what the audit found
 
-## Near-Term Documentation Backlog
+## Documentation backlog
 
-- Keep README language aligned with the current implementation.
-- Add ADRs before introducing major digital-twin behavior.
-- Update OpenAPI specs with every public API change.
-- Document simulator assumptions before presenting twin predictions.
-- Keep demo instructions realistic: show implemented behavior first, then target behavior.
+- Keep the README matching what is actually built.
+- Write the ADR before adding major twin behaviour, not after.
+- Update the OpenAPI spec with every public API change.
+- Write down the simulator's assumptions before showing anyone a prediction.
+- Keep the demo honest. Show what works, then say what is planned.
 
-## Documentation Principles
+## How we write docs here
 
 - Every major architectural choice gets an ADR.
-- Each ADR must list considered options.
-- Each ADR must explain why the selected option won.
-- Rejected options should be recorded, not silently forgotten.
-- Docs should distinguish current implementation from target architecture.
+- Each ADR lists the options that were considered.
+- Each ADR says why the chosen option won.
+- Rejected options stay on the record. They are the reasoning.
+- Docs say plainly what is built and what is only planned.
+- Prose follows the plain English standard in
+  `CODING_STANDARDS_COMMITMENT.md`. Short sentences, everyday words, active
+  voice.

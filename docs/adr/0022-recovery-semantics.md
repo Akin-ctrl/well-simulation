@@ -35,7 +35,7 @@ Use **Option D: restore latest valid snapshots, use bounded catch-up for small g
 
 ## Rationale
 
-The system should be honest about what it simulated. Small runtime delays can be handled with bounded catch-up, but larger downtime should be exposed as a recovery gap rather than silently replayed as if the model had been continuously operating.
+The system should be honest about what it simulated. Small runtime delays can be handled with bounded catch-up. Longer downtime should be shown as a recovery gap, not replayed as though the model had been running the whole time.
 
 ## Recovery Flow
 

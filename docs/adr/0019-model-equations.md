@@ -51,7 +51,7 @@ This provides a model that is explainable in documentation, testable in code, an
 
 ## Model Boundary
 
-The model is intended for operational simulation and decision support demonstrations. It is **not** a certified reservoir engineering model and should not be described as a replacement for specialist tools such as OLGA, PIPESIM, Eclipse, or similar high-fidelity simulators.
+The model is for operational simulation and decision support demonstrations. It is **not** a certified reservoir engineering model. Do not describe it as a replacement for OLGA, PIPESIM, Eclipse, or any other high-fidelity simulator.
 
 ## Version-One Model Structure
 

@@ -2,19 +2,19 @@
 
 This monorepo contains the TypeScript web/API layer for the Wellhead Monitoring Simulation.
 
-The wider repository is evolving toward a lightweight wellhead digital twin, but this monorepo is not the twin core. Its role is to provide the operator-facing dashboard, API boundary, shared contracts, database access layer, and reusable UI components that make the telemetry simulation understandable and demoable.
+The wider repository is heading toward a lightweight wellhead digital twin. This monorepo is not the twin core. It holds the operator dashboard, the API boundary, the shared contracts, the database access layer, and the UI components.
 
 ## What Lives Here
 
-| Path | Purpose |
-| --- | --- |
-| `apps/api` | Hono API used by the dashboard. Handles auth, dashboard reads, health, and readiness endpoints. |
-| `apps/website` | React Router/Vite dashboard served behind Nginx in Docker Compose. |
-| `packages/db` | Drizzle database schema, query helper, and migration tooling. |
-| `packages/dto` | Shared request/response DTOs and validation schemas. |
-| `packages/ui` | Shared React UI primitives used by the dashboard. |
-| `packages/utils` | Shared utility functions and runtime configuration helpers. |
-| `packages/tsconfig` | Shared TypeScript configuration. |
+| Path                | Purpose                                                                                         |
+| ------------------- | ----------------------------------------------------------------------------------------------- |
+| `apps/api`          | Hono API used by the dashboard. Handles auth, dashboard reads, health, and readiness endpoints. |
+| `apps/website`      | React Router/Vite dashboard served behind Nginx in Docker Compose.                              |
+| `packages/db`       | Drizzle database schema, query helper, and migration tooling.                                   |
+| `packages/dto`      | Shared request/response DTOs and validation schemas.                                            |
+| `packages/ui`       | Shared React UI primitives used by the dashboard.                                               |
+| `packages/utils`    | Shared utility functions and runtime configuration helpers.                                     |
+| `packages/tsconfig` | Shared TypeScript configuration.                                                                |
 
 ## Current Runtime Shape
 

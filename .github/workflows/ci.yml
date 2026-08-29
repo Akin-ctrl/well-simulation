@@ -41,6 +41,9 @@ jobs:
       - name: Lint
         run: pnpm turbo run lint
 
+      - name: Format check
+        run: pnpm format:check
+
       - name: Unit tests
         run: pnpm test:dto
 
@@ -76,6 +79,72 @@ jobs:
 
       - name: Validate OpenAPI specifications
         run: python3 scripts/validate_openapi.py
+
+      # Standard 4: the objective half of the plain English rules. Tone stays
+      # with review; a checker cannot judge it.
+      - name: Check prose
+        run: python3 scripts/check_prose.py
+
+  api-tests:
+    name: API integration tests
+    runs-on: ubuntu-latest
+    # These run against a real TimescaleDB. The dashboard reads continuous
+    # aggregates and alarm evaluation lives in a trigger, so a mocked database
+    # would verify almost nothing that matters.
+    services:
+      db:
+        image: timescale/timescaledb:latest-pg14
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      TEST_POSTGRES_HOST: localhost
+      TEST_POSTGRES_PORT: '5432'
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      TEST_JWT_SECRET: ci-secret-of-at-least-thirty-two-characters
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.11.1
+
+      - name: Install Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: monorepo/.nvmrc
+          cache: pnpm
+          cache-dependency-path: monorepo/pnpm-lock.yaml
+
+      - name: Install Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+
+      # The suite applies schema via the same migrator the stack uses, so the
+      # migrator's dependencies are required here.
+      - name: Install migrator dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Install workspace dependencies
+        run: pnpm install --frozen-lockfile
+        working-directory: monorepo
+
+      - name: Run API integration tests
+        run: pnpm --filter @corsight/api test
+        working-directory: monorepo
 
   images:
     name: Container images

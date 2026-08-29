@@ -25,7 +25,7 @@ The dashboard currently exposes the monitoring foundation:
 - analytics charts for pressure, temperature, flow, water cut, and GOR
 - per-wellhead detail pages with current readings, alarms, and trends
 
-The next planned dashboard capability is a dedicated Alarm Center. It should present active alarms as operational evidence: severity, affected wellhead, parameter, value, threshold, trigger time, age, and a link to the relevant wellhead detail page.
+The next dashboard page is an Alarm Center. It should present active alarms as evidence an operator can act on. Each alarm needs its severity, the affected wellhead, the parameter and its value, the threshold, the trigger time, and its age. Each also needs a link to the wellhead detail page.
 
 ## Target Lightweight Digital Twin
 

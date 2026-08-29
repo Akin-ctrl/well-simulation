@@ -5,7 +5,7 @@
 
 ## Context
 
-The reduced-order mechanistic model needs parameters such as productivity index, choke coefficient, downstream pressure, pressure gain coefficient, thermal response rate, water cut drift rate, and degradation coefficients.
+The reduced-order mechanistic model needs a set of parameters. These include productivity index, choke coefficient, downstream pressure, pressure gain coefficient, thermal response rate, water cut drift rate, and degradation coefficients.
 
 These values must be explicit, reviewable, tunable, and validated. Hardcoded magic numbers would make the model less credible and harder to operate.
 

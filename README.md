@@ -1,8 +1,16 @@
 # Wellhead Monitoring Simulation
 
-This project is a fullstack industrial wellhead monitoring simulation. It generates synthetic wellhead telemetry, exposes readings through a Modbus TCP gateway, stores time-series measurements in PostgreSQL/TimescaleDB, evaluates alarm rules, and serves a React/TypeScript operational dashboard.
+A simulation of an industrial wellhead monitoring system. It makes up wellhead
+telemetry, serves it over a Modbus TCP gateway, stores the readings in
+PostgreSQL and TimescaleDB, checks them against alarm rules, and shows the
+result on a React dashboard.
 
-The project is **not yet a digital twin**. Today it is a SCADA-style simulation and data acquisition platform. The next major evolution is to turn the random telemetry generator into a lightweight, stateful process model that can track wellhead state, respond to control inputs, run what-if scenarios, and forecast future conditions.
+This is not a digital twin. It is a SCADA-style simulation and data acquisition
+platform.
+
+The next big piece of work is replacing the random telemetry generator with a
+process model that holds state. That model would track the condition of each
+wellhead, respond to control inputs, run what-if scenarios, and forecast.
 
 ## Why This Exists
 
@@ -31,7 +39,12 @@ The dashboard currently focuses on credible monitoring rather than pretending to
 - Per-wellhead detail pages with active alarms and parameter history.
 - Active alarm data from the backend.
 
-The next dashboard slice is an **Alarm Center**: a dedicated operational page for active alarms, severity counts, affected assets, threshold context, alarm age, and links back to the impacted wellhead. Acknowledge and shelving workflows are intentionally out of scope until the project has an alarm lifecycle model.
+The next dashboard page is an Alarm Center. It shows active alarms with their
+severity, the affected asset, the threshold that was crossed, how long the alarm
+has been open, and a link to the wellhead.
+
+It will not have acknowledge or shelve buttons. The backend cannot store those
+states yet, and a button that does nothing is worse than no button.
 
 ## Target Direction
 
@@ -52,14 +65,73 @@ The target system is a lightweight wellhead digital twin with:
 5. Add the twin gap layer: observed vs simulated state and divergence.
 6. Add bounded what-if scenarios after the stateful model exists.
 
+## Quick Start
+
+```bash
+cp .env.example .env      # then set POSTGRES_PASSWORD and JWT_SECRET
+docker compose up --build
+```
+
+The `migrator` service applies the ordered SQL migrations in `data/sql/migrations`
+before the API or the telemetry services start. Schema changes do **not** require
+recreating the volume.
+
+Open the dashboard at <http://localhost:8090> and sign in:
+
+| Account | Role | Password |
+| --- | --- | --- |
+| `demo@example.com` | `USER` | `demo-operator-2026` |
+
+This account can view the dashboard and run what-if scenarios. It can do nothing
+else. The password is in the repository on purpose. It only gives read access to
+made-up telemetry on a local stack.
+
+You cannot sign yourself up. Only an `ADMIN` can create a user, as set out in
+[ADR 0033](docs/adr/0033-role-model-and-access-control.md). The migrator creates
+the first administrator when it first runs, and logs the generated password
+once:
+
+```
+"message": "Created bootstrap administrator; record this password now",
+"email": "admin@example.com", "password": "..."
+```
+
+Get it with `docker compose logs migrator` and save it. There is no way to
+recover it later.
+
+## Access Control
+
+Running the plant and administering the system are separate jobs. An
+administrator cannot send a control command, and an operator cannot create
+users.
+
+| Capability | USER | OPERATIONS | ADMIN |
+| --- | :---: | :---: | :---: |
+| View dashboard, trends, alarms | yes | yes | yes |
+| Run what-if scenarios | yes | yes | yes |
+| Acknowledge or shelve an alarm | no | yes | no |
+| Issue a live control command | no | yes | no |
+| Manage users | no | no | yes |
+| Edit alarm rules and asset metadata | no | no | yes |
+
+`OPERATIONS` guards nothing yet. Alarm acknowledgement and the control API are
+not built. The role exists now so that when they are built, they are built
+against it.
+
 ## Documentation
 
-- `docs/README.md` — documentation index.
-- `docs/architecture/overview.md` — current and target architecture.
-- `docs/architecture/production-readiness.md` — production-readiness checklist.
-- `docs/adr/README.md` — architecture decision records.
-- `docs/openapi/README.md` — public and planned internal API contracts.
+- `docs/README.md`: index of everything in `docs/`
+- `docs/architecture/overview.md`: the current architecture and the target one
+- `docs/architecture/production-readiness.md`: what production-grade means here
+- `docs/adr/README.md`: the architecture decision records
+- `docs/openapi/README.md`: the API contracts
+- `docs/remediation-roadmap.md`: the plan for fixing what the audit found
 
-## Important Status Note
+## Where this project actually stands
 
-The local Docker stack has been smoke-tested, and the API/dashboard contract is documented under `docs/openapi`. The project is still not production-ready: the twin core is not implemented, observability is incomplete, and automated CI contract validation still needs to be added.
+The local Docker stack runs and the API contract is written down under
+`docs/openapi`.
+
+It is not production ready. The twin core does not exist. There are no metrics.
+Several accepted ADRs are still unimplemented. `docs/remediation-roadmap.md`
+tracks the gap between what the documentation claims and what the code does.

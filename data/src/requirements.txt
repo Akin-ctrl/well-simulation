@@ -3,3 +3,7 @@
 # the threaded gateway would need restructuring to use.
 pymodbus == 3.11.4
 psycopg2-binary == 2.9.10
+
+# Used by the migrator to hash the generated bootstrap administrator password.
+# Verified to produce hashes the API bcryptjs accepts.
+bcrypt == 4.2.1

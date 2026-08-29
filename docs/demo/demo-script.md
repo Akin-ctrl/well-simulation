@@ -17,7 +17,7 @@ Show that the project is an industrial wellhead monitoring simulation evolving i
 2. Open the dashboard:
 
    ```text
-   http://localhost:8082
+   http://localhost:8090
    ```
 
 3. Confirm live telemetry:

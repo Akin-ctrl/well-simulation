@@ -154,7 +154,7 @@ Password: the `POSTGRES_PASSWORD` value from `.env`.
 
 Click "Save".
 
-You can now browse the database, view the schema created by init.sql, and run queries like SELECT * FROM parameterReading ORDER BY timestamp_utc DESC; to see the data flowing in.
+You can now browse the database and view the schema. To see readings arriving, run `SELECT * FROM parameterReading ORDER BY timestamp_utc DESC;`.
 
 ## Project Components Deep Dive
 
@@ -163,7 +163,7 @@ Here is a breakdown of each file and its role in the system.
 File	Role	Key Responsibilities
 docker-compose.yml:	Orchestrator.	Defines the db, pgAdmin, Modbus gateway, ingestion, API, and dashboard services, their dependencies, networks, and environment variables.
 Dockerfile:	Image Builder.	Creates a single, reusable Python image containing all necessary dependencies (pymodbus, psycopg2) for the application services.
-init.sql:	System Brain,	the most critical file. It defines the entire database schema and, crucially, seeds the database with the initial metadata for all 12 wellheads, 18 parameters, their Modbus mappings, and alarm rules.
+init.sql:	System Brain,	the most critical file. It defines the database schema. It also seeds the metadata for all 12 wellheads, 18 parameters, their Modbus mappings, and the alarm rules.
 wellhead_simulator.py:	Data Source.	On startup, it queries the DB to get a list of wellheads and their parameters. Generates randomised data within normal operating ranges and prints it to stdout as JSON.
 modbus_gateway.py:	Protocol Server.	Queries the DB for the deviceParameterMapping table. It launches the simulator as a subprocess, reads its JSON output, and uses the mapping to populate its Modbus registers with the correct data.
 database_ingestion.py:	Data Historian.	Queries the DB for the same mapping. It acts as a Modbus client, polls the gateway every 30 seconds, decodes the data, and performs an efficient batch INSERT into the parameterReading hypertable.

@@ -30,7 +30,7 @@ Start with **Option C: deterministic/rule-based stateful process model**.
 
 ## Rationale
 
-The first twin version should prioritize clarity and causality. Each wellhead should have model state such as tubing pressure, casing pressure, flow rate, choke position, valve states, pump state, water cut, temperature, and degradation factors.
+The first twin version should favour clarity and causality. Each wellhead needs model state. That covers tubing pressure, casing pressure, flow rate, choke position, valve states, pump state, water cut, temperature, and degradation factors.
 
 ## Consequences
 
