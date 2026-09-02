@@ -9,9 +9,11 @@ import { Link, useLoaderData } from 'react-router';
 import type {
   DashboardOverviewResponse,
   LatestReading,
-} from '@corsight/dto/res/dashboard';
+} from '@well-simulation/dto/res/dashboard';
 import { client, fetchFn } from '../utils/api';
 import { routes } from '../config/routes';
+import { REFRESH_INTERVALS, useAutoRefresh } from '../hooks/use-auto-refresh';
+import { FreshnessIndicator } from '../domains/dashboard/components/freshness';
 
 type WellheadCard = {
   wellheadId: number | null;
@@ -89,6 +91,44 @@ function alarmSeverityClass(severity: string | null | undefined) {
   return 'text-fgColor-muted';
 }
 
+/**
+ * The parameters shown on a card when nothing is wrong.
+ *
+ * The four an operator reads first on a producing well. Before this the card
+ * showed whichever four parameters happened to come back first from the view,
+ * which was arbitrary and differed by wellhead.
+ */
+const HEADLINE_PARAMETERS = [
+  'tubing_pressure',
+  'wellhead_temperature',
+  'flow_rate',
+  'water_cut',
+] as const;
+
+const CARD_READING_COUNT = 4;
+
+/**
+ * Order a wellhead's readings so anything abnormal is visible on the card.
+ *
+ * Out-of-range values come first, whichever parameter they belong to, then the
+ * headline four, then whatever is left. An excursion on a parameter outside the
+ * headline set would otherwise not appear on the overview at all.
+ */
+function cardReadings(readings: LatestReading[]): LatestReading[] {
+  const abnormal = readings.filter((r) => readingStatus(r) === 'out of range');
+  const headline = readings.filter(
+    (r) =>
+      readingStatus(r) !== 'out of range' &&
+      HEADLINE_PARAMETERS.includes(
+        (r.parameterCode ?? '') as (typeof HEADLINE_PARAMETERS)[number]
+      )
+  );
+  const rest = readings.filter((r) => !abnormal.includes(r) && !headline.includes(r));
+
+  const ordered = [...abnormal, ...headline, ...rest];
+  return ordered.slice(0, Math.max(CARD_READING_COUNT, abnormal.length));
+}
+
 function wellheadCards(readings: LatestReading[]) {
   const cards = new Map<string, WellheadCard>();
 
@@ -97,9 +137,7 @@ function wellheadCards(readings: LatestReading[]) {
     const existing = cards.get(key);
 
     if (existing) {
-      if (existing.readings.length < 4) {
-        existing.readings.push(reading);
-      }
+      existing.readings.push(reading);
       continue;
     }
 
@@ -117,6 +155,8 @@ function wellheadCards(readings: LatestReading[]) {
 
 function Overview() {
   const data = useLoaderData() as DashboardOverviewResponse;
+  useAutoRefresh(REFRESH_INTERVALS.overview);
+
   const cards = wellheadCards(data.latestReadings);
   const summaryCards = [
     {
@@ -135,8 +175,13 @@ function Overview() {
       icon: AlertTriangleIcon,
     },
     {
-      label: 'Latest Reading',
-      value: formatDate(data.summary.latestReadingAt),
+      label: 'Telemetry',
+      value: (
+        <FreshnessIndicator
+          ageSeconds={data.summary.latestReadingAgeSeconds}
+          latestReadingAt={data.summary.latestReadingAt}
+        />
+      ),
       icon: RadioTowerIcon,
     },
   ];
@@ -193,7 +238,7 @@ function Overview() {
                   </div>
 
                   <div className='grid gap-2'>
-                    {wellhead.readings.map((reading) => (
+                    {cardReadings(wellhead.readings).map((reading) => (
                       <div
                         key={`${reading.wellheadName}-${reading.parameterCode}-${reading.timestampUtc}`}
                         className='bg-neutral-100 p-3 rounded-lg flex items-center justify-between gap-3'

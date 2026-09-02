@@ -1,4 +1,5 @@
 import {
+  AlertTriangleIcon,
   ChartBarIcon,
   CogIcon,
   HelpCircleIcon,
@@ -6,6 +7,12 @@ import {
 } from 'lucide-react';
 
 import { routes } from '~/config/routes';
+
+/**
+ * The sidebar entries, in display order.
+ *
+ * Order is meaningful: it is the order they appear in the sidebar.
+ */
 
 export type MenuItem = {
   name: string;
@@ -22,6 +29,11 @@ export const menuItems = [
     name: 'Overview',
     href: routes.dashboard.overview,
     icon: <LayoutDashboardIcon />,
+  },
+  {
+    name: 'Alarms',
+    icon: <AlertTriangleIcon />,
+    href: routes.dashboard.alarms,
   },
   {
     name: 'Analytics',

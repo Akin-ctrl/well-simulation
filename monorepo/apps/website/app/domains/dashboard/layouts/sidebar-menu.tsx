@@ -3,12 +3,12 @@ import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
-} from '@corsight/ui/collapsible';
-import { ScrollArea } from '@corsight/ui/scroll-area';
+} from '@well-simulation/ui/collapsible';
+import { ScrollArea } from '@well-simulation/ui/scroll-area';
 import { ArrowUpRightIcon, ChevronDownIcon } from 'lucide-react';
 import { Link, useLocation } from 'react-router';
 
-import { cn } from '@corsight/utils/cn';
+import { cn } from '@well-simulation/utils/cn';
 import { menuItems, type MenuItem } from '../components/menu-items';
 
 export function SidebarMenu({ expanded }: { expanded: boolean }) {

@@ -11,7 +11,9 @@ export default function AuthLayout() {
           <div className='flex items-center mx-auto w-fit gap-2'>
             <Logo className='size-7' />
 
-            <span className='text-[26px] font-medium text-[#023BB5]'>Corsight</span>
+            <span className='text-[26px] font-medium text-[#023BB5]'>
+              Well Simulation
+            </span>
           </div>
 
           {outlet}
@@ -23,12 +25,9 @@ export default function AuthLayout() {
         style={{ backgroundImage: `url(${authBg})` }}
       >
         <div className='w-3/4 mx-auto drop-shadow-lg bg-black/20 rounded-xl p-4'>
-          <h3 className='font-semibold text-3xl text-center'>
-            Your Scada, Smarter and Simpler
-          </h3>
+          <h3 className='font-semibold text-3xl text-center'>Wellhead Monitoring</h3>
           <h5 className='font-medium text-center text-lg'>
-            Manage leads, track performance, and grow your business - all in one
-            powerful yet intuitive. platform
+            Live telemetry, alarms, and trends for the North Field.
           </h5>
         </div>
       </div>

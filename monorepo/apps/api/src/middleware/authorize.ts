@@ -6,7 +6,7 @@ import {
   isRole,
   type Capability,
   type Role,
-} from '@corsight/dto/auth/roles';
+} from '@well-simulation/dto/auth/roles';
 
 /**
  * Capability checks for the model in ADR 0033.

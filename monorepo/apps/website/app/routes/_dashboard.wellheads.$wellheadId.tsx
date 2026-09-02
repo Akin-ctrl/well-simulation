@@ -11,10 +11,11 @@ import type {
   LatestReading,
   TrendPoint,
   WellheadDetailResponse,
-} from '@corsight/dto/res/dashboard';
+} from '@well-simulation/dto/res/dashboard';
 import { Title } from '../domains/dashboard/components/misc';
 import { routes } from '../config/routes';
 import { client, fetchFn } from '../utils/api';
+import { REFRESH_INTERVALS, useAutoRefresh } from '../hooks/use-auto-refresh';
 
 type LoaderArgs = {
   params: {
@@ -195,6 +196,7 @@ function TrendPanel({
 
 export default function WellheadDetail() {
   const data = useLoaderData() as WellheadDetailResponse;
+  useAutoRefresh(REFRESH_INTERVALS.wellhead);
   const pressureData = multiSeries(data.pressureTrend, [
     'tubing_pressure',
     'casing_pressure',

@@ -1,10 +1,11 @@
 import { redirect, useLoaderData, useNavigation, useOutlet } from 'react-router';
 import { DesktopNav } from '../domains/dashboard/layouts/sidebar';
 import Header from '../domains/dashboard/layouts/header';
-import { cn } from '@corsight/utils/cn';
+import { cn } from '@well-simulation/utils/cn';
 import { motion } from 'motion/react';
 import { client, fetchFn } from '../utils/api';
 import { routes } from '../config/routes';
+import { ApiError } from '@well-simulation/dto/error';
 
 type DashboardUser = {
   firstName?: string | null;
@@ -21,8 +22,14 @@ export async function clientLoader() {
   try {
     const response = await fetchFn<CurrentUserData>(client.auth.me.$get());
     return { user: response.data.user };
-  } catch {
-    return redirect(routes.auth.login);
+  } catch (error) {
+    // Only a rejected session sends the user to the login page. Redirecting on
+    // any failure meant a 500 or a dropped connection logged you out, which
+    // hides a server problem behind what looks like an expired session.
+    if (error instanceof ApiError && error.statusCode === 401) {
+      return redirect(routes.auth.login);
+    }
+    throw error;
   }
 }
 

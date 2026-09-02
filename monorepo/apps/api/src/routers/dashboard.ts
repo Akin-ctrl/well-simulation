@@ -1,17 +1,17 @@
 import { Hono } from 'hono';
-import { and, asc, db, desc, eq, sql } from '@corsight/db/query';
+import { and, asc, db, desc, eq, sql } from '@well-simulation/db/query';
 import {
   field,
   location,
   parameterreading,
   parametertype,
   wellhead,
-} from '@corsight/db/schemas/schema';
+} from '@well-simulation/db/schemas/schema';
 import type {
   DashboardAnalyticsResponse,
   DashboardOverviewResponse,
   WellheadDetailResponse,
-} from '@corsight/dto/res/dashboard';
+} from '@well-simulation/dto/res/dashboard';
 import {
   mv5minAlarmCounts,
   mv2minPressureTrends,
@@ -19,7 +19,7 @@ import {
   mv2minWaterCutGorTrends,
   vActiveAlarms,
   vWellheadParameterReadings,
-} from '@corsight/db/schemas/views';
+} from '@well-simulation/db/schemas/views';
 import { responseHandler } from '../utils/handler';
 import { requireCapability } from '../middleware/authorize';
 import { HTTPException } from 'hono/http-exception';
@@ -34,6 +34,19 @@ async function countRows(
   const [row] = await db.select({ value: sql<number>`count(*)::int` }).from(table);
 
   return row?.value ?? 0;
+}
+
+/**
+ * Seconds since a timestamp, or null when there is none.
+ *
+ * Clamped at zero: a reading dated slightly in the future, which clock skew
+ * between the ingestion container and the API can produce, should read as
+ * fresh rather than as a negative age.
+ */
+function ageInSeconds(timestampUtc: string | null): number | null {
+  if (!timestampUtc) return null;
+  const age = (Date.now() - new Date(timestampUtc).getTime()) / 1000;
+  return Math.max(0, Math.round(age));
 }
 
 async function latestReadingTimestamp() {
@@ -287,6 +300,7 @@ export const dashboardRouter = new Hono()
           parametersTracked,
           activeAlarms: activeAlarmCount,
           latestReadingAt: latestAt,
+          latestReadingAgeSeconds: ageInSeconds(latestAt),
         },
         latestReadings: readings,
         activeAlarms: alarms,

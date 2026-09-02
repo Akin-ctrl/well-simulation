@@ -4,8 +4,12 @@ import { Link } from 'react-router';
 import { routes } from '~/config/routes';
 
 import { SidebarMenu } from './sidebar-menu';
-import { cn } from '@corsight/utils/cn';
+import { cn } from '@well-simulation/utils/cn';
 import Logo from '~/assets/svg/brand/logo.svg?react';
+
+/**
+ * The dashboard sidebar navigation.
+ */
 
 export function DesktopNav() {
   const [expanded, setExpanded] = React.useState(true);
@@ -44,7 +48,7 @@ export function DesktopNav() {
             <Logo className='size-7' />
             {expanded && (
               <span className='text-lg font-semibold text-[#023BB5] transition-all duration-300'>
-                Corsight
+                Well Simulation
               </span>
             )}
           </Link>

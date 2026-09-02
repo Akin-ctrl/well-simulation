@@ -1,26 +1,40 @@
-// This is called a "splat route" and as it's in the root `/app/routes/`
-// directory, it's a catchall. If no other routes match, this one will and we
-// can know that the user is hitting a URL that doesn't exist. By throwing a
-// 404 from the loader, we can force the error boundary to render which will
-// ensure the user gets the right status code and we can display a nicer error
-// message for them than the Remix and/or browser default.
+import { Link, isRouteErrorResponse, useRouteError } from 'react-router';
+
+import { routes } from '../config/routes';
+
+/**
+ * Catch-all for URLs that match no route.
+ *
+ * The loader throws so the error boundary renders and the response carries a
+ * real 404. This previously rendered an empty fragment with its boundary
+ * commented out, so an unknown URL produced a blank white page.
+ */
 
 export async function clientLoader() {
   throw new Response('Not found', { status: 404 });
 }
 
 export default function NotFound() {
-  // due to the loader, this component will never be rendered, but we'll return
-  // the error boundary just in case.
+  // Unreachable: the loader always throws. Present so the route is valid.
+  return null;
+}
+
+export function ErrorBoundary() {
+  const error = useRouteError();
+  const status = isRouteErrorResponse(error) ? error.status : 500;
+  const isMissing = status === 404;
+
   return (
-    // <GeneralErrorBoundary
-    //   statusHandlers={{
-    //     401: () => <Navigate to={routes.auth.login} />,
-    //     405: () => '405',
-    //     500: () => '500',
-    //   }}
-    //   unexpectedErrorHandler={() => <ErrorScreen />}
-    // />
-    <></>
+    <div className='flex min-h-dvh flex-col items-center justify-center gap-3 p-8 text-center'>
+      <p className='text-4xl font-semibold'>{status}</p>
+      <p className='text-fgColor-muted'>
+        {isMissing
+          ? 'That page does not exist.'
+          : 'Something went wrong loading that page.'}
+      </p>
+      <Link to={routes.dashboard.overview} className='text-blue-600 hover:underline'>
+        Back to the dashboard
+      </Link>
+    </div>
   );
 }

@@ -1,6 +1,5 @@
 import React from 'react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { Toaster } from '@corsight/ui/toast';
+import { Toaster } from '@well-simulation/ui/toast';
 import { CheckIcon, XIcon } from 'lucide-react';
 import globalStylsheet from './styles/global.css?url';
 import { Links, Meta, Scripts, ScrollRestoration, useOutlet } from 'react-router';
@@ -8,15 +7,12 @@ import type { MetaFunction } from 'react-router';
 
 export const meta: MetaFunction = () => [
   {
-    title: 'Corsight - Your Scada, Smarter and Simpler',
-    description: 'Your Scada, Smarter and Simpler',
+    title: 'Well Simulation',
+    description: 'Wellhead monitoring simulation',
   },
 ];
 
-export const links = () => [
-  { rel: 'stylesheet', href: globalStylsheet },
-  { rel: 'canonical', href: 'https://corsight.com' },
-];
+export const links = () => [{ rel: 'stylesheet', href: globalStylsheet }];
 
 export function Layout({ children }: { children: React.ReactNode }) {
   return (
@@ -39,10 +35,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
 export default function App() {
   const outlet = useOutlet();
 
-  const queryClient = new QueryClient({});
-
   return (
-    <QueryClientProvider client={queryClient}>
+    <>
       <Toaster
         position='bottom-right'
         toastOptions={{
@@ -61,7 +55,7 @@ export default function App() {
         }}
       />
       {outlet}
-    </QueryClientProvider>
+    </>
   );
 }
 

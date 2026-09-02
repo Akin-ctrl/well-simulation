@@ -14,9 +14,10 @@ import type {
   AlarmCount,
   DashboardAnalyticsResponse,
   TrendPoint,
-} from '@corsight/dto/res/dashboard';
+} from '@well-simulation/dto/res/dashboard';
 import { Title } from '../domains/dashboard/components/misc';
 import { client, fetchFn } from '../utils/api';
+import { REFRESH_INTERVALS, useAutoRefresh } from '../hooks/use-auto-refresh';
 
 type MultiMetricPoint = {
   date: string;
@@ -184,6 +185,7 @@ function MultiMetricChart({
 
 function Analytics() {
   const data = useLoaderData() as DashboardAnalyticsResponse;
+  useAutoRefresh(REFRESH_INTERVALS.analytics);
   const pressureData = multiSeries(data.pressureTrend, [
     'tubing_pressure',
     'casing_pressure',
