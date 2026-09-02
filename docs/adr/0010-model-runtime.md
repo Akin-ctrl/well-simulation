@@ -2,6 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-05-31
+- Implementation: Not started. There is no twin-core service.
 
 ## Context
 

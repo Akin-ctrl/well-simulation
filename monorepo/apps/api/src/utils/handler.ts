@@ -1,4 +1,4 @@
-import type { ApiErr, ApiRes } from '@corsight/dto/res/response';
+import type { ApiErr, ApiRes } from '@well-simulation/dto/res/response';
 import type { Context } from 'hono';
 import { HTTPException } from 'hono/http-exception';
 import type { ContentfulStatusCode } from 'hono/utils/http-status';
@@ -116,8 +116,13 @@ function classify(error: unknown): { status: ContentfulStatusCode; msg: string }
  * raised in middleware has the same shape as one raised in a handler. Without
  * this, a 403 from the capability guard came back as plain text while every
  * other error was JSON, and a client parsing the body hit a syntax error.
+ *
+ * The return type is deliberately inferred rather than annotated as `Response`.
+ * Annotating it widened what the route handlers return, which collapsed the
+ * Hono client's inferred response type to `{}` and broke every typed call in
+ * the dashboard.
  */
-export function errorResponse(c: Context, error: unknown): Response {
+export function errorResponse(c: Context, error: unknown) {
   const { status, msg } = classify(error);
 
   if (status >= 500) {

@@ -2,6 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-05-31
+- Implementation: Implemented. PostgreSQL and TimescaleDB, with hypertables, continuous aggregates, and retention.
 
 ## Context
 

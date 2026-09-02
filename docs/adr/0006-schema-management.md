@@ -2,6 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-05-31
+- Implementation: Implemented. Ordered SQL migrations are canonical. The Drizzle journal is gone and drift is tested.
 
 ## Context
 

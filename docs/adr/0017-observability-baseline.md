@@ -2,6 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-05-31
+- Implementation: Implemented. Structured JSON logs, health and readiness on every service, and metrics.
 
 ## Context
 

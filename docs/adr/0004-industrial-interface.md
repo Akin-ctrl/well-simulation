@@ -2,6 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-05-31
+- Implementation: Implemented. Modbus TCP is the edge interface, on pymodbus 3.11.4 with real unit-id addressing.
 
 ## Context
 

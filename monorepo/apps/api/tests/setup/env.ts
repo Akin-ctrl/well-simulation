@@ -67,7 +67,8 @@ export function serverTarget(): Omit<DatabaseTarget, 'database'> & {
  * to clean up instead of accumulating them, and so the name is obvious when
  * inspecting the server by hand.
  */
-export const TEST_DATABASE = process.env.TEST_DATABASE_NAME ?? 'corsight_api_test';
+export const TEST_DATABASE =
+  process.env.TEST_DATABASE_NAME ?? 'well_simulation_api_test';
 
 export function databaseUrl(database: string): string {
   const { host, port, user, password } = serverTarget();

@@ -5,7 +5,7 @@ import { TEST_DATABASE, databaseUrl, loadRepoEnv } from './env';
 /**
  * Configure the process before any application module is imported.
  *
- * `config.ts` validates JWT_SECRET and `@corsight/db/query` reads DATABASE_URL
+ * `config.ts` validates JWT_SECRET and `@well-simulation/db/query` reads DATABASE_URL
  * at import time, so these must be set before a test file's imports evaluate.
  * Vitest runs setup files ahead of the test module, which is what makes this
  * work.

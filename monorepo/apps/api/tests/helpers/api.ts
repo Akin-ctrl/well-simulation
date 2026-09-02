@@ -3,7 +3,7 @@ import { Client } from 'pg';
 
 import { TEST_DATABASE, databaseUrl } from '../setup/env';
 import { appRouter } from '../../src/_app';
-import type { Role } from '@corsight/dto/auth/roles';
+import type { Role } from '@well-simulation/dto/auth/roles';
 
 /**
  * Helpers for driving the API in tests.

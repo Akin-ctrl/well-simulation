@@ -2,6 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-05-31
+- Implementation: Not started. No twin tables exist. The audit table from ADR 0034 is separate.
 
 ## Context
 

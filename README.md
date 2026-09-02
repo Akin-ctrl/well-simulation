@@ -56,14 +56,13 @@ The target system is a lightweight wellhead digital twin with:
 - Historical comparison between observed and predicted behavior.
 - Production-grade deployment, observability, security, and documentation.
 
-## Near-Term Build Order
+## What happens next
 
-1. Add the Alarm Center using the existing alarm rules and event data.
-2. Add a Trend Explorer with wellhead, parameter, and time-window filters.
-3. Add sensor/data freshness indicators for ingestion credibility.
-4. Document simulation assumptions directly in the app and docs.
-5. Add the twin gap layer: observed vs simulated state and divergence.
-6. Add bounded what-if scenarios after the stateful model exists.
+`docs/roadmap.md` is the plan. `docs/remediation-roadmap.md` covers the repair
+work that came out of the project audit, and is complete through Phase 8.
+
+The next feature work is the twin core: a process model that holds state per
+wellhead, then observed against simulated, then forecasting and scenarios.
 
 ## Quick Start
 
@@ -126,6 +125,25 @@ against it.
 - `docs/adr/README.md`: the architecture decision records
 - `docs/openapi/README.md`: the API contracts
 - `docs/remediation-roadmap.md`: the plan for fixing what the audit found
+
+## What the numbers mean
+
+Every reading is invented. The simulator picks a random value inside each
+parameter's configured range, and pushes about one in ten outside it so the
+alarm rules have something to fire on.
+
+Nothing is modelled. Tubing pressure is not related to flow rate, and there is
+no choke to close. Anything that looks like a trend is noise.
+
+Two more things are compressed for a demo rather than set the way a plant would
+set them:
+
+- The trend aggregates bucket at 2 and 5 minutes, not hours and days. The view
+  names say so.
+- Alarm thresholds sit at the edge of each normal range, so alarms actually
+  occur. They are illustrative, not engineering values.
+
+Raw readings are kept for 7 days and alarm events for 90.
 
 ## Where this project actually stands
 

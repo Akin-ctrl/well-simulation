@@ -2,6 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-05-31
+- Implementation: Partial. Every service exposes Prometheus metrics. The optional Prometheus and Grafana stack was deliberately not added.
 
 ## Context
 

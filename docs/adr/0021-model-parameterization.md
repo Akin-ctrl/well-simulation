@@ -2,6 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-05-31
+- Implementation: Not started. Depends on the model. The reload mechanism it would need is built (ADR 0035).
 
 ## Context
 

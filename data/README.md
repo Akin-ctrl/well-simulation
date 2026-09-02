@@ -1,180 +1,99 @@
-# Industry 4.0 Wellhead Monitoring System Simulation
+# Data Layer
 
-![alt text](https://img.shields.io/badge/python-3.12-blue.svg)
-![alt text](https://img.shields.io/badge/docker-compose-blue.svg)
-![alt text](https://img.shields.io/badge/postgresql-14-green.svg)
-![alt text](https://img.shields.io/badge/timescaledb-latest-green.svg)
-![alt text](https://img.shields.io/badge/protocol-ModbusTCP-orange.svg)
+The telemetry pipeline and the database schema. The dashboard and API live in
+`monorepo/`, and the root `README.md` covers running the whole stack.
 
-This project is a complete, containerised simulation of a modern industrial data acquisition and monitoring system for oil and gas wellheads. It demonstrates key Industry 4.0 principles, including metadata-driven configuration, scalable time-series data storage, and real-time, rule-based alarm generation.
+## What is here
 
-The entire system is orchestrated with Docker Compose, allowing for a one-command setup and execution.
+| Path | What it does |
+| --- | --- |
+| `src/wellhead_simulator.py` | Makes up readings for each wellhead and writes them to stdout |
+| `src/modbus_gateway.py` | Serves those readings as Modbus holding registers |
+| `src/database_ingestion.py` | Polls the gateway and writes readings to the historian |
+| `src/schema.py` | Applies the ordered SQL migrations |
+| `src/telemetry_common.py` | Config, logging, database access, and the health endpoints |
+| `src/telemetry_metrics.py` | Prometheus metric definitions |
+| `sql/migrations/` | The schema. Canonical, per ADR 0006 |
+| `sql/seeds/` | Demo fleet and accounts, applied after the migrations |
 
-## The Problem Solved
+## How the data flows
 
-In traditional industrial environments, monitoring systems are often rigid. Adding a new piece of equipment or changing a sensor requires manual code changes, reconfiguration of communication servers, and updates to database schemas. This process is slow, error-prone, and does not scale efficiently.
+The simulator writes a JSON batch to stdout every telemetry interval. The
+gateway reads that on a pipe and encodes each value into two Modbus registers.
+Ingestion polls those registers over Modbus TCP and batch-inserts the decoded
+values.
 
-This project solves that problem by implementing a metadata-driven architecture. Instead of hardcoding configuration, the entire system, from the simulator to the data ingestion service, configures itself on startup by querying a central database. This creates a flexible and dynamic system where:
+The simulator runs as a child process of the gateway, so they share a container.
+The gateway exits when the simulator does, because a gateway with no source
+would keep serving its last registers and ingestion would record them as fresh.
 
-Adding a new wellhead is as simple as adding a new row to a database table.
+## Metadata drives everything
 
-Changing a Modbus address is a simple UPDATE query.
+The services do not hardcode which wellheads or parameters exist. Each queries
+the database on startup and configures itself from what it finds.
 
-Defining new alarm rules can be done on the fly without restarting any services.
+Each also re-reads that metadata every telemetry interval, so adding a wellhead,
+moving a Modbus address, or changing an alarm threshold takes effect within a
+few seconds without a restart. ADR 0035 records why a timer was chosen over a
+notification or a reload endpoint.
 
-This approach dramatically reduces maintenance overhead and allows the system to scale seamlessly from a dozen wellheads to thousands.
+When a register mapping moves, the gateway clears its whole register image. A
+value left at an address nothing maps any more would be a stale reading on a
+live interface.
 
-## System Architecture
+## Telling stale data from fresh
 
-The application is composed of four main services that communicate within a Docker network. The data flows in a single, robust pipeline from simulation to storage and analysis.
+The gateway writes the time of its last batch to register 1900. Ingestion reads
+that first, and skips the insert if it has not advanced.
 
+Without it, a stalled simulator meant the gateway kept answering reads with
+frozen values and ingestion kept recording them under new timestamps. The
+dashboard showed a healthy fleet on data that had stopped moving. That is worse
+than an outage, because nothing downstream could detect it.
 
-```mermaid
-graph TD
-    %% Define the master container for the entire system first.
-    subgraph "Dockerized System"
-        
-        %% Define the nodes for each service
-        A[Wellhead Simulator]
-        B[Modbus Gateway]
-        C[Database Ingestion]
-        D[(PostgreSQL / TimescaleDB<br><b>Data Historian</b>)]
-        E[pgAdmin UI]
+## Alarms
 
-        %% Group the nodes into logical subgraphs for clarity
-        subgraph " "
-            direction LR
-            subgraph "Real-time Data Pipeline"
-                direction TB
-                A -- JSON via stdout/pipe --> B
-                B -- Modbus TCP Poll --> C
-                C -- Batch SQL INSERT --> D
-            end
+Alarm rules live in `alarmRule`. A statement-level trigger on `parameterReading`
+evaluates each batch.
 
-            subgraph "Visualisation"
-                direction TB
-                E -- "User Queries &<br>Metadata Management" --> D
-            end
-        end
+Alarms have hysteresis: three consecutive breaching readings to open one, three
+consecutive normal ones to clear it. Without that, randomised telemetry made
+alarms flap continuously and `alarmEvent` filled with events that lasted a
+single sample.
 
-        %% Define the metadata flow separately to show the "brain" of the system
-        subgraph "Metadata Configuration Flow (on startup)"
-            direction RL
-            A -- "Reads Asset & Parameter List" --> D
-            B -- "Reads Modbus Register Map" --> D
-            C -- "Reads Polling & Mapping Info" --> D
-        end
-    end
+## Operational endpoints
 
-    %% Apply styling to key components
-    %% style D fill:#d4f0fd,stroke:#333,stroke-width:2px
-    %% style E fill:#d4f0fd,stroke:#333,stroke-width:2px
-```
- #### Wellhead Simulator: Simulates data for 12 wellheads, each with 18 parameters. It first queries the database to learn which wellheads and parameters it needs to simulate.
+The gateway and ingestion each serve `/health`, `/ready`, and `/metrics` on the
+port in `SERVICE_PORT`. The ports are not published to the host; reach them from
+inside the compose network.
 
-#### Modbus Gateway: Reads the simulated data and maps it to a Modbus TCP server's register addresses, which are also defined in the database.
+`/ready` means the service is doing its job, not merely running. Ingestion is
+ready once it has written readings, and not ready while it is reconnecting.
 
-#### Database Ingestion: Polls the Modbus Gateway, reads the register values, and inserts them into a TimescaleDB hypertable for efficient time-series storage.
+## Running it
 
-#### PostgreSQL + TimescaleDB: The central nervous system. It stores all asset metadata, configuration, time-series readings, and alarm events. A powerful trigger automatically processes incoming data to check for alarm conditions.
+The root `README.md` has the quick start. The migrator applies
+`sql/migrations/` on every `up`, so a schema change does not need the volume
+recreated.
 
-#### pgAdmin: A web-based UI for visualising the database schema, querying live data, and managing the system's metadata.
+To inspect the data:
 
-## The Data Model
-
-The system's flexibility is built upon a comprehensive relational data model. This model separates asset hierarchy, parameter definitions, time-series data, and alarm logic.
-
-
-##  Getting Started
-
-Follow these steps to get the entire system running on your local machine.
-
-### Prerequisites
-
-Docker
-
-Docker Compose
-
-### 1. Configuration
-
-The project uses a root `.env` file to manage local configuration and secrets.
-Copy `.env.example` to `.env`, then replace placeholder values with local-only
-credentials before starting the stack.
-
-## 2. Build and Run
-Start docker
-Open a terminal in the project's root directory and execute the following command:
-```bash
-docker compose up --build
+```sh
+docker exec -it wellhead_db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"
 ```
 
+```sql
+SELECT timestamp_utc, raw_value FROM parameterReading
+WHERE wellhead_id = 1 AND parameter_type_id = 1
+ORDER BY timestamp_utc DESC LIMIT 10;
+```
 
-This command will:
+## What the numbers are
 
-Build the custom Python Docker image.
+The readings are random values inside each parameter's configured range, with
+about one in ten pushed outside it so the alarm rules have something to fire on.
 
-Pull the official Postgres/TimescaleDB and pgAdmin images.
-
-Create and start the database, pgAdmin, Modbus gateway, ingestion service, API,
-and dashboard containers.
-
-Establish a network for the containers to communicate.
-
-You will see logs from all services streaming in your terminal.
-
-## 3. Accessing the System
-
-Modbus Server: Accessible on localhost:5020.
-
-PostgreSQL Database: Accessible on localhost:5434.
-
-pgAdmin Web UI: Accessible at http://localhost:5050.
-
-## 4. Setting up pgAdmin
-
-Navigate to http://localhost:5050 in your browser.
-
-Log in using the pgAdmin credentials from your `.env` file.
-
-Click "Add New Server".
-
-In the "General" tab, give it a name (e.g., "Wellhead DB").
-
-In the "Connection" tab, use the following details. This is crucial as pgAdmin is inside the Docker network.
-
-Host Name/Address: db
-
-Port: 5432
-
-Maintenance database: wellhead_data
-
-Username: the `POSTGRES_USER` value from `.env`.
-
-Password: the `POSTGRES_PASSWORD` value from `.env`.
-
-Click "Save".
-
-You can now browse the database and view the schema. To see readings arriving, run `SELECT * FROM parameterReading ORDER BY timestamp_utc DESC;`.
-
-## Project Components Deep Dive
-
-Here is a breakdown of each file and its role in the system.
-
-File	Role	Key Responsibilities
-docker-compose.yml:	Orchestrator.	Defines the db, pgAdmin, Modbus gateway, ingestion, API, and dashboard services, their dependencies, networks, and environment variables.
-Dockerfile:	Image Builder.	Creates a single, reusable Python image containing all necessary dependencies (pymodbus, psycopg2) for the application services.
-init.sql:	System Brain,	the most critical file. It defines the database schema. It also seeds the metadata for all 12 wellheads, 18 parameters, their Modbus mappings, and the alarm rules.
-wellhead_simulator.py:	Data Source.	On startup, it queries the DB to get a list of wellheads and their parameters. Generates randomised data within normal operating ranges and prints it to stdout as JSON.
-modbus_gateway.py:	Protocol Server.	Queries the DB for the deviceParameterMapping table. It launches the simulator as a subprocess, reads its JSON output, and uses the mapping to populate its Modbus registers with the correct data.
-database_ingestion.py:	Data Historian.	Queries the DB for the same mapping. It acts as a Modbus client, polls the gateway every 30 seconds, decodes the data, and performs an efficient batch INSERT into the parameterReading hypertable.
-.env:	Configuration	Stores secrets and environment-specific settings, keeping them separate from the application code and out of version control.
-requirements.txt:	Dependencies. Lists the Python packages required for the application, used by the Dockerfile during the image build process.
-Future Enhancements
-
-Web Dashboard: Add a Grafana or custom web dashboard service to visualise the time-series data and active alarms.
-
-MQTT Protocol: Implement an MQTT broker and update services to publish/subscribe, a common pattern in IoT architectures.
-
-Advanced Analytics: Create more tables for metrics/derivedValue and write SQL functions to calculate hourly averages, uptime, etc.
-
-CI/CD Pipeline: Implement a CI/CD pipeline using GitHub Actions to automatically build, test, and deploy the Docker containers.
+There is no physics here. Nothing links tubing pressure to flow rate, and
+closing a choke would change nothing, because there is no choke. Replacing this
+with a model that holds state is the next major piece of work, and the point at
+which the project could reasonably be called a digital twin.

@@ -65,3 +65,14 @@ The project becomes a credible lightweight digital twin by adding capabilities i
 ## Key Boundary
 
 The project should not claim to be a high-fidelity reservoir simulator. The target is a **lightweight operational digital twin**: useful for demonstrating state, causality, prediction, alarms, and decision support.
+
+## Diagrams
+
+- [Data model](../relevant_visuals/data-model.pdf): the
+  relational schema, showing the asset hierarchy, parameter metadata, and the
+  time-series tables.
+- [Flow diagram](../relevant_visuals/flow-diagram.pdf): how a
+  reading travels from the simulator to the dashboard.
+
+These predate the current schema. The migrations in `data/sql/migrations` are
+canonical where the two disagree.

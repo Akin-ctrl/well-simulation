@@ -2,6 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-05-31
+- Implementation: Implemented. The README and docs say monitoring simulation, not digital twin.
 
 ## Context
 

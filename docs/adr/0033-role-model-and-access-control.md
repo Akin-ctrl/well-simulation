@@ -2,6 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-07-31
+- Implementation: Implemented. Capability guards enforce the matrix. Registration requires an ADMIN session.
 
 ## Context
 

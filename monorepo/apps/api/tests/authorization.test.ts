@@ -9,7 +9,7 @@ import {
   rolesWithCapability,
   type Capability,
   type Role,
-} from '@corsight/dto/auth/roles';
+} from '@well-simulation/dto/auth/roles';
 
 import { deleteTestUsers, request, signedInAs } from './helpers/api';
 

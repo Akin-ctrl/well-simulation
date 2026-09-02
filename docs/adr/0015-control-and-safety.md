@@ -2,6 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-05-31
+- Implementation: Partial. The OPERATIONS role and the control:issue capability exist per ADR 0033. No control API to guard yet.
 
 ## Context
 

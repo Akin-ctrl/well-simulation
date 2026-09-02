@@ -2,6 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-05-31
+- Implementation: Not started. No model of any fidelity exists yet.
 
 ## Context
 
