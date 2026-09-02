@@ -131,16 +131,35 @@ def emit_telemetry(payload: list[dict[str, object]]) -> None:
 
 
 def run_simulation(
-    config: dict[int, list[SimulatedParameter]], interval_seconds: int
+    settings: Settings, config: dict[int, list[SimulatedParameter]]
 ) -> None:
-    """Run the synthetic telemetry loop."""
+    """Run the synthetic telemetry loop.
+
+    The parameter set is re-read each interval, so adding a wellhead or changing
+    a normal range takes effect without a restart (ADR 0035).
+    """
     logger.info(
         "Starting wellhead simulator",
-        extra={"wellheads": len(config), "interval_seconds": interval_seconds},
+        extra={
+            "wellheads": len(config),
+            "interval_seconds": settings.interval_seconds,
+        },
     )
     while True:
         emit_telemetry(build_batch(config))
-        time.sleep(interval_seconds)
+        time.sleep(settings.interval_seconds)
+
+        try:
+            reloaded = get_simulation_metadata(settings.database)
+        except psycopg2.Error:
+            logger.exception("Metadata reload failed; keeping the current parameters")
+            continue
+
+        if reloaded and reloaded != config:
+            config = reloaded
+            logger.info(
+                "Simulation metadata reloaded", extra={"wellheads": len(config)}
+            )
 
 
 def main() -> int:
@@ -157,7 +176,11 @@ def main() -> int:
         logger.error("No simulation metadata found in database")
         return 1
 
-    run_simulation(config, settings.interval_seconds)
+    # No operational endpoints here. The simulator runs as a child process of
+    # the Modbus gateway, inside the same container and sharing its environment,
+    # so binding a port would collide with the gateway's. Its liveness is
+    # already covered: the gateway exits when the simulator does.
+    run_simulation(settings, config)
     return 0
 
 

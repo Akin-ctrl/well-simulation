@@ -15,18 +15,36 @@ from telemetry_common import (
     HEARTBEAT_REGISTER,
     WORD_ORDER,
     DatabaseSettings,
+    MetadataReloader,
     ParameterMapping,
+    ServiceHealth,
     as_number,
     configure_logging,
     configure_pymodbus_logging,
     connect_db,
     load_parameter_mappings,
+    mappings_changed,
     required_env,
+    service_port,
+    start_service_endpoints,
     telemetry_interval_seconds,
 )
+from telemetry_metrics import (
+    INGESTION_RECONNECTS,
+    METADATA_RELOADS,
+    MODBUS_READ_ERRORS,
+    POLL_DURATION,
+    POLLS_SKIPPED_STALE,
+    READINGS_WRITTEN,
+    TELEMETRY_AGE,
+)
 
-RECONNECT_DELAY_SECONDS = 10
+# Backoff between reconnection attempts. Doubles on repeated failure so a
+# database that is down is not hammered once every ten seconds indefinitely.
+RECONNECT_DELAY_SECONDS = 5
+MAX_RECONNECT_DELAY_SECONDS = 120
 REGISTERS_PER_VALUE = 2
+DEFAULT_SERVICE_PORT = 9101
 
 DATATYPE = ModbusClientMixin.DATATYPE
 
@@ -120,6 +138,7 @@ def read_heartbeat(client: ModbusTcpClient, unit_id: int) -> int | None:
         HEARTBEAT_REGISTER, count=REGISTERS_PER_VALUE, device_id=unit_id
     )
     if result.isError():
+        MODBUS_READ_ERRORS.labels(kind="heartbeat").inc()
         logger.warning("Modbus heartbeat read failed", extra={"unit_id": unit_id})
         return None
 
@@ -160,6 +179,7 @@ def poll_once(
             device_id=mapping.modbus_unit_id,
         )
         if result.isError():
+            MODBUS_READ_ERRORS.labels(kind="register").inc()
             logger.warning(
                 "Modbus read failed",
                 extra={
@@ -186,14 +206,41 @@ def poll_once(
     return readings
 
 
+def apply_metadata_reload(
+    reloader: MetadataReloader, current: list[ParameterMapping]
+) -> list[ParameterMapping]:
+    """Reload the mappings if due, and adopt them if they changed.
+
+    ADR 0035. Returns the mappings now in force, which are the previous ones
+    when the reload is not due, the read failed, or nothing changed.
+    """
+    if not reloader.is_due():
+        return current
+
+    reloaded = reloader.reload()
+    if reloaded is None:
+        METADATA_RELOADS.labels(result="failed").inc()
+        return current
+
+    if not mappings_changed(current, reloaded):
+        METADATA_RELOADS.labels(result="unchanged").inc()
+        return current
+
+    METADATA_RELOADS.labels(result="changed").inc()
+    logger.info("Parameter mappings reloaded", extra={"mappings": len(reloaded)})
+    return reloaded
+
+
 def ingest_forever(
     settings: Settings,
     mappings: list[ParameterMapping],
     client: ModbusTcpClient,
+    health: ServiceHealth,
 ) -> None:
     """Poll and persist until the connection fails, then let the caller retry."""
     heartbeat_unit_id = mappings[0].modbus_unit_id
     last_heartbeat: int | None = None
+    reloader = MetadataReloader(settings.database, settings.poll_interval_seconds)
 
     conn = connect_db(settings.database)
     try:
@@ -209,8 +256,15 @@ def ingest_forever(
             started_at = time.time()
             now = datetime.now(timezone.utc)
 
+            mappings = apply_metadata_reload(reloader, mappings)
+            heartbeat_unit_id = mappings[0].modbus_unit_id
+
             heartbeat = read_heartbeat(client, heartbeat_unit_id)
+            if heartbeat is not None:
+                TELEMETRY_AGE.set(max(0.0, now.timestamp() - heartbeat))
+
             if is_stale(heartbeat, last_heartbeat):
+                POLLS_SKIPPED_STALE.inc()
                 logger.warning(
                     "Skipping poll: telemetry is stale",
                     extra={
@@ -220,12 +274,16 @@ def ingest_forever(
                 )
             else:
                 last_heartbeat = heartbeat
-                readings = poll_once(client, mappings, now)
+                with POLL_DURATION.time():
+                    readings = poll_once(client, mappings, now)
                 if readings:
                     execute_batch(
                         cursor, INSERT_READING_SQL, [r.as_row() for r in readings]
                     )
                     conn.commit()
+                    READINGS_WRITTEN.inc(len(readings))
+                    # Only now is the service demonstrably doing its job.
+                    health.ready = True
                     logger.info(
                         "Inserted parameter readings", extra={"count": len(readings)}
                     )
@@ -238,21 +296,36 @@ def ingest_forever(
             conn.close()
 
 
-def run_ingestion_loop(settings: Settings, mappings: list[ParameterMapping]) -> None:
-    """Run the ingestion loop, reconnecting after transport or database failures."""
+def run_ingestion_loop(
+    settings: Settings, mappings: list[ParameterMapping], health: ServiceHealth
+) -> None:
+    """Run the ingestion loop, reconnecting after transport or database failures.
+
+    The delay doubles on each consecutive failure up to a ceiling. A fixed delay
+    meant a database that was down got a reconnection attempt every ten seconds
+    for as long as it stayed down.
+    """
     client = ModbusTcpClient(settings.modbus_host, port=settings.modbus_port)
+    delay = RECONNECT_DELAY_SECONDS
 
     while True:
         try:
-            ingest_forever(settings, mappings, client)
+            ingest_forever(settings, mappings, client, health)
         except Exception:
+            INGESTION_RECONNECTS.inc()
+            # Not ready while disconnected, so readiness reflects whether the
+            # service can actually ingest rather than whether it is running.
+            health.ready = False
             logger.exception(
                 "Ingestion loop failed; reconnecting",
-                extra={"retry_in_seconds": RECONNECT_DELAY_SECONDS},
+                extra={"retry_in_seconds": delay},
             )
             if client.is_socket_open():
                 client.close()
-            time.sleep(RECONNECT_DELAY_SECONDS)
+            time.sleep(delay)
+            delay = min(delay * 2, MAX_RECONNECT_DELAY_SECONDS)
+        else:
+            delay = RECONNECT_DELAY_SECONDS
 
 
 def main() -> int:
@@ -277,7 +350,13 @@ def main() -> int:
             "interval_seconds": settings.poll_interval_seconds,
         },
     )
-    run_ingestion_loop(settings, mappings)
+
+    health = ServiceHealth(detail={"mappings": len(mappings)})
+    start_service_endpoints(
+        "database_ingestion", health, service_port(DEFAULT_SERVICE_PORT)
+    )
+
+    run_ingestion_loop(settings, mappings, health)
     return 0
 
 

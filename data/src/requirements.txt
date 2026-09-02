@@ -7,3 +7,4 @@ psycopg2-binary == 2.9.10
 # Used by the migrator to hash the generated bootstrap administrator password.
 # Verified to produce hashes the API bcryptjs accepts.
 bcrypt == 4.2.1
+prometheus-client == 0.23.1

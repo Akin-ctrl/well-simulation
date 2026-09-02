@@ -23,17 +23,30 @@ from telemetry_common import (
     HEARTBEAT_REGISTER,
     WORD_ORDER,
     DatabaseSettings,
+    MetadataReloader,
     ParameterMapping,
+    ServiceHealth,
     collect_unit_ids,
     configure_logging,
     configure_pymodbus_logging,
     load_parameter_mappings,
+    mappings_changed,
     required_env,
+    service_port,
+    start_service_endpoints,
+    telemetry_interval_seconds,
 )
+from telemetry_metrics import BATCH_ERRORS, BATCHES_APPLIED, METADATA_RELOADS
 
 SIMULATOR_SCRIPT = "wellhead_simulator.py"
 REGISTER_BLOCK_SIZE = 2000
 SIMULATOR_POLL_SECONDS = 0.1
+DEFAULT_SERVICE_PORT = 9102
+
+# pymodbus offsets a device context by one, so a block of N registers starting
+# at address 0 accepts N-1 values from that address. Writing the full N returns
+# an exception code and changes nothing.
+USABLE_REGISTERS = REGISTER_BLOCK_SIZE - 1
 
 DATATYPE = ModbusClientMixin.DATATYPE
 
@@ -75,6 +88,10 @@ def encode_value(value: float, data_type: str) -> list[int]:
     raise ValueError(f"Unsupported Modbus data type: {data_type}")
 
 
+class RegisterWriteError(RuntimeError):
+    """A Modbus register write was rejected by the datastore."""
+
+
 class RegisterStore:
     """Owns the Modbus register image and the mappings that address it.
 
@@ -85,10 +102,7 @@ class RegisterStore:
     def __init__(self, mappings: list[ParameterMapping]) -> None:
         """Build one holding-register context per distinct Modbus unit id."""
         self._by_wellhead: dict[int, dict[str, ParameterMapping]] = {}
-        for mapping in mappings:
-            self._by_wellhead.setdefault(mapping.wellhead_id, {})[
-                mapping.parameter_code
-            ] = mapping
+        self._index_mappings(mappings)
 
         self.unit_ids = collect_unit_ids(mappings)
         self.context = ModbusServerContext(
@@ -100,6 +114,54 @@ class RegisterStore:
             },
             single=False,
         )
+
+    def _write(self, unit_id: int, address: int, values: list[int]) -> None:
+        """Write holding registers, raising if the datastore rejects it.
+
+        `setValues` reports a bad address by returning a Modbus exception code
+        rather than raising, so an unchecked call fails silently. That is the
+        same class of problem as serving stale telemetry: the system carries on
+        looking correct while the data is wrong.
+        """
+        result = self.context[unit_id].setValues(3, address, values)
+        if result is not None:
+            raise RegisterWriteError(
+                f"unit {unit_id} rejected a write of {len(values)} registers "
+                f"at address {address} (modbus exception {result})"
+            )
+
+    def replace_mappings(self, mappings: list[ParameterMapping]) -> None:
+        """Adopt a new mapping set and clear the register image.
+
+        ADR 0035 clears the whole block rather than only the registers whose
+        mapping moved. A value left at an address nothing maps any more is a
+        stale reading on a live Modbus interface, and working out exactly which
+        addresses to clear is the kind of bookkeeping that fails silently. The
+        cost is that every register reads zero until the next telemetry batch.
+        """
+        self._index_mappings(mappings)
+        previous_unit_ids = self.unit_ids
+        self.unit_ids = collect_unit_ids(mappings)
+
+        # A unit id that appears for the first time needs its own register
+        # image. The running server holds a reference to this context, so
+        # devices are added to it rather than the context being replaced.
+        for unit_id in self.unit_ids:
+            if unit_id not in previous_unit_ids:
+                self.context[unit_id] = ModbusDeviceContext(
+                    hr=ModbusSequentialDataBlock(0, [0] * REGISTER_BLOCK_SIZE)
+                )
+
+        for unit_id in self.unit_ids:
+            self._write(unit_id, 0, [0] * USABLE_REGISTERS)
+
+    def _index_mappings(self, mappings: list[ParameterMapping]) -> None:
+        """Rebuild the wellhead and parameter lookup from a mapping set."""
+        self._by_wellhead = {}
+        for mapping in mappings:
+            self._by_wellhead.setdefault(mapping.wellhead_id, {})[
+                mapping.parameter_code
+            ] = mapping
 
     def apply_batch(self, telemetry: list[dict[str, object]]) -> None:
         """Write one telemetry batch into the register image."""
@@ -122,8 +184,10 @@ class RegisterStore:
                 if mapping is None:
                     continue
 
-                self.context[mapping.modbus_unit_id].setValues(
-                    3, mapping.modbus_register, encode_value(value, mapping.data_type)
+                self._write(
+                    mapping.modbus_unit_id,
+                    mapping.modbus_register,
+                    encode_value(value, mapping.data_type),
                 )
 
         self.write_heartbeat(datetime.now(timezone.utc))
@@ -134,10 +198,45 @@ class RegisterStore:
             int(timestamp.timestamp()), DATATYPE.UINT32, word_order=WORD_ORDER
         )
         for unit_id in self.unit_ids:
-            self.context[unit_id].setValues(3, HEARTBEAT_REGISTER, payload)
+            self._write(unit_id, HEARTBEAT_REGISTER, payload)
 
 
-def pump_simulator_output(store: RegisterStore, process: subprocess.Popen[str]) -> int:
+def apply_metadata_reload(
+    store: RegisterStore, reloader: MetadataReloader, current: list[ParameterMapping]
+) -> list[ParameterMapping]:
+    """Reload the mappings if due, and adopt them if they changed.
+
+    Returns the mappings now in force, which are the previous ones when the
+    reload is not due, the read failed, or nothing changed.
+    """
+    if not reloader.is_due():
+        return current
+
+    reloaded = reloader.reload()
+    if reloaded is None:
+        METADATA_RELOADS.labels(result="failed").inc()
+        return current
+
+    if not mappings_changed(current, reloaded):
+        METADATA_RELOADS.labels(result="unchanged").inc()
+        return current
+
+    METADATA_RELOADS.labels(result="changed").inc()
+    store.replace_mappings(reloaded)
+    logger.info(
+        "Register mappings reloaded; register image cleared",
+        extra={"mappings": len(reloaded), "unit_ids": store.unit_ids},
+    )
+    return reloaded
+
+
+def pump_simulator_output(
+    store: RegisterStore,
+    process: subprocess.Popen[str],
+    reloader: MetadataReloader,
+    mappings: list[ParameterMapping],
+    health: ServiceHealth,
+) -> int:
     """Feed simulator output into the register store until the process exits.
 
     Returns the simulator's exit code. If the simulator stops, the gateway must
@@ -154,7 +253,15 @@ def pump_simulator_output(store: RegisterStore, process: subprocess.Popen[str]) 
             try:
                 store.apply_batch(json.loads(line.strip()))
             except (json.JSONDecodeError, KeyError, TypeError, ValueError):
+                BATCH_ERRORS.inc()
                 logger.exception("Failed to process simulator telemetry")
+            else:
+                BATCHES_APPLIED.inc()
+                # Serving real values is what makes the gateway useful, so
+                # readiness starts at the first batch rather than at startup.
+                health.ready = True
+
+        mappings = apply_metadata_reload(store, reloader, mappings)
 
         exit_code = process.poll()
         if exit_code is not None:
@@ -163,7 +270,12 @@ def pump_simulator_output(store: RegisterStore, process: subprocess.Popen[str]) 
         time.sleep(SIMULATOR_POLL_SECONDS)
 
 
-def run_simulator_thread(store: RegisterStore) -> None:
+def run_simulator_thread(
+    store: RegisterStore,
+    reloader: MetadataReloader,
+    mappings: list[ParameterMapping],
+    health: ServiceHealth,
+) -> None:
     """Run the simulator subprocess and stop the server when it exits."""
     logger.info("Starting simulator subprocess for Modbus register updates")
     # sys.executable rather than a bare "python" so the interpreter is resolved
@@ -174,8 +286,10 @@ def run_simulator_thread(store: RegisterStore) -> None:
         text=True,
     )
 
-    exit_code = pump_simulator_output(store, process)
+    exit_code = pump_simulator_output(store, process, reloader, mappings, health)
 
+    health.alive = False
+    health.ready = False
     logger.error(
         "Simulator exited; stopping the gateway so the telemetry source "
         "cannot go stale unnoticed",
@@ -209,7 +323,17 @@ def main() -> int:
         extra={"mappings": len(mappings), "unit_ids": store.unit_ids},
     )
 
-    threading.Thread(target=run_simulator_thread, args=(store,), daemon=True).start()
+    health = ServiceHealth(detail={"unit_ids": store.unit_ids})
+    start_service_endpoints(
+        "modbus_gateway", health, service_port(DEFAULT_SERVICE_PORT)
+    )
+
+    reloader = MetadataReloader(settings.database, telemetry_interval_seconds())
+    threading.Thread(
+        target=run_simulator_thread,
+        args=(store, reloader, mappings, health),
+        daemon=True,
+    ).start()
 
     logger.info(
         "Starting Modbus TCP server",
