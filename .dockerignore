@@ -1,0 +1,19 @@
+# Kept out of every build context. The Python image builds from data/src and
+# the node images from monorepo, but a stray context would otherwise pull in
+# the repository history and local state.
+.git
+.venv
+venv
+__pycache__
+*.py[cod]
+.pytest_cache
+.mypy_cache
+.ruff_cache
+node_modules
+dist
+build
+.turbo
+.react-router
+*.tsbuildinfo
+.env
+docs

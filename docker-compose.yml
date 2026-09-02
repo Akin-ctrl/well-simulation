@@ -19,6 +19,7 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    restart: unless-stopped
     networks:
       - wellnet
   # pgadmin:
@@ -83,6 +84,7 @@ services:
       MODBUS_PORT: ${MODBUS_PORT}
       MODBUS_BIND_HOST: "0.0.0.0"
       TELEMETRY_INTERVAL_SECONDS: ${TELEMETRY_INTERVAL_SECONDS:-5}
+      SERVICE_PORT: "9102"
 
   ingestion:
     build: ./data/src
@@ -95,7 +97,7 @@ services:
       migrator:
         condition: service_completed_successfully
       modbus:
-        condition: service_started
+        condition: service_healthy
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -105,6 +107,7 @@ services:
       MODBUS_HOST: modbus
       MODBUS_PORT: ${MODBUS_PORT}
       TELEMETRY_INTERVAL_SECONDS: ${TELEMETRY_INTERVAL_SECONDS:-5}
+      SERVICE_PORT: "9101"
 
     networks:
       - wellnet
@@ -113,7 +116,7 @@ services:
     build:
       context: ./monorepo
       dockerfile: apps/api/Dockerfile
-    container_name: corsight_api
+    container_name: well_simulation_api
     depends_on:
       db:
         condition: service_healthy
@@ -131,6 +134,17 @@ services:
     # trusted-proxy handling. Add a compose override for direct local access.
     expose:
       - "3000"
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 15s
+      timeout: 3s
+      retries: 3
+      start_period: 20s
     networks:
       - wellnet
 
@@ -138,12 +152,19 @@ services:
     build:
       context: ./monorepo
       dockerfile: apps/website/Dockerfile
-    container_name: corsight_dashboard
+    container_name: well_simulation_dashboard
     depends_on:
-      - api
+      api:
+        condition: service_healthy
     ports:
       - "8090:80"
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/"]
+      interval: 15s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
     networks:
       - wellnet
 
