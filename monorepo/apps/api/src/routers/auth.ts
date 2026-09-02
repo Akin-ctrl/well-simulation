@@ -1,9 +1,9 @@
 import { Hono, type Context } from 'hono';
-import { db } from '@corsight/db/query';
-import { users } from '@corsight/db/schemas/user';
+import { db } from '@well-simulation/db/query';
+import { users } from '@well-simulation/db/schemas/user';
 import { zValidator } from '@hono/zod-validator';
-import { loginSchema, registerSchema } from '@corsight/dto/req/auth';
-import { DEFAULT_ROLE } from '@corsight/dto/auth/roles';
+import { loginSchema, registerSchema } from '@well-simulation/dto/req/auth';
+import { DEFAULT_ROLE } from '@well-simulation/dto/auth/roles';
 import { responseHandler } from '../utils/handler';
 import { requireCapability, sessionUserId } from '../middleware/authorize';
 import bcryptjs from 'bcryptjs';
@@ -12,6 +12,7 @@ import { deleteCookie, setCookie } from 'hono/cookie';
 import { sign } from 'hono/jwt';
 
 import { config } from '../config';
+import { recordAuditEvent } from '../audit';
 
 const AUTH_COOKIE_NAME = 'auth_token';
 const BCRYPT_ROUNDS = 11;
@@ -77,6 +78,15 @@ export const authRouter = new Hono()
           throw new HTTPException(500, { message: 'User registration failed' });
         }
 
+        await recordAuditEvent(c, {
+          action: 'user.create',
+          outcome: 'success',
+          actorUserId: sessionUserId(c),
+          subjectType: 'user',
+          subjectId: createdUser.id,
+          detail: { role: createdUser.role ?? DEFAULT_ROLE },
+        });
+
         return { user: publicUser(createdUser) };
       })(c);
     }
@@ -95,6 +105,15 @@ export const authRouter = new Hono()
       });
 
       if (!user) {
+        // Recorded even though no account matched. If rows only appeared for
+        // real accounts, the presence of one would disclose that the account
+        // exists (ADR 0034).
+        await recordAuditEvent(c, {
+          action: 'auth.login',
+          outcome: 'failure',
+          actorIdentifier: payload.emailOrUsername,
+          detail: { reason: 'unknown_identifier' },
+        });
         throw new HTTPException(401, { message: 'Invalid credentials' });
       }
 
@@ -109,10 +128,23 @@ export const authRouter = new Hono()
       );
 
       if (!isPasswordValid) {
+        await recordAuditEvent(c, {
+          action: 'auth.login',
+          outcome: 'failure',
+          actorUserId: user.id,
+          actorIdentifier: payload.emailOrUsername,
+          detail: { reason: 'bad_password' },
+        });
         throw new HTTPException(401, { message: 'Invalid credentials' });
       }
 
       await issueSession(c, user);
+      await recordAuditEvent(c, {
+        action: 'auth.login',
+        outcome: 'success',
+        actorUserId: user.id,
+        actorIdentifier: payload.emailOrUsername,
+      });
       return { user: publicUser(user) };
     })(c);
   })
@@ -133,11 +165,19 @@ export const authRouter = new Hono()
     })(c);
   })
   .post('/logout', (c) => {
-    deleteCookie(c, AUTH_COOKIE_NAME, {
-      path: '/',
-    });
-
     return responseHandler(async () => {
+      // Read the session before the cookie is cleared, so the event carries an
+      // actor rather than being anonymous.
+      const userId = sessionUserId(c);
+
+      deleteCookie(c, AUTH_COOKIE_NAME, { path: '/' });
+
+      await recordAuditEvent(c, {
+        action: 'auth.logout',
+        outcome: 'success',
+        actorUserId: userId,
+      });
+
       return { authenticated: false };
     }, 'Logged out')(c);
   });

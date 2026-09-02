@@ -12,7 +12,7 @@ import { config } from '../config';
  * administrative action. `/auth/logout` requires a session too, so clearing a
  * cookie cannot be triggered by an unauthenticated caller.
  */
-const publicRoutes: string[] = ['/auth/login'];
+const publicRoutes: string[] = ['/auth/login', '/metrics'];
 
 export const authMiddleware: MiddlewareHandler = async (c, next) => {
   const token = getCookie(c, 'auth_token');
