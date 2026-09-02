@@ -2,7 +2,7 @@ import React from 'react';
 
 import { Input } from './input';
 import type { InputProps } from './input';
-import { cn } from '@corsight/utils/cn';
+import { cn } from '@well-simulation/utils/cn';
 
 export interface PasswordProps extends Omit<InputProps, 'type' | 'size'> {
   /** It is the password visibility toggle icon.  */

@@ -3,7 +3,7 @@ import { cva } from 'class-variance-authority';
 import type { VariantProps } from 'class-variance-authority';
 import { isValidElementType } from 'react-is';
 
-import { cn } from '@corsight/utils/cn';
+import { cn } from '@well-simulation/utils/cn';
 import { useInteractiveEvent } from './use-interactive';
 
 const inputVariants = cva('control control-field-default', {

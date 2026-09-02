@@ -1,4 +1,4 @@
-# Corsight Web Monorepo
+# Well Simulation Web Monorepo
 
 This monorepo contains the TypeScript web/API layer for the Wellhead Monitoring Simulation.
 
@@ -49,8 +49,8 @@ From `monorepo/`:
 
 ```sh
 npx --yes pnpm@10.11.1 install
-npx --yes pnpm@10.11.1 --filter @corsight/api dev
-npx --yes pnpm@10.11.1 --filter @corsight/website dev
+npx --yes pnpm@10.11.1 --filter @well-simulation/api dev
+npx --yes pnpm@10.11.1 --filter @well-simulation/website dev
 ```
 
 For the full stack, prefer the root Docker Compose file:

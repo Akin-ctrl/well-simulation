@@ -1,6 +1,6 @@
 import React from 'react';
 import * as CollapsiblePrimitive from '@radix-ui/react-collapsible';
-import { cn } from '@corsight/utils/cn';
+import { cn } from '@well-simulation/utils/cn';
 
 const Collapsible = CollapsiblePrimitive.Root;
 

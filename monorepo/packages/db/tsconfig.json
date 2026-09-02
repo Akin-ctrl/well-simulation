@@ -1,5 +1,5 @@
 {
-  "extends": "@corsight/tsconfig/base.json",
+  "extends": "@well-simulation/tsconfig/base.json",
   "include": ["."],
   "exclude": ["dist", "build", "node_modules"],
   "compilerOptions": {

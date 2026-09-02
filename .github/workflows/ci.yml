@@ -143,7 +143,7 @@ jobs:
         working-directory: monorepo
 
       - name: Run API integration tests
-        run: pnpm --filter @corsight/api test
+        run: pnpm --filter @well-simulation/api test
         working-directory: monorepo
 
   images:

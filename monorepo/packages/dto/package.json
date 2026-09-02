@@ -1,7 +1,7 @@
 {
-  "name": "@corsight/dto",
+  "name": "@well-simulation/dto",
   "version": "1.0.0",
-  "description": "Corsight dto package",
+  "description": "Shared dto for the wellhead monitoring simulation",
   "main": "index.js",
   "type": "module",
   "scripts": {

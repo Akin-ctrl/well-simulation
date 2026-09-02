@@ -1,9 +1,9 @@
 {
-  "name": "corsight",
+  "name": "well-simulation",
   "private": true,
   "scripts": {
-    "web": "dotenv -- turbo run dev --filter=@corsight/website --filter=@corsight/api",
-    "server": "dotenv -- turbo run dev --filter=@corsight/api",
+    "web": "dotenv -- turbo run dev --filter=@well-simulation/website --filter=@well-simulation/api",
+    "server": "dotenv -- turbo run dev --filter=@well-simulation/api",
     "build": "turbo run build",
     "dev": "turbo run dev",
     "lint": "turbo run lint",

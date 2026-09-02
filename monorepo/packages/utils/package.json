@@ -1,7 +1,7 @@
 {
-  "name": "@corsight/utils",
+  "name": "@well-simulation/utils",
   "version": "1.0.0",
-  "description": "Corsight utils package",
+  "description": "Shared utils for the wellhead monitoring simulation",
   "main": "index.js",
   "scripts": {
     "check-types": "tsc --noEmit",

@@ -1,5 +1,5 @@
 {
-  "extends": "@corsight/tsconfig/vite.json",
+  "extends": "@well-simulation/tsconfig/vite.json",
   "include": ["**/*", "**/.server/**/*", "**/.client/**/*", ".react-router/types/**/*"],
   "compilerOptions": {
     "types": ["node", "vite/client"],
