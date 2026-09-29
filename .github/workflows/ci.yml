@@ -63,7 +63,7 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements-dev.txt
 
-      # These four are what make CODING_STANDARDS_COMMITMENT.md enforceable
+      # These four are what make the project's coding standards enforceable
       # for the Python services rather than advisory.
       - name: Lint
         run: ruff check .

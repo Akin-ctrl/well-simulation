@@ -2,7 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-05-31
-- Implementation: Not started. Telemetry is randomised. No process model holds state.
+- Implementation: Not started
 
 ## Context
 

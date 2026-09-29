@@ -2,7 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-05-31
-- Implementation: Implemented. The stack is self-contained and runs from a clean checkout.
+- Implementation: Implemented
 
 ## Context
 

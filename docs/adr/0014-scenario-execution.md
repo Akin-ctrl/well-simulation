@@ -2,7 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-05-31
-- Implementation: Not started. No scenario execution exists.
+- Implementation: Not started
 
 ## Context
 

@@ -2,7 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-05-31
-- Implementation: Implemented. Docker Compose runs the whole stack, migrator included.
+- Implementation: Implemented
 
 ## Context
 

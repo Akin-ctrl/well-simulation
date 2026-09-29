@@ -2,7 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-07-31
-- Implementation: Implemented. Capability guards enforce the matrix. Registration requires an ADMIN session.
+- Implementation: Implemented
 
 ## Context
 
@@ -14,7 +14,7 @@ identical, complete access to all fleet telemetry and alarms.
 Registration compounds this: `POST /auth/register` is public and unauthenticated, so
 anyone who can reach the dashboard can create an account and read the whole fleet.
 
-`CODING_STANDARDS_COMMITMENT.md` Standard 12 requires that "roles and permissions must
+The project coding standards require that "roles and permissions must
 be explicit, meaningful, and enforceable" and that "administrative power must not be the
 default fallback for ordinary users or services". The current state satisfies none of
 that, and the standards document aligns the repository with ISA/IEC 62443, which treats

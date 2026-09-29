@@ -2,7 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-05-31
-- Implementation: Not started. Depends on the model.
+- Implementation: Partial
 
 ## Context
 
@@ -54,3 +54,6 @@ The service must not apply one large elapsed-time update after a pause. Instead,
 - Runtime metrics should include simulation lag.
 - Forecast and scenario outputs can be compared directly with live model behavior.
 
+## Implementation on 2026-09-29
+
+The service runs a one-second fixed scheduler with bounded catch-up, skipped-tick logging, and lag metrics. No physical model step, model telemetry emission, or state snapshot is produced yet.

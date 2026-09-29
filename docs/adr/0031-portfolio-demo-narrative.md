@@ -2,7 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-05-31
-- Implementation: Partial. docs/demo/demo-script.md exists. No screenshots or recording yet.
+- Implementation: Partial
 
 ## Context
 

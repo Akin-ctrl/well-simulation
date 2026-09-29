@@ -2,7 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-08-29
-- Implementation: Implemented. All three services re-read metadata on a timer. The gateway clears its register image.
+- Implementation: Implemented
 
 ## Context
 

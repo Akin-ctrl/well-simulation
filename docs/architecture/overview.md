@@ -10,22 +10,30 @@ Wellhead simulator
   -> Database ingestion service
   -> PostgreSQL/TimescaleDB historian
   -> SQL alarm rules and analytics views
-  -> TypeScript API and React dashboard foundation
+  -> TypeScript API and React dashboard
 ```
 
-The current simulator generates synthetic telemetry. It does not yet maintain a physics-aware or behavior-aware model of the wellhead.
+The current simulator generates synthetic telemetry. It does not yet maintain
+a physics-aware or behavior-aware model of the wellhead. A separate twin-core
+service reads active assets and recent historian values. It runs a fixed-step
+scheduler but has no process equations or model telemetry yet.
+
+The [Milestone 4 design](../design/twin-core-milestone-4.md) explains the
+new service boundary, timing, data quality, and failure behavior.
 
 ## Current Dashboard Layer
 
 The dashboard currently exposes the monitoring foundation:
 
 - fleet-level overview for all simulated wellheads
-- latest complete telemetry snapshots
+- latest recorded telemetry snapshots, which may be partial after a read failure
 - active alarms from database alarm evaluation
 - analytics charts for pressure, temperature, flow, water cut, and GOR
 - per-wellhead detail pages with current readings, alarms, and trends
+- an Alarm Center with severity, threshold, age, and links to wellheads
 
-The next dashboard page is an Alarm Center. It should present active alarms as evidence an operator can act on. Each alarm needs its severity, the affected wellhead, the parameter and its value, the threshold, the trigger time, and its age. Each also needs a link to the wellhead detail page.
+The API does not currently check whether a recorded batch contains every mapped
+parameter. A Modbus read failure can leave a partial snapshot in the historian.
 
 ## Target Lightweight Digital Twin
 

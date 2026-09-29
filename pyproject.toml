@@ -7,7 +7,7 @@
 [tool.ruff]
 line-length = 88
 target-version = "py312"
-src = ["data/src", "scripts"]
+src = ["data/src", "twin_core", "scripts"]
 
 [tool.ruff.lint]
 select = [
@@ -36,6 +36,7 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 # Test names and assertions are the documentation; assert is the point.
 "data/tests/*" = ["D100", "D101", "D102", "D103", "D104", "S101"]
+"twin_core/tests/*" = ["D100", "D101", "D102", "D103", "D104", "S101"]
 
 [tool.ruff.lint.mccabe]
 max-complexity = 10
@@ -45,7 +46,7 @@ convention = "pep257"
 
 [tool.mypy]
 python_version = "3.12"
-files = ["data/src", "data/tests", "scripts"]
+files = ["data/src", "data/tests", "twin_core", "scripts"]
 mypy_path = "data/src"
 strict = true
 warn_unreachable = true
@@ -57,6 +58,6 @@ ignore_missing_imports = true
 untyped_calls_exclude = ["pymodbus", "psycopg2"]
 
 [tool.pytest.ini_options]
-testpaths = ["data/tests"]
-pythonpath = ["data/src"]
+testpaths = ["data/tests", "twin_core/tests"]
+pythonpath = [".", "data/src"]
 addopts = "-q"

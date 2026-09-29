@@ -2,7 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-05-31
-- Implementation: Implemented. REST with OpenAPI specs, validated in CI.
+- Implementation: Implemented
 
 ## Context
 

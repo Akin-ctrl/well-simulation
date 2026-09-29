@@ -2,7 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-05-31
-- Implementation: Not started. The twin layer does not exist. Only the monitoring foundation is built.
+- Implementation: Partial
 
 ## Context
 

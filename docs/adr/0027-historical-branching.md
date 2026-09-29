@@ -2,7 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-05-31
-- Implementation: Not started. Depends on model snapshots.
+- Implementation: Not started
 
 ## Context
 

@@ -90,10 +90,11 @@ ORDER BY timestamp_utc DESC LIMIT 10;
 
 ## What the numbers are
 
-The readings are random values inside each parameter's configured range, with
-about one in ten pushed outside it so the alarm rules have something to fire on.
+The readings are random values inside each parameter's configured range. About
+one in ten draws use a wider range; only some of those values fall outside the
+normal range and exercise the alarm rules.
 
-There is no physics here. Nothing links tubing pressure to flow rate, and
-closing a choke would change nothing, because there is no choke. Replacing this
-with a model that holds state is the next major piece of work, and the point at
-which the project could reasonably be called a digital twin.
+There is no physics in these readings. Nothing links tubing pressure to flow
+rate, and closing a choke would change nothing. The separate twin-core service
+now has a scheduler and typed state, but no process equations or model output.
+Replacing the random source with model output is later work.

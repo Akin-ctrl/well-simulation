@@ -2,7 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-05-31
-- Implementation: Implemented. Compression and tiered retention on parameterReading, alarmEvent, and auditEvent.
+- Implementation: Implemented
 
 ## Context
 

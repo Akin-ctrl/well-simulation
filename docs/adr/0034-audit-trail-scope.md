@@ -2,13 +2,13 @@
 
 - Status: Accepted
 - Date: 2026-08-29
-- Implementation: Implemented. auditEvent records authentication and user lifecycle events with a request id.
+- Implementation: Implemented
 
 ## Context
 
 Nothing in this system records who did anything. There is no audit table and no
 `created_by` column on any record. Standards 14 and 17 in
-`CODING_STANDARDS_COMMITMENT.md` both fail, and a code review does not catch it,
+the project coding standards both fail, and a code review does not catch it,
 because nothing in the code is wrong. The capability is simply absent.
 
 This matters now rather than later. The feature roadmap adds a control API in

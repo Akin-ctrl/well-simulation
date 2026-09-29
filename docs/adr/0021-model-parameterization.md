@@ -2,7 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-05-31
-- Implementation: Not started. Depends on the model. The reload mechanism it would need is built (ADR 0035).
+- Implementation: Partial
 
 ## Context
 
@@ -80,3 +80,6 @@ Each model parameter should define:
 - Invalid per-well parameters should prevent that wellhead model from running or mark it unavailable.
 - Future calibration can write proposed parameter updates without changing model code.
 
+## Implementation on 2026-09-29
+
+Versioned defaults and validated global overrides load now. A typed per-well override source is ready, but the database table and adapter belong to Milestone 7.

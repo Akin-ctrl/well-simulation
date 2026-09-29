@@ -1,6 +1,6 @@
 """Check prose against the plain English standard.
 
-Standard 4 in CODING_STANDARDS_COMMITMENT.md adopts the GOV.UK plain English
+The project's coding standards adopt the GOV.UK plain English
 guidance. Some of it is objective and can be checked here. Tone and voice
 cannot, and are left to review rather than faked with a rule.
 

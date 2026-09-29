@@ -20,6 +20,11 @@ Show that the project is an industrial wellhead monitoring simulation evolving i
    http://localhost:8090
    ```
 
+   This step is currently blocked in the production image. The page returns
+   HTTP 200 but stays blank because its Content Security Policy blocks the
+   React Router startup scripts. Do not present the later UI steps as verified
+   until a browser can render them.
+
 3. Confirm live telemetry:
 
    - wellhead pressure
@@ -33,7 +38,7 @@ Show that the project is an industrial wellhead monitoring simulation evolving i
    - fleet overview
    - analytics charts
    - per-wellhead detail page
-   - active alarms on affected wellheads
+   - Alarm Center and active alarms on affected wellheads
 
 5. Inspect active alarms:
 
@@ -42,11 +47,12 @@ Show that the project is an industrial wellhead monitoring simulation evolving i
    - high water cut
    - high vibration or degradation indicators
 
-6. Explain the next implementation slice:
+6. Explain what is simulated:
 
    ```text
-   The next dashboard page is an Alarm Center for active alarms, severity summaries,
-   threshold context, alarm age, and links back to wellhead details.
+   Readings are random values based on configured ranges. Pressure does not
+   cause flow to change. The two-minute and five-minute chart buckets and
+   alarm thresholds are chosen for a short demo, not a real plant.
    ```
 
 7. Explain the target what-if scenario:
@@ -77,4 +83,6 @@ Show that the project is an industrial wellhead monitoring simulation evolving i
 
 ## Current Status
 
-The overview, analytics, per-wellhead detail pages, live telemetry, and active alarm data are implemented. The Alarm Center is the next dashboard feature. Stateful twin behavior, predictions, and what-if scenarios are still target capabilities, not current implementation.
+The overview, analytics, per-wellhead detail pages, Alarm Center, live telemetry,
+and active alarm data are implemented. Stateful twin behavior, predictions, and
+what-if scenarios are still target capabilities, not current features.

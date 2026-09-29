@@ -19,12 +19,12 @@ none of those.
 - A PostgreSQL and TimescaleDB historian
 - Alarm evaluation in SQL
 - A public TypeScript API
-- A React dashboard with an overview, analytics, and per-wellhead detail pages
+- A separate twin-core service skeleton with no physical model yet
+- A React dashboard with an overview, analytics, per-wellhead detail pages, and
+  an Alarm Center
 
-The next piece of work is the Alarm Center. It should make active alarms
-inspectable and explainable. It should not add acknowledge or shelve buttons
-until the data model can store those states, because a button that pretends to
-do something is worse than no button.
+The Alarm Center shows active alarms and their thresholds. It does not offer
+acknowledge or shelve actions because the data model cannot store those states.
 
 ## Contents
 
@@ -32,15 +32,17 @@ do something is worse than no button.
 - `architecture/production-readiness.md`: what production-grade means here
 - `adr/README.md`: the ADR format and the index
 - `demo/demo-script.md`: the demo flow for a portfolio review
+- `design/twin-core-milestone-4.md`: the new service design and its limits
 - `openapi/README.md`: the API contracts and the rules for changing them
-- `remediation-roadmap.md`: the plan for fixing what the audit found
+- `roadmap.md`: the tracked feature plan
+- `remediation-roadmap.md`: the repair record
 
 ## Documentation backlog
 
 - Keep the README matching what is actually built.
 - Write the ADR before adding major twin behaviour, not after.
 - Update the OpenAPI spec with every public API change.
-- Write down the simulator's assumptions before showing anyone a prediction.
+- Keep the simulator's assumptions visible while it produces random readings.
 - Keep the demo honest. Show what works, then say what is planned.
 
 ## How we write docs here
@@ -51,5 +53,6 @@ do something is worse than no button.
 - Rejected options stay on the record. They are the reasoning.
 - Docs say plainly what is built and what is only planned.
 - Prose follows the plain English standard in
-  `CODING_STANDARDS_COMMITMENT.md`. Short sentences, everyday words, active
-  voice.
+  the project's coding standards: short sentences, everyday words, active
+  voice, and no em dashes. `scripts/check_prose.py` enforces the checkable
+  parts.

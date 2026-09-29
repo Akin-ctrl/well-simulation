@@ -13,6 +13,7 @@ than a silent divergence.
 from __future__ import annotations
 
 import hashlib
+import os
 import re
 import secrets
 import sys
@@ -22,6 +23,7 @@ from pathlib import Path
 import bcrypt
 import psycopg2
 import psycopg2.extensions
+from psycopg2 import sql
 
 from telemetry_common import DatabaseSettings, configure_logging, connect_db
 
@@ -280,6 +282,90 @@ def bootstrap_admin(conn: psycopg2.extensions.connection) -> None:
     )
 
 
+def provision_twin_reader(
+    conn: psycopg2.extensions.connection, database: DatabaseSettings
+) -> None:
+    """Create a read-only login for the internal twin-core service.
+
+    Standalone migration runs without twin settings keep working. Compose sets
+    both values, so its dependent twin-core always receives a provisioned role.
+    """
+    user = os.getenv("TWIN_DB_USER", "")
+    password = os.getenv("TWIN_DB_PASSWORD", "")
+    if not user and not password:
+        return
+    if not user or not password:
+        raise ValueError("TWIN_DB_USER and TWIN_DB_PASSWORD must be set together")
+    if user == database.user:
+        raise ValueError("Twin reader must use a separate database role")
+
+    with conn.cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT oid, rolcanlogin, rolsuper, rolcreatedb, rolcreaterole,
+                   rolreplication
+            FROM pg_roles WHERE rolname = %s
+            """,
+            (user,),
+        )
+        existing = cursor.fetchone()
+        if existing is None:
+            cursor.execute(
+                sql.SQL(
+                    "CREATE ROLE {} WITH LOGIN NOINHERIT NOSUPERUSER "
+                    "NOCREATEDB NOCREATEROLE NOREPLICATION PASSWORD %s"
+                ).format(sql.Identifier(user)),
+                (password,),
+            )
+        else:
+            role_id, can_login, superuser, create_db, create_role, replication = (
+                existing
+            )
+            if not can_login or any((superuser, create_db, create_role, replication)):
+                raise ValueError("Twin database role has unexpected privileges")
+            cursor.execute(
+                "SELECT 1 FROM pg_auth_members WHERE member = %s LIMIT 1",
+                (role_id,),
+            )
+            if cursor.fetchone() is not None:
+                raise ValueError("Twin database role must not inherit another role")
+            cursor.execute(
+                sql.SQL("ALTER ROLE {} PASSWORD %s").format(sql.Identifier(user)),
+                (password,),
+            )
+
+        # PostgreSQL 14 grants CREATE on public and TEMPORARY on the database
+        # to PUBLIC by default. Table SELECT grants alone do not make this
+        # account read-only while those broad grants remain in force.
+        cursor.execute("REVOKE CREATE ON SCHEMA public FROM PUBLIC")
+        cursor.execute(
+            sql.SQL("REVOKE TEMPORARY ON DATABASE {} FROM PUBLIC").format(
+                sql.Identifier(database.name)
+            )
+        )
+        cursor.execute(
+            sql.SQL("REVOKE ALL ON ALL TABLES IN SCHEMA public FROM {}").format(
+                sql.Identifier(user)
+            )
+        )
+        cursor.execute(
+            sql.SQL("GRANT CONNECT ON DATABASE {} TO {}").format(
+                sql.Identifier(database.name), sql.Identifier(user)
+            )
+        )
+        cursor.execute(
+            sql.SQL("GRANT USAGE ON SCHEMA public TO {}").format(sql.Identifier(user))
+        )
+        cursor.execute(
+            sql.SQL(
+                "GRANT SELECT ON TABLE wellhead, deviceParameterMapping, "
+                "parameterType, parameterReading TO {}"
+            ).format(sql.Identifier(user))
+        )
+    conn.commit()
+    logger.info("Twin-core read-only database role is ready", extra={"role": user})
+
+
 def main() -> int:
     """Apply schema migrations, then seed fixtures."""
     settings = DatabaseSettings.from_env()
@@ -309,6 +395,13 @@ def main() -> int:
         # failed. Blocking every dependent service on that would be wrong.
         logger.exception("Bootstrap administrator could not be created")
         conn.rollback()
+
+    try:
+        provision_twin_reader(conn, settings)
+    except (psycopg2.Error, ValueError):
+        logger.error("Twin-core database role could not be provisioned")
+        conn.rollback()
+        return 1
     finally:
         if not conn.closed:
             conn.close()

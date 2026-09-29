@@ -15,7 +15,7 @@ services:
     volumes:
       - timescaledb_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -56,6 +56,33 @@ services:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_HOST: db
       POSTGRES_PORT: "5432"
+      TWIN_DB_USER: ${TWIN_DB_USER}
+      TWIN_DB_PASSWORD: ${TWIN_DB_PASSWORD}
+    networks:
+      - wellnet
+
+  twin-core:
+    build: ./twin_core
+    container_name: well_simulation_twin_core
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      migrator:
+        condition: service_completed_successfully
+    environment:
+      POSTGRES_HOST: db
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: ${POSTGRES_DB}
+      TWIN_DB_USER: ${TWIN_DB_USER}
+      TWIN_DB_PASSWORD: ${TWIN_DB_PASSWORD}
+      TWIN_SERVICE_PORT: "8000"
+      TWIN_MAX_CATCHUP_STEPS: "5"
+      TWIN_FLEET_REFRESH_SECONDS: "30"
+      TELEMETRY_INTERVAL_SECONDS: ${TELEMETRY_INTERVAL_SECONDS:-5}
+      TWIN_MODEL_OVERRIDES_JSON: ${TWIN_MODEL_OVERRIDES_JSON:-}
+    expose:
+      - "8000"
     networks:
       - wellnet
 

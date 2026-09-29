@@ -2,7 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-06-21
-- Implementation: Implemented. The Alarm Center is built to this scope, with no acknowledge or shelve controls.
+- Implementation: Implemented
 
 ## Context
 

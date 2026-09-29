@@ -2,7 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-05-31
-- Implementation: Not started. Depends on the twin core.
+- Implementation: Partial
 
 ## Context
 
@@ -68,3 +68,6 @@ The system should expose model status values such as:
 - Metrics should include recovery count and simulation lag.
 - The model avoids generating fake continuity across downtime.
 
+## Implementation on 2026-09-29
+
+The scheduler bounds catch-up and records skipped time. Snapshot restoration, recovery events, and model recovery status still need the Milestone 7 schema.

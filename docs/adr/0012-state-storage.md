@@ -2,7 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-05-31
-- Implementation: Not started. Depends on the twin core.
+- Implementation: Partial
 
 ## Context
 
@@ -44,3 +44,6 @@ This is the right lightweight production path. It keeps model ticks fast while g
 - Define snapshot cadence and recovery behavior.
 - Revisit Redis or another state store if multi-instance runtime or stricter recovery is needed.
 
+## Implementation on 2026-09-29
+
+The service keeps active lifecycle state in memory. No physical process state or durable snapshot exists yet. Snapshot recovery belongs to Milestone 7.

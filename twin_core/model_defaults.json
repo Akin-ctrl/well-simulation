@@ -1,0 +1,150 @@
+{
+  "modelVersion": "0.1.0",
+  "description": "Synthetic defaults for the first reduced-order wellhead model. These are not field-calibrated values.",
+  "parameters": {
+    "reservoir_pressure_proxy": {
+      "description": "Approximate pressure source",
+      "unit": "psi",
+      "default": 3200,
+      "minimum": 1000,
+      "maximum": 6000,
+      "changeLive": false,
+      "requiresRestart": true
+    },
+    "downstream_pressure": {
+      "description": "Surface or export pressure",
+      "unit": "psi",
+      "default": 250,
+      "minimum": 50,
+      "maximum": 1000,
+      "changeLive": false,
+      "requiresRestart": true
+    },
+    "productivity_index": {
+      "description": "Drawdown to inflow conversion",
+      "unit": "bbl/day/psi",
+      "default": 1.2,
+      "minimum": 0.1,
+      "maximum": 10,
+      "changeLive": false,
+      "requiresRestart": true
+    },
+    "choke_coefficient": {
+      "description": "Choke and pressure drop to outflow conversion",
+      "unit": "model coefficient",
+      "default": 18,
+      "minimum": 1,
+      "maximum": 100,
+      "changeLive": false,
+      "requiresRestart": true
+    },
+    "pressure_gain_coefficient": {
+      "description": "Pressure response to flow imbalance",
+      "unit": "psi per flow imbalance/sec",
+      "default": 0.002,
+      "minimum": 0.0001,
+      "maximum": 0.02,
+      "changeLive": false,
+      "requiresRestart": true
+    },
+    "natural_loss_coefficient": {
+      "description": "Pressure dissipation rate",
+      "unit": "psi/sec",
+      "default": 0.01,
+      "minimum": 0,
+      "maximum": 1,
+      "changeLive": false,
+      "requiresRestart": true
+    },
+    "ambient_temperature": {
+      "description": "Environmental temperature baseline",
+      "unit": "degrees F",
+      "default": 85,
+      "minimum": -20,
+      "maximum": 140,
+      "changeLive": false,
+      "requiresRestart": true
+    },
+    "thermal_response_rate": {
+      "description": "Temperature response speed",
+      "unit": "1/sec",
+      "default": 0.01,
+      "minimum": 0.001,
+      "maximum": 0.1,
+      "changeLive": false,
+      "requiresRestart": true
+    },
+    "flow_heating_coefficient": {
+      "description": "Flow-driven heating contribution",
+      "unit": "degrees F",
+      "default": 45,
+      "minimum": 0,
+      "maximum": 150,
+      "changeLive": false,
+      "requiresRestart": true
+    },
+    "stress_heating_coefficient": {
+      "description": "Pressure-driven heating contribution",
+      "unit": "degrees F",
+      "default": 25,
+      "minimum": 0,
+      "maximum": 100,
+      "changeLive": false,
+      "requiresRestart": true
+    },
+    "water_cut_drift_rate": {
+      "description": "Slow increase in water fraction",
+      "unit": "fraction/sec",
+      "default": 1e-06,
+      "minimum": 0,
+      "maximum": 0.0001,
+      "changeLive": false,
+      "requiresRestart": true
+    },
+    "corrosion_rate_coefficient": {
+      "description": "Corrosion progression rate",
+      "unit": "1/sec",
+      "default": 5e-07,
+      "minimum": 0,
+      "maximum": 0.0001,
+      "changeLive": false,
+      "requiresRestart": true
+    },
+    "blockage_growth_coefficient": {
+      "description": "Flow restriction progression rate",
+      "unit": "1/sec",
+      "default": 3e-07,
+      "minimum": 0,
+      "maximum": 0.0001,
+      "changeLive": false,
+      "requiresRestart": true
+    },
+    "min_blockage_factor": {
+      "description": "Lower clamp for flow capacity",
+      "unit": "fraction",
+      "default": 0.35,
+      "minimum": 0.1,
+      "maximum": 1,
+      "changeLive": false,
+      "requiresRestart": true
+    },
+    "max_tubing_pressure": {
+      "description": "Upper tubing pressure clamp",
+      "unit": "psi",
+      "default": 5000,
+      "minimum": 1000,
+      "maximum": 10000,
+      "changeLive": false,
+      "requiresRestart": true
+    },
+    "max_flow_rate": {
+      "description": "Upper flow rate clamp",
+      "unit": "bbl/day",
+      "default": 5000,
+      "minimum": 100,
+      "maximum": 50000,
+      "changeLive": false,
+      "requiresRestart": true
+    }
+  }
+}

@@ -2,7 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-05-31
-- Implementation: Implemented. Per-service specs under docs/openapi, checked by scripts/validate_openapi.py in CI.
+- Implementation: Implemented
 
 ## Context
 

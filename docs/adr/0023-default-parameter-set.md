@@ -2,7 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-05-31
-- Implementation: Not started. Depends on the model.
+- Implementation: Partial
 
 ## Context
 
@@ -79,3 +79,6 @@ The variation must be deterministic across restarts unless explicitly changed by
 - Future calibration can replace defaults or write per-well overrides.
 - Tests can assert that all parameters remain within declared ranges.
 
+## Implementation on 2026-09-29
+
+All 16 documented defaults load from a version-controlled file with units and bounds. Deterministic per-well variation will arrive with the process model in Milestone 5.

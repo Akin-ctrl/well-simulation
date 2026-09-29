@@ -2,7 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-05-31
-- Implementation: Implemented. Every service is containerised, with health checks, restart policies, and non-root users.
+- Implementation: Implemented
 
 ## Context
 
