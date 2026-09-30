@@ -165,3 +165,15 @@ blockage_factor_next = blockage_factor
 ## Implementation on 2026-09-29
 
 The pure one-second model implements inflow, choke outflow, pump and valve effects, pressure inventory, casing and thermal lag, water drift, and bounded degradation. The equations and their limits are in the Milestone 5 design. No field calibration is claimed.
+
+## Amendment 2026-09-30: Add dimensioned reference-well diagnostics
+
+The original reduced-order pressure and liquid-flow model remains the one-second
+state engine. Version 0.3.0 derives oil, water, and gas rates plus the seven
+previously omitted seeded signals from its current pressure, temperature,
+water cut, flow, and pump state. The sealed outer annulus adds its own
+pressure and temperature state. The equations, units, assumptions, and
+validation boundary are in the
+[reference-well design](../design/reference-well-physics.md). These quantities
+are synthetic and uncalibrated. The extension does not turn the model into a
+field-validated multiphase or well-integrity simulator.

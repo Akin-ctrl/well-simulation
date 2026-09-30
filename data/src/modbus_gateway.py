@@ -2,9 +2,6 @@
 
 from __future__ import annotations
 
-import json
-import subprocess
-import sys
 import threading
 import time
 from dataclasses import dataclass
@@ -17,8 +14,9 @@ from pymodbus.datastore import (
     ModbusSequentialDataBlock,
     ModbusServerContext,
 )
-from pymodbus.server import ServerStop, StartTcpServer
+from pymodbus.server import StartTcpServer
 
+from model_source import fetch_model_snapshot, supported_mappings
 from telemetry_common import (
     HEARTBEAT_REGISTER,
     WORD_ORDER,
@@ -38,9 +36,7 @@ from telemetry_common import (
 )
 from telemetry_metrics import BATCH_ERRORS, BATCHES_APPLIED, METADATA_RELOADS
 
-SIMULATOR_SCRIPT = "wellhead_simulator.py"
 REGISTER_BLOCK_SIZE = 2000
-SIMULATOR_POLL_SECONDS = 0.1
 DEFAULT_SERVICE_PORT = 9102
 
 # pymodbus offsets a device context by one, so a block of N registers starting
@@ -61,6 +57,8 @@ class Settings:
     modbus_bind_host: str
     modbus_port: int
     database: DatabaseSettings
+    twin_core_url: str
+    interval_seconds: int
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -72,6 +70,10 @@ class Settings:
             modbus_bind_host=required_env("MODBUS_BIND_HOST", "0.0.0.0"),  # noqa: S104
             modbus_port=int(required_env("MODBUS_PORT", "5020")),
             database=DatabaseSettings.from_env(),
+            twin_core_url=required_env(
+                "TWIN_CORE_SNAPSHOT_URL", "http://twin-core:8000/model-snapshot"
+            ),
+            interval_seconds=telemetry_interval_seconds(),
         )
 
 
@@ -163,8 +165,11 @@ class RegisterStore:
                 mapping.parameter_code
             ] = mapping
 
-    def apply_batch(self, telemetry: list[dict[str, object]]) -> None:
+    def apply_batch(
+        self, telemetry: list[dict[str, object]], at: datetime | None = None
+    ) -> None:
         """Write one telemetry batch into the register image."""
+        self.clear_heartbeat()
         for data_point in telemetry:
             wellhead_id = data_point["wellhead_id"]
             parameters = data_point["parameters"]
@@ -190,7 +195,12 @@ class RegisterStore:
                     encode_value(value, mapping.data_type),
                 )
 
-        self.write_heartbeat(datetime.now(timezone.utc))
+        self.write_heartbeat(at or datetime.now(timezone.utc))
+
+    def clear_heartbeat(self) -> None:
+        """Mark a register update in progress before changing any value."""
+        for unit_id in self.unit_ids:
+            self._write(unit_id, HEARTBEAT_REGISTER, [0, 0])
 
     def write_heartbeat(self, timestamp: datetime) -> None:
         """Publish the time of the latest batch to every device context."""
@@ -212,7 +222,8 @@ def apply_metadata_reload(
     if not reloader.is_due():
         return current
 
-    reloaded = reloader.reload()
+    loaded = reloader.reload()
+    reloaded = supported_mappings(loaded) if loaded is not None else None
     if reloaded is None:
         METADATA_RELOADS.labels(result="failed").inc()
         return current
@@ -230,75 +241,36 @@ def apply_metadata_reload(
     return reloaded
 
 
-def pump_simulator_output(
-    store: RegisterStore,
-    process: subprocess.Popen[str],
-    reloader: MetadataReloader,
-    mappings: list[ParameterMapping],
-    health: ServiceHealth,
-) -> int:
-    """Feed simulator output into the register store until the process exits.
-
-    Returns the simulator's exit code. If the simulator stops, the gateway must
-    stop too: continuing to serve the last registers would let ingestion record
-    stale values as fresh readings, which is worse than an outage because
-    nothing downstream can detect it.
-    """
-    if process.stdout is None:
-        raise RuntimeError("Simulator stdout pipe was not created")
-
-    while True:
-        line = process.stdout.readline()
-        if line:
-            try:
-                store.apply_batch(json.loads(line.strip()))
-            except (json.JSONDecodeError, KeyError, TypeError, ValueError):
-                BATCH_ERRORS.inc()
-                logger.exception("Failed to process simulator telemetry")
-            else:
-                BATCHES_APPLIED.inc()
-                # Serving real values is what makes the gateway useful, so
-                # readiness starts at the first batch rather than at startup.
-                health.ready = True
-
-        mappings = apply_metadata_reload(store, reloader, mappings)
-
-        exit_code = process.poll()
-        if exit_code is not None:
-            return exit_code
-
-        time.sleep(SIMULATOR_POLL_SECONDS)
-
-
-def run_simulator_thread(
+def run_model_source(
     store: RegisterStore,
     reloader: MetadataReloader,
     mappings: list[ParameterMapping],
     health: ServiceHealth,
+    settings: Settings,
 ) -> None:
-    """Run the simulator subprocess and stop the server when it exits."""
-    logger.info("Starting simulator subprocess for Modbus register updates")
-    # sys.executable rather than a bare "python" so the interpreter is resolved
-    # explicitly instead of via PATH lookup.
-    process = subprocess.Popen(  # noqa: S603
-        [sys.executable, SIMULATOR_SCRIPT],
-        stdout=subprocess.PIPE,
-        text=True,
-    )
-
-    exit_code = pump_simulator_output(store, process, reloader, mappings, health)
-
-    health.alive = False
-    health.ready = False
-    logger.error(
-        "Simulator exited; stopping the gateway so the telemetry source "
-        "cannot go stale unnoticed",
-        extra={"simulator_exit_code": exit_code},
-    )
-    # Ask the Modbus server to shut down cleanly, closing its listening socket.
-    # The main thread then returns from StartTcpServer and main() exits non-zero
-    # so the container restart policy recovers the service.
-    ServerStop()
+    """Refresh registers from complete model ticks at a bounded interval."""
+    last_tick: datetime | None = None
+    max_age = max(settings.interval_seconds * 2, 5)
+    while health.alive:
+        started = time.monotonic()
+        try:
+            mappings = apply_metadata_reload(store, reloader, mappings)
+            expected_ids = {mapping.wellhead_id for mapping in mappings}
+            batch = fetch_model_snapshot(settings.twin_core_url, expected_ids, max_age)
+            if last_tick is not None and batch.simulated_at <= last_tick:
+                raise ValueError("Model tick has not advanced")
+            store.apply_batch(batch.telemetry, batch.simulated_at)
+        except Exception:
+            BATCH_ERRORS.inc()
+            health.ready = False
+            logger.exception("Model snapshot unavailable; heartbeat not advanced")
+        else:
+            last_tick = batch.simulated_at
+            BATCHES_APPLIED.inc()
+            health.ready = True
+        remaining = settings.interval_seconds - (time.monotonic() - started)
+        if remaining > 0:
+            time.sleep(remaining)
 
 
 def main() -> int:
@@ -306,7 +278,7 @@ def main() -> int:
     settings = Settings.from_env()
 
     try:
-        mappings = load_parameter_mappings(settings.database)
+        mappings = supported_mappings(load_parameter_mappings(settings.database))
     except psycopg2.OperationalError:
         logger.exception("Database connection failed while loading register mappings")
         return 1
@@ -315,7 +287,7 @@ def main() -> int:
         logger.error("No active Modbus register mappings found")
         return 1
 
-    # Build the register image before the simulator starts so the first batch
+    # Build the register image before the model source starts so the first batch
     # always has somewhere to land.
     store = RegisterStore(mappings)
     logger.info(
@@ -328,10 +300,10 @@ def main() -> int:
         "modbus_gateway", health, service_port(DEFAULT_SERVICE_PORT)
     )
 
-    reloader = MetadataReloader(settings.database, telemetry_interval_seconds())
+    reloader = MetadataReloader(settings.database, settings.interval_seconds)
     threading.Thread(
-        target=run_simulator_thread,
-        args=(store, reloader, mappings, health),
+        target=run_model_source,
+        args=(store, reloader, mappings, health, settings),
         daemon=True,
     ).start()
 
@@ -348,7 +320,7 @@ def main() -> int:
         address=(settings.modbus_bind_host, settings.modbus_port),
     )
 
-    # Reached only once the simulator thread has stopped the server.
+    # Reached only after the Modbus server stops unexpectedly.
     return 1
 
 

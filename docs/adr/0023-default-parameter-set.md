@@ -102,3 +102,12 @@ the original model coefficient labels; their numeric defaults do not change.
 The versioned file is the active source for all 21 defaults and their ranges.
 Stable per-well variation and bounds are implemented. These values are still
 uncalibrated demonstration parameters.
+
+## Amendment 2026-09-30: Version the reference-well inputs
+
+`twin_core/model_defaults.json` is now version 0.3.0. It adds explicit PVT,
+gas composition, sealed-annulus, sand, corrosion-current, and vibration inputs.
+Each has a unit, a finite range, and a restart requirement. They are synthetic
+reference values, not measurements from the demo wells. The
+[reference-well design](../design/reference-well-physics.md) maps each input
+to its equation and identifies what field measurements would replace it.

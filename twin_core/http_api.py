@@ -59,18 +59,25 @@ class TwinRequestHandler(BaseHTTPRequestHandler):
             self._body(200, self.runtime.metrics.render(), CONTENT_TYPE_LATEST)
             return
 
+        if parsed.path == "/model-snapshot":
+            self._model_snapshot()
+            return
+
         match = WELLHEAD_PATH.fullmatch(parsed.path)
         if match is None:
             self._json(404, {"error": "not_found"})
             return
 
-        wellhead_id = int(match.group(1))
+        self._wellhead(int(match.group(1)), match.group(2))
+
+    def _wellhead(self, wellhead_id: int, view: str) -> None:
+        """Serve one active wellhead view."""
         state = self.runtime.state(wellhead_id)
         if state is None:
             self._json(404, {"error": "wellhead_not_found"})
             return
 
-        if match.group(2) == "state":
+        if view == "state":
             self._json(200, state.to_payload())
             return
 
@@ -83,6 +90,14 @@ class TwinRequestHandler(BaseHTTPRequestHandler):
             self._json(503, {"error": "service_busy"})
             return
         self._json(200, snapshot.to_payload())
+
+    def _model_snapshot(self) -> None:
+        """Send a complete model fleet or an explicit unready response."""
+        snapshot = self.runtime.model_snapshot()
+        if snapshot is None:
+            self._json(503, {"error": "model_not_ready"})
+        else:
+            self._json(200, snapshot)
 
     def do_POST(self) -> None:
         """Reject writes until the controlled command phase is implemented."""

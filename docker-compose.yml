@@ -90,8 +90,7 @@ services:
     build: ./data/src
     container_name: modbus_gateway
     command: python modbus_gateway.py
-    # The gateway exits when its telemetry source stops, rather than serving
-    # stale registers. Restarting is how it recovers.
+    # Readiness fails when twin-core is unavailable; heartbeat stops advancing.
     restart: unless-stopped
     ports:
       - "5020:5020"
@@ -100,6 +99,8 @@ services:
         condition: service_healthy
       migrator:
         condition: service_completed_successfully
+      twin-core:
+        condition: service_healthy
     networks:
       - wellnet
     environment:
@@ -112,6 +113,7 @@ services:
       MODBUS_BIND_HOST: "0.0.0.0"
       TELEMETRY_INTERVAL_SECONDS: ${TELEMETRY_INTERVAL_SECONDS:-5}
       SERVICE_PORT: "9102"
+      TWIN_CORE_SNAPSHOT_URL: http://twin-core:8000/model-snapshot
 
   ingestion:
     build: ./data/src

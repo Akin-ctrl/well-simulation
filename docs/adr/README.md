@@ -60,9 +60,9 @@ previously written down.
 | [0033](0033-role-model-and-access-control.md) | Separate Operating Authority From Administrative Authority | Implemented |
 | [0034](0034-audit-trail-scope.md) | Record An Audit Trail For Actors, Not For Auditors | Implemented |
 | [0035](0035-metadata-reload.md) | How Metadata Changes Reach A Running Service | Implemented |
+| [0036](0036-model-telemetry-through-modbus.md) | Send Model Telemetry Through The Existing Modbus Path | Implemented |
 
-Of 35 decisions: 16 implemented, 10 not started, 9 partial.
+Of 36 decisions: 17 implemented, 10 not started, 9 partial.
 
-The twin-core service boundary now exists. The process model, forecasts,
-scenarios, and most twin persistence are still to be built. Those steps
-remain sequenced in the project plan.
+The twin-core process model now feeds the Modbus gateway and historian.
+Forecasts, scenarios, and durable model state snapshots remain planned.

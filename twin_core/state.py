@@ -208,6 +208,11 @@ class ModelRegistry:
         with self._lock:
             return self._states.get(wellhead_id)
 
+    def snapshot(self) -> tuple[WellheadState, ...]:
+        """Return one consistent view of every active model state."""
+        with self._lock:
+            return tuple(self._states[key] for key in sorted(self._states))
+
     def count(self) -> int:
         """Return the number of active wellheads in memory."""
         with self._lock:

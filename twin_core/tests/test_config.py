@@ -11,8 +11,8 @@ from twin_core.config import ParameterOverride, load_defaults, resolve_parameter
 
 def test_all_synthetic_defaults_load_with_valid_ranges() -> None:
     defaults = load_defaults()
-    assert defaults.version == "0.2.0"
-    assert len(defaults.parameters) == 21
+    assert defaults.version == "0.3.0"
+    assert len(defaults.parameters) == 46
     assert defaults.parameters["ambient_temperature"].unit == "degrees F"
     for spec in defaults.parameters.values():
         assert spec.minimum <= spec.default <= spec.maximum

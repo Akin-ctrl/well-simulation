@@ -37,7 +37,16 @@ class FakeHistorian(HistorianReader):
         now = datetime.now(timezone.utc)
         return make_snapshot(
             wellhead_id,
-            [("tubing_pressure", "psi", 1800.0, now, now)],
+            [
+                (
+                    "tubing_pressure",
+                    "psi",
+                    1800.0,
+                    now,
+                    now,
+                    "synthetic_random_simulator",
+                )
+            ],
             now,
             freshness_seconds,
         )
@@ -99,7 +108,7 @@ def test_latest_telemetry_is_labelled_as_existing_simulator_output(
 ) -> None:
     status, body = _get(server, "/wellheads/1/latest-telemetry")
     assert status == 200
-    assert body["source"] == "current_simulator_via_historian"
+    assert body["source"] == "synthetic_random_simulator"
     assert body["modelGenerated"] is False
     assert body["quality"] == "fresh"
 
@@ -121,3 +130,9 @@ def test_write_method_is_rejected(server: ThreadingHTTPServer) -> None:
         urlopen(request, timeout=2)  # noqa: S310
     assert error.value.code == 405
     assert error.value.headers["Allow"] == "GET"
+
+
+def test_model_snapshot_rejects_unready_fleet(server: ThreadingHTTPServer) -> None:
+    status, body = _get(server, "/model-snapshot")
+    assert status == 503
+    assert body["error"] == "model_not_ready"

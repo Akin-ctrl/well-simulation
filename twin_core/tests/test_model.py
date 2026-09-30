@@ -214,6 +214,17 @@ def test_demo_fleet_stays_finite_for_one_model_hour() -> None:
                 current.water_cut_percent,
                 current.blockage_factor,
                 current.corrosion_factor,
+                current.annulus_pressure_psi,
+                current.annulus_temperature_f,
+                current.oil_rate_bpd,
+                current.water_rate_bpd,
+                current.gas_rate_scfd,
+                current.gas_oil_ratio_scf_stb,
+                current.sand_detector_ppm,
+                current.corrosion_rate_mpy,
+                current.h2s_level_ppm,
+                current.co2_level_percent,
+                current.vibration_mm_s,
             )
         )
         assert 0 <= current.tubing_pressure_psi <= parameters.max_tubing_pressure
@@ -221,3 +232,10 @@ def test_demo_fleet_stays_finite_for_one_model_hour() -> None:
         assert 0 <= current.water_cut_percent <= 100
         assert parameters.min_blockage_factor <= current.blockage_factor <= 1
         assert 1 <= current.corrosion_factor <= parameters.max_corrosion_factor
+        assert current.oil_rate_bpd + current.water_rate_bpd == pytest.approx(
+            current.flow_rate_bpd
+        )
+        assert current.gas_rate_scfd == pytest.approx(
+            current.oil_rate_bpd * current.gas_oil_ratio_scf_stb
+        )
+        assert current.annulus_pressure_psi >= 0

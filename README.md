@@ -5,10 +5,9 @@ telemetry, serves it over a Modbus TCP gateway, stores the readings in
 PostgreSQL and TimescaleDB, checks them against alarm rules, and shows the
 result on a React dashboard.
 
-The Modbus readings still come from a random simulator. A separate twin-core
-service now runs an uncalibrated, stateful process model for each well. Its output
-is available through an internal read API and does not yet feed Modbus, the
-historian, or the dashboard.
+The Modbus gateway now serves all 18 seeded signals from the uncalibrated,
+stateful reference-well model in twin-core. Ingestion stores those readings in
+TimescaleDB with the model tick time and source label.
 
 ## Why This Exists
 
@@ -19,7 +18,7 @@ This repository currently implements the telemetry and monitoring foundation. Th
 ## Current Capabilities
 
 - Metadata-driven wellhead and parameter configuration.
-- Synthetic wellhead telemetry generation.
+- Deterministic synthetic wellhead telemetry generation.
 - Modbus TCP gateway for industrial protocol simulation.
 - TimescaleDB/PostgreSQL historian for time-series readings.
 - PostgreSQL alarm rules and alarm event generation.
@@ -29,7 +28,7 @@ This repository currently implements the telemetry and monitoring foundation. Th
 - Health, readiness, and metrics endpoints for the API, telemetry services,
   and the new twin-core service boundary.
 - A twin-core service with one-second process steps, deterministic per-well
-  variation, bounded model state, and separate source-labelled historian reads.
+  variation, bounded model state, and source-labelled historian reads.
 - Docker-based local orchestration.
 
 ## Current Dashboard Scope
@@ -64,9 +63,8 @@ The local `docs/roadmap.md` records feature work, and the local
 `docs/remediation-roadmap.md` records the repair. Both are ignored by Git.
 The committed design documents and ADRs record the implemented decisions.
 
-The reduced-order process model now responds to synthetic choke, valve, and
-pump inputs. Milestone 6 will connect its output to the Modbus gateway and
-historian. Snapshots, forecasts, and what-if APIs follow in later milestones.
+The model now feeds the Modbus gateway and historian. Durable twin state
+snapshots, forecasts, and what-if APIs follow in later milestones.
 
 ## Quick Start
 
@@ -134,19 +132,19 @@ control API, and metadata editing are not built.
 - `docs/openapi/README.md`: the API contracts
 - `docs/design/twin-core-milestone-4.md`: the twin-core skeleton design
 - `docs/design/twin-core-milestone-5.md`: the process model equations and limits
+- `docs/design/twin-core-milestone-6.md`: the model-to-Modbus data path
+- `docs/design/reference-well-physics.md`: the phase and diagnostic equations
 - `docs/roadmap.md`: the local feature plan (ignored by Git)
 - `docs/remediation-roadmap.md`: the local repair record (ignored by Git)
 
 ## What the numbers mean
 
-Every reading is invented. The simulator usually picks a random value inside
-each parameter's configured normal range. About one in ten draws use a wider
-range; only some of those values fall outside the normal range and exercise the
-alarm rules.
-
-Those stored readings are still independent noise. The separate twin-core
-model links flow, pressure, choke position, temperature, water cut, and slow
-degradation, but its results are not yet the stored readings.
+Every reading is invented. New values are calculated by the reduced-order
+model and passed through Modbus. Older random readings remain labelled in the
+historian until retention removes them. The model links flow, pressure, temperature, water cut, gas, sand, corrosion,
+annulus pressure, and vibration, but it has not been calibrated against a real well.
+No new readings are produced for annulus pressure, gas-oil ratio, sand, corrosion
+rate, H2S, CO2, or vibration because the model has no equations for them.
 
 Two more things are compressed for a demo rather than set the way a plant would
 set them:

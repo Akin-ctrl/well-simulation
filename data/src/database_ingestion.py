@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -11,6 +12,7 @@ from psycopg2.extras import execute_batch
 from pymodbus.client import ModbusTcpClient
 from pymodbus.client.mixin import ModbusClientMixin
 
+from model_source import supported_mappings
 from telemetry_common import (
     HEARTBEAT_REGISTER,
     WORD_ORDER,
@@ -19,6 +21,7 @@ from telemetry_common import (
     ParameterMapping,
     ServiceHealth,
     as_number,
+    collect_unit_ids,
     configure_logging,
     configure_pymodbus_logging,
     connect_db,
@@ -50,8 +53,8 @@ DATATYPE = ModbusClientMixin.DATATYPE
 
 INSERT_READING_SQL = """
 INSERT INTO parameterReading (
-    timestamp_utc, wellhead_id, parameter_type_id, mapping_id, raw_value
-) VALUES (%s, %s, %s, %s, %s)
+    timestamp_utc, wellhead_id, parameter_type_id, mapping_id, raw_value, source_kind
+) VALUES (%s, %s, %s, %s, %s, %s)
 """
 
 logger = configure_logging("database_ingestion")
@@ -88,7 +91,7 @@ class Reading:
     mapping_id: int
     raw_value: float
 
-    def as_row(self) -> tuple[datetime, int, int, int, float]:
+    def as_row(self) -> tuple[datetime, int, int, int, float, str]:
         """Return the tuple expected by INSERT_READING_SQL."""
         return (
             self.timestamp_utc,
@@ -96,6 +99,7 @@ class Reading:
             self.parameter_type_id,
             self.mapping_id,
             self.raw_value,
+            "synthetic_reduced_order_model",
         )
 
 
@@ -120,20 +124,12 @@ def decode_registers(registers: list[int], data_type: str) -> float | None:
 
 
 def is_stale(heartbeat: int | None, last_heartbeat: int | None) -> bool:
-    """Decide whether the gateway has published anything new since the last poll.
-
-    A telemetry source that has stopped updating still answers reads with its
-    last values. Recording those as new readings would silently invent data, so
-    an unadvanced heartbeat means the cycle is skipped.
-
-    An unreadable heartbeat is not treated as stale: that indicates a transport
-    problem, which the register reads will surface on their own.
-    """
-    return heartbeat is not None and heartbeat == last_heartbeat
+    """Skip a missing or unchanged model tick."""
+    return heartbeat is None or heartbeat == last_heartbeat
 
 
 def read_heartbeat(client: ModbusTcpClient, unit_id: int) -> int | None:
-    """Read the gateway's last-batch timestamp, or None if it is unavailable."""
+    """Read the model tick epoch seconds, or None while the image is invalid."""
     result = client.read_holding_registers(
         HEARTBEAT_REGISTER, count=REGISTERS_PER_VALUE, device_id=unit_id
     )
@@ -155,6 +151,7 @@ def read_heartbeat(client: ModbusTcpClient, unit_id: int) -> int | None:
     # published a batch yet or is too old to publish one at all. Say so plainly
     # rather than letting it look like an indefinite stall.
     if heartbeat == 0:
+        MODBUS_READ_ERRORS.labels(kind="heartbeat").inc()
         logger.error(
             "Gateway is not publishing a heartbeat; freshness cannot be verified",
             extra={"unit_id": unit_id, "register": HEARTBEAT_REGISTER},
@@ -162,6 +159,22 @@ def read_heartbeat(client: ModbusTcpClient, unit_id: int) -> int | None:
         return None
 
     return heartbeat
+
+
+def read_fleet_heartbeat(
+    client: ModbusTcpClient, mappings: list[ParameterMapping]
+) -> int | None:
+    """Accept a model tick only when every mapped Modbus unit agrees."""
+    common: int | None = None
+    for unit_id in collect_unit_ids(mappings):
+        heartbeat = read_heartbeat(client, unit_id)
+        if heartbeat is None:
+            return None
+        if common is not None and heartbeat != common:
+            logger.warning("Modbus units report different model ticks")
+            return None
+        common = heartbeat
+    return common
 
 
 def poll_once(
@@ -187,11 +200,19 @@ def poll_once(
                     "register": mapping.modbus_register,
                 },
             )
-            continue
+            raise ConnectionError("Modbus parameter read failed")
 
         value = decode_registers(result.registers, mapping.data_type)
         if value is None:
-            continue
+            raise ValueError("Unsupported parameter type in active model mapping")
+        if not math.isfinite(value):
+            raise ValueError("Nonfinite Modbus model reading")
+        if mapping.data_type == "boolean" and value not in (0, 1):
+            raise ValueError("Invalid Modbus boolean reading")
+        if mapping.parameter_code == "choke_valve_position" and not 0 <= value <= 100:
+            raise ValueError("Invalid Modbus choke position")
+        if mapping.parameter_code != "wellhead_temperature" and value < 0:
+            raise ValueError("Negative Modbus model reading")
 
         readings.append(
             Reading(
@@ -222,6 +243,7 @@ def apply_metadata_reload(
         METADATA_RELOADS.labels(result="failed").inc()
         return current
 
+    reloaded = supported_mappings(reloaded)
     if not mappings_changed(current, reloaded):
         METADATA_RELOADS.labels(result="unchanged").inc()
         return current
@@ -231,6 +253,18 @@ def apply_metadata_reload(
     return reloaded
 
 
+def current_heartbeat(
+    heartbeat: int | None, now: datetime, interval_seconds: int
+) -> int | None:
+    """Reject old or future model ticks before polling mapped registers."""
+    if heartbeat is None:
+        return None
+    age = now.timestamp() - heartbeat
+    if age > max(interval_seconds * 2, 5) or age < -2:
+        return None
+    return heartbeat
+
+
 def ingest_forever(
     settings: Settings,
     mappings: list[ParameterMapping],
@@ -238,7 +272,6 @@ def ingest_forever(
     health: ServiceHealth,
 ) -> None:
     """Poll and persist until the connection fails, then let the caller retry."""
-    heartbeat_unit_id = mappings[0].modbus_unit_id
     last_heartbeat: int | None = None
     reloader = MetadataReloader(settings.database, settings.poll_interval_seconds)
 
@@ -257,30 +290,45 @@ def ingest_forever(
             now = datetime.now(timezone.utc)
 
             mappings = apply_metadata_reload(reloader, mappings)
-            heartbeat_unit_id = mappings[0].modbus_unit_id
 
-            heartbeat = read_heartbeat(client, heartbeat_unit_id)
+            heartbeat = read_fleet_heartbeat(client, mappings)
             if heartbeat is not None:
                 TELEMETRY_AGE.set(max(0.0, now.timestamp() - heartbeat))
 
+            heartbeat = current_heartbeat(
+                heartbeat, now, settings.poll_interval_seconds
+            )
             if is_stale(heartbeat, last_heartbeat):
+                health.ready = False
                 POLLS_SKIPPED_STALE.inc()
                 logger.warning(
                     "Skipping poll: telemetry is stale",
                     extra={
                         "heartbeat": heartbeat,
-                        "age_seconds": round(now.timestamp() - (heartbeat or 0)),
+                        "age_seconds": (
+                            round(now.timestamp() - heartbeat) if heartbeat else None
+                        ),
                     },
                 )
             else:
-                last_heartbeat = heartbeat
+                if heartbeat is None:
+                    raise ValueError("Missing heartbeat before Modbus poll")
+                source_time = datetime.fromtimestamp(heartbeat, timezone.utc)
                 with POLL_DURATION.time():
-                    readings = poll_once(client, mappings, now)
-                if readings:
+                    readings = poll_once(client, mappings, source_time)
+                ending_heartbeat = read_fleet_heartbeat(client, mappings)
+                if ending_heartbeat != heartbeat:
+                    health.ready = False
+                    POLLS_SKIPPED_STALE.inc()
+                    logger.warning("Discarding poll changed during Modbus reads")
+                elif len(readings) != len(mappings):
+                    raise ValueError("Incomplete Modbus model batch")
+                else:
                     execute_batch(
                         cursor, INSERT_READING_SQL, [r.as_row() for r in readings]
                     )
                     conn.commit()
+                    last_heartbeat = heartbeat
                     READINGS_WRITTEN.inc(len(readings))
                     # Only now is the service demonstrably doing its job.
                     health.ready = True
@@ -334,7 +382,7 @@ def main() -> int:
     logger.info("Starting database ingestion service")
 
     try:
-        mappings = load_parameter_mappings(settings.database)
+        mappings = supported_mappings(load_parameter_mappings(settings.database))
     except psycopg2.OperationalError:
         logger.exception("Database connection failed while loading mappings")
         return 1

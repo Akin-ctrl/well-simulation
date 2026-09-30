@@ -1,6 +1,6 @@
 {
-  "modelVersion": "0.2.0",
-  "description": "Synthetic defaults for the first reduced-order wellhead model. These are not field-calibrated values.",
+  "modelVersion": "0.3.0",
+  "description": "Synthetic dimensioned reference well, uncalibrated for any field.",
   "parameters": {
     "reservoir_pressure_proxy": {
       "description": "Approximate pressure source",
@@ -188,6 +188,231 @@
       "default": 2,
       "minimum": 1,
       "maximum": 5,
+      "changeLive": false,
+      "requiresRestart": true
+    },
+    "bubble_point_pressure_psi": {
+      "description": "Black-oil bubble point pressure",
+      "unit": "psi",
+      "default": 1800,
+      "minimum": 100,
+      "maximum": 6000,
+      "changeLive": false,
+      "requiresRestart": true
+    },
+    "reference_temperature_f": {
+      "description": "PVT and corrosion reference temperature",
+      "unit": "degrees F",
+      "default": 120,
+      "minimum": 40,
+      "maximum": 250,
+      "changeLive": false,
+      "requiresRestart": true
+    },
+    "solution_gas_at_bubble_point_scf_stb": {
+      "description": "Solution gas at bubble point",
+      "unit": "scf/stb",
+      "default": 600,
+      "minimum": 0,
+      "maximum": 3000,
+      "changeLive": false,
+      "requiresRestart": true
+    },
+    "free_gas_oil_ratio_scf_stb": {
+      "description": "Free gas at reservoir conditions per oil barrel",
+      "unit": "scf/stb",
+      "default": 650,
+      "minimum": 0,
+      "maximum": 3000,
+      "changeLive": false,
+      "requiresRestart": true
+    },
+    "solution_gas_pressure_exponent": {
+      "description": "Black-oil solution-gas pressure exponent",
+      "unit": "fraction",
+      "default": 1.1,
+      "minimum": 0.2,
+      "maximum": 3,
+      "changeLive": false,
+      "requiresRestart": true
+    },
+    "gas_h2s_mole_fraction": {
+      "description": "H2S fraction of produced gas",
+      "unit": "fraction",
+      "default": 2e-05,
+      "minimum": 0,
+      "maximum": 0.02,
+      "changeLive": false,
+      "requiresRestart": true
+    },
+    "gas_co2_mole_fraction": {
+      "description": "CO2 fraction of produced gas",
+      "unit": "fraction",
+      "default": 0.03,
+      "minimum": 0,
+      "maximum": 0.5,
+      "changeLive": false,
+      "requiresRestart": true
+    },
+    "sand_onset_drawdown_psi": {
+      "description": "Reservoir-to-tubing drawdown for sand onset",
+      "unit": "psi",
+      "default": 500,
+      "minimum": 0,
+      "maximum": 5000,
+      "changeLive": false,
+      "requiresRestart": true
+    },
+    "sand_entrainment_kg_per_bbl_psi": {
+      "description": "Sand mass per liquid barrel and excess drawdown",
+      "unit": "kg/bbl/psi",
+      "default": 0.0002,
+      "minimum": 0,
+      "maximum": 0.1,
+      "changeLive": false,
+      "requiresRestart": true
+    },
+    "liquid_density_kg_per_bbl": {
+      "description": "Produced-liquid mass per stock-tank barrel",
+      "unit": "kg/bbl",
+      "default": 140,
+      "minimum": 80,
+      "maximum": 200,
+      "changeLive": false,
+      "requiresRestart": true
+    },
+    "water_wetting_half_fraction": {
+      "description": "Water cut at half of maximum wall wetting",
+      "unit": "fraction",
+      "default": 0.1,
+      "minimum": 0.001,
+      "maximum": 1,
+      "changeLive": false,
+      "requiresRestart": true
+    },
+    "reference_co2_partial_pressure_psi": {
+      "description": "CO2 partial pressure reference for current law",
+      "unit": "psi",
+      "default": 20,
+      "minimum": 0.1,
+      "maximum": 500,
+      "changeLive": false,
+      "requiresRestart": true
+    },
+    "co2_corrosion_exponent": {
+      "description": "Corrosion current response to CO2 partial pressure",
+      "unit": "fraction",
+      "default": 0.6,
+      "minimum": 0,
+      "maximum": 2,
+      "changeLive": false,
+      "requiresRestart": true
+    },
+    "corrosion_activation_energy_j_mol": {
+      "description": "Apparent corrosion activation energy",
+      "unit": "J/mol",
+      "default": 25000,
+      "minimum": 0,
+      "maximum": 100000,
+      "changeLive": false,
+      "requiresRestart": true
+    },
+    "corrosion_flow_factor": {
+      "description": "Flow contribution to corrosion current at maximum flow",
+      "unit": "fraction",
+      "default": 0.5,
+      "minimum": 0,
+      "maximum": 5,
+      "changeLive": false,
+      "requiresRestart": true
+    },
+    "reference_corrosion_current_a_m2": {
+      "description": "Reference uniform Fe dissolution current density",
+      "unit": "A/m2",
+      "default": 0.01,
+      "minimum": 0,
+      "maximum": 1,
+      "changeLive": false,
+      "requiresRestart": true
+    },
+    "vibration_excitation_hz": {
+      "description": "Pump and flow forcing frequency",
+      "unit": "Hz",
+      "default": 25,
+      "minimum": 0.1,
+      "maximum": 200,
+      "changeLive": false,
+      "requiresRestart": true
+    },
+    "vibration_natural_hz": {
+      "description": "Reference structure natural frequency",
+      "unit": "Hz",
+      "default": 30,
+      "minimum": 0.1,
+      "maximum": 200,
+      "changeLive": false,
+      "requiresRestart": true
+    },
+    "vibration_effective_mass_kg": {
+      "description": "Reference vibrating structure effective mass",
+      "unit": "kg",
+      "default": 20,
+      "minimum": 0.1,
+      "maximum": 1000,
+      "changeLive": false,
+      "requiresRestart": true
+    },
+    "vibration_damping_ratio": {
+      "description": "Reference vibration damping ratio",
+      "unit": "fraction",
+      "default": 0.15,
+      "minimum": 0.01,
+      "maximum": 2,
+      "changeLive": false,
+      "requiresRestart": true
+    },
+    "pump_excitation_force_n": {
+      "description": "Pump harmonic force amplitude",
+      "unit": "N",
+      "default": 6,
+      "minimum": 0,
+      "maximum": 1000,
+      "changeLive": false,
+      "requiresRestart": true
+    },
+    "flow_excitation_force_n_per_bpd": {
+      "description": "Flow harmonic force per liquid flow rate",
+      "unit": "N per (bbl/day)",
+      "default": 0.001,
+      "minimum": 0,
+      "maximum": 1,
+      "changeLive": false,
+      "requiresRestart": true
+    },
+    "annulus_initial_pressure_psi": {
+      "description": "Initial sealed outer-annulus gauge pressure",
+      "unit": "psi",
+      "default": 150,
+      "minimum": 0,
+      "maximum": 2000,
+      "changeLive": false,
+      "requiresRestart": true
+    },
+    "annulus_thermal_coupling": {
+      "description": "Fraction of wellhead heat reaching outer annulus",
+      "unit": "fraction",
+      "default": 0.3,
+      "minimum": 0,
+      "maximum": 1,
+      "changeLive": false,
+      "requiresRestart": true
+    },
+    "annulus_thermal_response_rate": {
+      "description": "Outer-annulus temperature response speed",
+      "unit": "1/sec",
+      "default": 0.005,
+      "minimum": 1e-05,
+      "maximum": 0.2,
       "changeLive": false,
       "requiresRestart": true
     }

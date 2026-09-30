@@ -14,7 +14,16 @@ def test_fresh_complete_readings_keep_both_timestamps() -> None:
     inserted = NOW - timedelta(seconds=2)
     snapshot = make_snapshot(
         1,
-        [("tubing_pressure", "psi", 1800.0, source, inserted)],
+        [
+            (
+                "tubing_pressure",
+                "psi",
+                1800.0,
+                source,
+                inserted,
+                "synthetic_random_simulator",
+            )
+        ],
         NOW,
         15,
     )
@@ -31,8 +40,8 @@ def test_partial_readings_keep_missing_as_null() -> None:
     snapshot = make_snapshot(
         1,
         [
-            ("flow_rate", "bbl/day", 100.0, NOW, NOW),
-            ("water_cut", "%", None, None, None),
+            ("flow_rate", "bbl/day", 100.0, NOW, NOW, "synthetic_reduced_order_model"),
+            ("water_cut", "%", None, None, None, None),
         ],
         NOW,
         15,
@@ -46,9 +55,23 @@ def test_stale_future_and_invalid_values_are_visible() -> None:
     snapshot = make_snapshot(
         1,
         [
-            ("old", "psi", 100.0, NOW - timedelta(seconds=20), NOW),
-            ("future", "psi", 100.0, NOW + timedelta(seconds=10), NOW),
-            ("bad", "psi", float("nan"), NOW, NOW),
+            (
+                "old",
+                "psi",
+                100.0,
+                NOW - timedelta(seconds=20),
+                NOW,
+                "synthetic_random_simulator",
+            ),
+            (
+                "future",
+                "psi",
+                100.0,
+                NOW + timedelta(seconds=10),
+                NOW,
+                "synthetic_random_simulator",
+            ),
+            ("bad", "psi", float("nan"), NOW, NOW, "synthetic_random_simulator"),
         ],
         NOW,
         15,
@@ -60,3 +83,29 @@ def test_stale_future_and_invalid_values_are_visible() -> None:
     ]
     assert snapshot.quality == "invalid"
     assert snapshot.readings[2].value is None
+
+
+def test_mixed_legacy_and_model_sources_remain_visible() -> None:
+    snapshot = make_snapshot(
+        1,
+        [
+            (
+                "tubing_pressure",
+                "psi",
+                1800.0,
+                NOW,
+                NOW,
+                "synthetic_reduced_order_model",
+            ),
+            ("h2s_level", "ppm", 3.0, NOW, NOW, "synthetic_random_simulator"),
+        ],
+        NOW,
+        15,
+    )
+    payload = snapshot.to_payload()
+    assert payload["source"] == "mixed"
+    assert payload["modelGenerated"] is False
+    assert [row.source_kind for row in snapshot.readings] == [
+        "synthetic_reduced_order_model",
+        "synthetic_random_simulator",
+    ]

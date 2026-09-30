@@ -7,7 +7,8 @@ from dataclasses import dataclass, fields
 from datetime import datetime
 from typing import Self
 
-from twin_core.config import stable_fraction
+from twin_core.config import load_defaults, stable_fraction
+from twin_core.derived_physics import annulus_next_pressure, derive_readings
 
 MODEL_STEP_SECONDS = 1.0
 EQUILIBRIUM_SEARCH_STEPS = 48
@@ -52,6 +53,31 @@ class ModelParameters:
     casing_pressure_fraction: float
     casing_response_rate: float
     max_corrosion_factor: float
+    bubble_point_pressure_psi: float
+    reference_temperature_f: float
+    solution_gas_at_bubble_point_scf_stb: float
+    free_gas_oil_ratio_scf_stb: float
+    solution_gas_pressure_exponent: float
+    gas_h2s_mole_fraction: float
+    gas_co2_mole_fraction: float
+    sand_onset_drawdown_psi: float
+    sand_entrainment_kg_per_bbl_psi: float
+    liquid_density_kg_per_bbl: float
+    water_wetting_half_fraction: float
+    reference_co2_partial_pressure_psi: float
+    co2_corrosion_exponent: float
+    corrosion_activation_energy_j_mol: float
+    corrosion_flow_factor: float
+    reference_corrosion_current_a_m2: float
+    vibration_excitation_hz: float
+    vibration_natural_hz: float
+    vibration_effective_mass_kg: float
+    vibration_damping_ratio: float
+    pump_excitation_force_n: float
+    flow_excitation_force_n_per_bpd: float
+    annulus_initial_pressure_psi: float
+    annulus_thermal_coupling: float
+    annulus_thermal_response_rate: float
 
     @classmethod
     def from_values(cls, values: dict[str, float]) -> Self:
@@ -60,8 +86,9 @@ class ModelParameters:
         if set(values) != expected:
             raise ValueError("Model parameter keys do not match the model version")
         parameters = cls(**values)
-        if not all(math.isfinite(value) for value in values.values()):
-            raise ValueError("Model parameters must be finite")
+        specs = load_defaults().parameters
+        for key, value in values.items():
+            specs[key].validate(value)
         if parameters.reservoir_pressure_proxy <= parameters.downstream_pressure:
             raise ValueError("Reservoir proxy must exceed downstream pressure")
         if parameters.max_tubing_pressure <= parameters.downstream_pressure:
@@ -120,6 +147,17 @@ class ProcessState:
     water_cut_percent: float
     blockage_factor: float
     corrosion_factor: float
+    annulus_pressure_psi: float
+    annulus_temperature_f: float
+    oil_rate_bpd: float
+    water_rate_bpd: float
+    gas_rate_scfd: float
+    gas_oil_ratio_scf_stb: float
+    sand_detector_ppm: float
+    corrosion_rate_mpy: float
+    h2s_level_ppm: float
+    co2_level_percent: float
+    vibration_mm_s: float
 
     def to_payload(self) -> dict[str, object]:
         """Return unit-labelled model state for the internal read API."""
@@ -142,6 +180,17 @@ class ProcessState:
             "waterCutPercent": self.water_cut_percent,
             "blockageFactor": self.blockage_factor,
             "corrosionFactor": self.corrosion_factor,
+            "annulusPressurePsi": self.annulus_pressure_psi,
+            "annulusTemperatureF": self.annulus_temperature_f,
+            "oilRateBpd": self.oil_rate_bpd,
+            "waterRateBpd": self.water_rate_bpd,
+            "gasRateScfd": self.gas_rate_scfd,
+            "gasOilRatioScfStb": self.gas_oil_ratio_scf_stb,
+            "sandDetectorPpm": self.sand_detector_ppm,
+            "corrosionRateMpy": self.corrosion_rate_mpy,
+            "h2sLevelPpm": self.h2s_level_ppm,
+            "co2LevelPercent": self.co2_level_percent,
+            "vibrationMmS": self.vibration_mm_s,
         }
 
 
@@ -217,6 +266,16 @@ def initial_state(
         * tubing
         / parameters.max_tubing_pressure
     )
+    derived = derive_readings(
+        flow_rate_bpd=flow,
+        water_cut_percent=water_fraction * 100.0,
+        reservoir_pressure_psi=parameters.reservoir_pressure_proxy,
+        tubing_pressure_psi=tubing,
+        wellhead_temperature_f=temperature,
+        pump_flow_factor=initial_pump_factor,
+        pump_on=controls.pump_on,
+        parameters=parameters,
+    )
     return ProcessState(
         simulated_at=at,
         reservoir_pressure_proxy_psi=parameters.reservoir_pressure_proxy,
@@ -234,6 +293,9 @@ def initial_state(
         water_cut_percent=water_fraction * 100.0,
         blockage_factor=blockage,
         corrosion_factor=corrosion,
+        annulus_pressure_psi=parameters.annulus_initial_pressure_psi,
+        annulus_temperature_f=parameters.ambient_temperature,
+        **vars(derived),
     )
 
 
@@ -261,6 +323,17 @@ def step_model(
         current.water_cut_percent,
         current.blockage_factor,
         current.corrosion_factor,
+        current.annulus_pressure_psi,
+        current.annulus_temperature_f,
+        current.oil_rate_bpd,
+        current.water_rate_bpd,
+        current.gas_rate_scfd,
+        current.gas_oil_ratio_scf_stb,
+        current.sand_detector_ppm,
+        current.corrosion_rate_mpy,
+        current.h2s_level_ppm,
+        current.co2_level_percent,
+        current.vibration_mm_s,
     )
     if not all(math.isfinite(value) for value in numeric_state):
         raise ValueError("Current model state is not finite")
@@ -270,6 +343,22 @@ def step_model(
         and parameters.min_blockage_factor <= current.blockage_factor <= 1
         and 1 <= current.corrosion_factor <= parameters.max_corrosion_factor
         and parameters.pump_off_flow_factor <= current.pump_flow_factor <= 1
+        and current.annulus_pressure_psi >= 0
+        and current.annulus_temperature_f > -459.67
+        and all(
+            value >= 0
+            for value in (
+                current.oil_rate_bpd,
+                current.water_rate_bpd,
+                current.gas_rate_scfd,
+                current.gas_oil_ratio_scf_stb,
+                current.sand_detector_ppm,
+                current.corrosion_rate_mpy,
+                current.h2s_level_ppm,
+                current.co2_level_percent,
+                current.vibration_mm_s,
+            )
+        )
     ):
         raise ValueError("Current model state is outside its bounds")
 
@@ -283,7 +372,7 @@ def step_model(
     inflow = parameters.productivity_index * max(
         parameters.reservoir_pressure_proxy - current.tubing_pressure_psi, 0.0
     )
-    outflow = _flow(
+    outflow_at_start = _flow(
         current.tubing_pressure_psi,
         controls,
         parameters,
@@ -293,13 +382,16 @@ def step_model(
     tubing = _clamp(
         current.tubing_pressure_psi
         + (
-            parameters.pressure_gain_coefficient * (inflow - outflow)
+            parameters.pressure_gain_coefficient * (inflow - outflow_at_start)
             - parameters.natural_loss_coefficient
         )
         * dt_seconds,
         0.0,
         parameters.max_tubing_pressure,
     )
+    # The pressure step uses the starting flow; published flow belongs to the
+    # updated pressure at this tick, so all derived readings share that state.
+    outflow = _flow(tubing, controls, parameters, pump_factor, current.blockage_factor)
     casing_target = parameters.downstream_pressure + (
         parameters.casing_pressure_fraction * (tubing - parameters.downstream_pressure)
     )
@@ -357,6 +449,30 @@ def step_model(
     )
     if not all(math.isfinite(value) for value in outputs):
         raise ValueError("Model calculation is not finite")
+    annulus_target_f = parameters.ambient_temperature + (
+        parameters.annulus_thermal_coupling
+        * (temperature - parameters.ambient_temperature)
+    )
+    annulus_temperature = current.annulus_temperature_f + (
+        parameters.annulus_thermal_response_rate
+        * (annulus_target_f - current.annulus_temperature_f)
+        * dt_seconds
+    )
+    annulus_pressure = annulus_next_pressure(
+        current.annulus_pressure_psi,
+        current.annulus_temperature_f,
+        annulus_temperature,
+    )
+    derived = derive_readings(
+        flow_rate_bpd=outflow,
+        water_cut_percent=water_fraction * 100.0,
+        reservoir_pressure_psi=parameters.reservoir_pressure_proxy,
+        tubing_pressure_psi=tubing,
+        wellhead_temperature_f=temperature,
+        pump_flow_factor=pump_factor,
+        pump_on=controls.pump_on,
+        parameters=parameters,
+    )
     return ProcessState(
         simulated_at=at,
         reservoir_pressure_proxy_psi=parameters.reservoir_pressure_proxy,
@@ -374,4 +490,7 @@ def step_model(
         water_cut_percent=water_fraction * 100.0,
         blockage_factor=blockage,
         corrosion_factor=corrosion,
+        annulus_pressure_psi=annulus_pressure,
+        annulus_temperature_f=annulus_temperature,
+        **vars(derived),
     )

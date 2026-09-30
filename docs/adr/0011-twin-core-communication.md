@@ -47,3 +47,10 @@ HTTP keeps control, forecast, scenario, and latest telemetry calls explicit and 
 ## Implementation on 2026-09-29
 
 The service exposes internal read-only HTTP for health, readiness, metrics, state, and current telemetry. Durable twin snapshots, commands, forecasts, and scenarios are still planned.
+
+## Implementation on 2026-09-30
+
+The Modbus gateway now reads a complete, read-only model fleet snapshot over
+internal HTTP. It converts the supported model fields into Modbus registers;
+ingestion still polls Modbus and writes source-labelled readings to TimescaleDB.
+Durable model state snapshots, commands, forecasts, and scenarios remain planned.

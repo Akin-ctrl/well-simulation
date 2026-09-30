@@ -218,3 +218,14 @@ existing simulator as its source. The fresh database role allowed SELECT on
 `wellhead` but denied INSERT there, SELECT on `users`, schema CREATE, and
 database TEMPORARY. The isolated test volume was removed, and the original
 stack was restored against its preserved volume.
+
+## Later handoff, 2026-09-30
+
+Milestone 5 filled the `ProcessState` slot with deterministic one-second model
+values. Milestone 6 now publishes a complete running fleet through the internal
+`GET /model-snapshot` endpoint. The gateway validates that snapshot before it
+updates Modbus registers, and ingestion stores source-labelled readings. The
+original Milestone 4 sections above describe the service at its first release.
+See the [Milestone 5 design](twin-core-milestone-5.md),
+[reference-well equations](reference-well-physics.md), and
+[Milestone 6 design](twin-core-milestone-6.md) for the current handoff.

@@ -1,4 +1,4 @@
-"""Read active assets and current simulator readings from the historian."""
+"""Read active assets and source-labelled readings from the historian."""
 
 from __future__ import annotations
 
@@ -15,12 +15,13 @@ from twin_core.config import ServiceSettings
 
 LATEST_TELEMETRY_SQL = """
 SELECT pt.code, pt.canonical_unit,
-       recent.raw_value, recent.timestamp_utc, recent.inserted_at
+       recent.raw_value, recent.timestamp_utc, recent.inserted_at, recent.source_kind
 FROM wellhead AS wh
 JOIN deviceParameterMapping AS mapping ON mapping.device_id = wh.device_id
 JOIN parameterType AS pt ON pt.parameter_type_id = mapping.parameter_type_id
 LEFT JOIN LATERAL (
-    SELECT reading.raw_value, reading.timestamp_utc, reading.inserted_at
+    SELECT reading.raw_value, reading.timestamp_utc, reading.inserted_at,
+           reading.source_kind
     FROM parameterReading AS reading
     WHERE reading.wellhead_id = wh.wellhead_id
       AND reading.mapping_id = mapping.mapping_id
@@ -52,6 +53,7 @@ class TelemetryReading:
     inserted_at: datetime | None
     age_seconds: float | None
     quality: ReadingQuality
+    source_kind: str | None
 
     def to_payload(self) -> dict[str, object]:
         """Return the internal API representation."""
@@ -65,6 +67,7 @@ class TelemetryReading:
             "insertedAt": self.inserted_at.isoformat() if self.inserted_at else None,
             "ageSeconds": self.age_seconds,
             "quality": self.quality,
+            "source": self.source_kind,
         }
 
 
@@ -79,12 +82,18 @@ class TelemetrySnapshot:
     readings: tuple[TelemetryReading, ...]
 
     def to_payload(self) -> dict[str, object]:
-        """Mark the existing simulator as the source of these readings."""
+        """Report which stored source produced the available readings."""
+        sources = {r.source_kind for r in self.readings if r.value is not None}
+        source = (
+            next(iter(sources))
+            if len(sources) == 1
+            else ("mixed" if sources else "unknown")
+        )
         return {
             "wellheadId": self.wellhead_id,
             "observedAt": self.observed_at.isoformat(),
-            "source": "current_simulator_via_historian",
-            "modelGenerated": False,
+            "source": source,
+            "modelGenerated": source == "synthetic_reduced_order_model",
             "quality": self.quality,
             "complete": self.complete,
             "expectedParameterCount": len(self.readings),
@@ -110,16 +119,19 @@ def make_reading(
     inserted_at: datetime | None,
     observed_at: datetime,
     freshness_seconds: int,
+    source_kind: str | None = None,
 ) -> TelemetryReading:
     """Classify a value without treating missing or bad data as zero."""
     if raw_value is None or source_timestamp is None:
-        return TelemetryReading(code, unit, None, None, None, None, "missing")
+        return TelemetryReading(code, unit, None, None, None, None, "missing", None)
 
     source = _ensure_utc(source_timestamp)
     insertion = _ensure_utc(inserted_at) if inserted_at else None
     age = (observed_at - source).total_seconds()
     if not math.isfinite(raw_value):
-        return TelemetryReading(code, unit, None, source, insertion, age, "invalid")
+        return TelemetryReading(
+            code, unit, None, source, insertion, age, "invalid", source_kind
+        )
     if age < -5:
         quality: ReadingQuality = "clock_skew"
     elif age > freshness_seconds:
@@ -127,22 +139,26 @@ def make_reading(
     else:
         quality = "fresh"
     return TelemetryReading(
-        code, unit, float(raw_value), source, insertion, age, quality
+        code, unit, float(raw_value), source, insertion, age, quality, source_kind
     )
 
 
 def make_snapshot(
     wellhead_id: int,
-    rows: list[tuple[str, str | None, float | None, datetime | None, datetime | None]],
+    rows: list[
+        tuple[
+            str, str | None, float | None, datetime | None, datetime | None, str | None
+        ]
+    ],
     observed_at: datetime,
     freshness_seconds: int,
 ) -> TelemetrySnapshot:
     """Build an honest current view from the mapped historian readings."""
     readings = tuple(
         make_reading(
-            code, unit, value, source, inserted, observed_at, freshness_seconds
+            code, unit, value, source, inserted, observed_at, freshness_seconds, kind
         )
-        for code, unit, value, source, inserted in rows
+        for code, unit, value, source, inserted, kind in rows
     )
     qualities = {reading.quality for reading in readings}
     if "invalid" in qualities:

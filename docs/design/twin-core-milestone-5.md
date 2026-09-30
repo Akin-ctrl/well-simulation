@@ -237,3 +237,14 @@ readings carry different source labels. Logs omit credentials and raw payloads;
 metrics use fixed names without well IDs as labels. The service still has no
 control write endpoint or physical device connection. A restart begins a new
 synthetic run until durable snapshots arrive in Milestone 7.
+
+## Milestone 6 handoff, 2026-09-30
+
+Milestone 6 replaced the gateway's random subprocess with model output.
+The [Milestone 6 design](twin-core-milestone-6.md) records the complete 18-signal
+mapping, Modbus freshness handshake, and historian source labels. Version 0.3.0
+recalculates published flow at the updated tubing pressure, then derives phase
+and diagnostic readings from that same state. The pressure step still uses the
+starting flow. The [reference-well design](reference-well-physics.md) records
+those additional equations and their limits. The earlier
+boundary description above records what was true when Milestone 5 finished.

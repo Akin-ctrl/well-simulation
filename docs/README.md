@@ -8,9 +8,9 @@ architecture decision records.
 Call it a wellhead monitoring simulation, or a SCADA-style industrial telemetry
 platform.
 
-Do not call it a digital twin yet. It becomes one when it has a stateful process
-model, control inputs, prediction, calibration, and what-if simulation. It has
-none of those.
+Do not call it a finished digital twin yet. It has a stateful synthetic process
+model, but no field calibration, durable model snapshots, forecast API, or
+what-if scenarios.
 
 ## What is built
 
@@ -34,6 +34,8 @@ acknowledge or shelve actions because the data model cannot store those states.
 - `demo/demo-script.md`: the demo flow for a portfolio review
 - `design/twin-core-milestone-4.md`: the service boundary and its limits
 - `design/twin-core-milestone-5.md`: the process model equations and limits
+- `design/twin-core-milestone-6.md`: model telemetry through Modbus
+- `design/reference-well-physics.md`: phase and diagnostic equations
 - `openapi/README.md`: the API contracts and the rules for changing them
 - `roadmap.md`: the local feature plan (ignored by Git)
 - `remediation-roadmap.md`: the local repair record (ignored by Git)
@@ -43,7 +45,7 @@ acknowledge or shelve actions because the data model cannot store those states.
 - Keep the README matching what is actually built.
 - Write the ADR before adding major twin behaviour, not after.
 - Update the OpenAPI spec with every public API change.
-- Keep the simulator's assumptions visible while it produces random readings.
+- Keep model assumptions visible wherever synthetic readings appear.
 - Keep the demo honest. Show what works, then say what is planned.
 
 ## How we write docs here

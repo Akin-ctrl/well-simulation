@@ -90,6 +90,21 @@ class TwinRuntime:
         """Read current lifecycle state for one active wellhead."""
         return self.registry.get(wellhead_id)
 
+    def model_snapshot(self) -> dict[str, object] | None:
+        """Return a complete running fleet from one registry read."""
+        ready, _ = self.readiness()
+        if not ready:
+            return None
+        states = self.registry.snapshot()
+        if not states or any(state.process is None for state in states):
+            return None
+        return {
+            "source": "synthetic_reduced_order_model",
+            "fieldCalibrated": False,
+            "modelVersion": self.defaults.version,
+            "wellheads": [state.to_payload() for state in states],
+        }
+
     def latest_telemetry(self, wellhead_id: int) -> TelemetrySnapshot:
         """Limit concurrent database reads and report overload explicitly."""
         if not self._read_slots.acquire(blocking=False):

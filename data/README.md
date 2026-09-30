@@ -7,10 +7,11 @@ The telemetry pipeline and the database schema. The dashboard and API live in
 
 | Path | What it does |
 | --- | --- |
-| `src/wellhead_simulator.py` | Makes up readings for each wellhead and writes them to stdout |
-| `src/modbus_gateway.py` | Serves those readings as Modbus holding registers |
-| `src/database_ingestion.py` | Polls the gateway and writes readings to the historian |
+| `src/wellhead_simulator.py` | Legacy random simulator, no longer started by Compose |
+| `src/modbus_gateway.py` | Fetches model snapshots and serves supported values as holding registers |
+| `src/database_ingestion.py` | Polls Modbus and writes model readings to the historian |
 | `src/schema.py` | Applies the ordered SQL migrations |
+| `src/model_source.py` | Validates model snapshots and maps all 18 seeded signals |
 | `src/telemetry_common.py` | Config, logging, database access, and the health endpoints |
 | `src/telemetry_metrics.py` | Prometheus metric definitions |
 | `sql/migrations/` | The schema. Canonical, per ADR 0006 |
@@ -18,14 +19,13 @@ The telemetry pipeline and the database schema. The dashboard and API live in
 
 ## How the data flows
 
-The simulator writes a JSON batch to stdout every telemetry interval. The
-gateway reads that on a pipe and encodes each value into two Modbus registers.
-Ingestion polls those registers over Modbus TCP and batch-inserts the decoded
-values.
+Twin-core advances each active well once per second. The gateway requests one
+complete fleet snapshot every telemetry interval, validates it, and writes the
+18 seeded values to Modbus holding registers. Ingestion polls those registers
+and stores the model tick time and source label in TimescaleDB. The former random
+simulator script remains as historical code but is not started by the gateway.
 
-The simulator runs as a child process of the gateway, so they share a container.
-The gateway exits when the simulator does, because a gateway with no source
-would keep serving its last registers and ingestion would record them as fresh.
+The full mapping and failure rules are in the [Milestone 6 design](../docs/design/twin-core-milestone-6.md). The [reference-well design](../docs/design/reference-well-physics.md) defines the synthetic equations and their limits.
 
 ## Metadata drives everything
 
@@ -43,13 +43,11 @@ live interface.
 
 ## Telling stale data from fresh
 
-The gateway writes the time of its last batch to register 1900. Ingestion reads
-that first, and skips the insert if it has not advanced.
-
-Without it, a stalled simulator meant the gateway kept answering reads with
-frozen values and ingestion kept recording them under new timestamps. The
-dashboard showed a healthy fleet on data that had stopped moving. That is worse
-than an outage, because nothing downstream could detect it.
+The gateway writes zero to heartbeat register 1900 before changing values, then
+writes the model tick's UTC epoch second after the complete register update.
+Ingestion reads it before and after a poll. A missing, unchanged, too-old, or
+changed-mid-poll heartbeat prevents an insert. `timestamp_utc` is the model
+tick, while `inserted_at` is the database arrival time. Both are UTC.
 
 ## Alarms
 
@@ -90,11 +88,8 @@ ORDER BY timestamp_utc DESC LIMIT 10;
 
 ## What the numbers are
 
-The readings are random values inside each parameter's configured range. About
-one in ten draws use a wider range; only some of those values fall outside the
-normal range and exercise the alarm rules.
-
-There is no physics in these stored readings. Nothing links their tubing
-pressure to flow rate. The separate twin-core service now calculates synthetic
-process state with linked pressure, flow, temperature, and degradation. Its
-output will replace the random Modbus source in Milestone 6.
+The new readings come from a reduced-order synthetic model, not a field device.
+Pressure, flow, temperature, water cut, valve state, and pump state now share
+one model tick. They are uncalibrated and unsuitable for plant decisions.
+Rows written before this change retain `synthetic_random_simulator` in
+`source_kind`; new rows carry `synthetic_reduced_order_model`.

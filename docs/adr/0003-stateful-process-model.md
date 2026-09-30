@@ -43,3 +43,10 @@ The first twin version should favour clarity and causality. Each wellhead needs 
 ## Implementation on 2026-09-29
 
 A deterministic per-well process state now runs in twin-core. The Modbus simulator still feeds the historian, and durable snapshots remain Milestone 7 work.
+
+## Implementation update on 2026-09-30
+
+Milestone 6 replaced the random Modbus source with the current model state.
+The gateway now reads one complete model fleet snapshot. Ingestion stores the
+supported values with a model source label. Durable model state snapshots remain
+Milestone 7 work.

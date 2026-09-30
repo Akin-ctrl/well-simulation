@@ -5,7 +5,8 @@
 The current system is a simulated industrial monitoring pipeline:
 
 ```text
-Wellhead simulator
+Twin-core model
+  -> read-only fleet snapshot
   -> Modbus TCP gateway
   -> Database ingestion service
   -> PostgreSQL/TimescaleDB historian
@@ -13,15 +14,19 @@ Wellhead simulator
   -> TypeScript API and React dashboard
 ```
 
-The current Modbus simulator still generates independent synthetic telemetry.
-A separate twin-core service reads active assets and recent historian values.
-It also calculates a deterministic process state for each well on a fixed
-one-second step. Its model output is not yet sent through Modbus or stored in
-the historian.
+Twin-core reads active assets and calculates a deterministic process state for
+each well on a fixed one-second step. The gateway reads one complete fleet
+snapshot and serves all 18 seeded model signals as Modbus registers.
+Ingestion polls the gateway and stores source-labelled readings. The seven
+diagnostic signals added in model version 0.3.0 remain synthetic estimates.
 
 The [Milestone 4 design](../design/twin-core-milestone-4.md) explains the
 service boundary and data quality rules. The [Milestone 5 design](../design/twin-core-milestone-5.md)
-explains the process equations, units, and limits.
+explains the original process equations, units, and limits. The
+[reference-well design](../design/reference-well-physics.md) explains the
+additional phase and diagnostic equations. The
+[Milestone 6 design](../design/twin-core-milestone-6.md) describes the Modbus
+mapping and freshness rules.
 
 ## Current Dashboard Layer
 
@@ -34,8 +39,9 @@ The dashboard currently exposes the monitoring foundation:
 - per-wellhead detail pages with current readings, alarms, and trends
 - an Alarm Center with severity, threshold, age, and links to wellheads
 
-The API does not currently check whether a recorded batch contains every mapped
-parameter. A Modbus read failure can leave a partial snapshot in the historian.
+Ingestion rejects a failed or mixed-time Modbus poll before inserting a batch.
+The API can still show partial or stale latest views during source failure,
+metadata changes, or while older readings expire.
 
 ## Target Lightweight Digital Twin
 
@@ -45,7 +51,7 @@ The target architecture adds a twin core between asset metadata and telemetry ou
 Asset metadata
   -> Twin model registry
   -> Stateful wellhead process model
-  -> Simulated/observed telemetry
+  -> Simulated telemetry
   -> Historian
   -> Prediction and what-if services
   -> Operational dashboard and API
@@ -55,8 +61,9 @@ Asset metadata
 
 - **Twin core**: maintains current process state for each wellhead.
 - **Process model**: updates pressure, flow, temperature, valve state, pump state, and degradation over time.
-- **Telemetry adapter**: converts model state into Modbus-readable register values.
-- **Historian**: stores raw readings, model state snapshots, predictions, and alarm events.
+- **Telemetry adapter**: converts supported model fields into Modbus-readable register values.
+- **Historian**: stores source-labelled readings and alarm events. Model state
+  snapshots and predictions remain planned.
 - **Control API**: accepts bounded operational inputs.
 - **Scenario API**: runs what-if simulations without mutating live state.
 - **Dashboard**: shows live state, historical trends, alarms, predictions, and scenario outputs.
@@ -81,8 +88,7 @@ The project should not claim to be a high-fidelity reservoir simulator. The targ
 - [Data model](../relevant_visuals/data-model.pdf): the
   relational schema, showing the asset hierarchy, parameter metadata, and the
   time-series tables.
-- [Flow diagram](../relevant_visuals/flow-diagram.pdf): how a
-  reading travels from the simulator to the dashboard.
+- [Flow diagram](../relevant_visuals/flow-diagram.pdf): the older random simulator path to the dashboard.
 
 These predate the current schema. The migrations in `data/sql/migrations` are
 canonical where the two disagree.

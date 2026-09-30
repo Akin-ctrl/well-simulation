@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import logging
 from datetime import datetime, timezone
+from unittest.mock import Mock
 
 import pytest
 from pymodbus.client.mixin import ModbusClientMixin
@@ -17,6 +18,7 @@ import database_ingestion as ingestion
 import modbus_gateway as gateway
 from telemetry_common import (
     HEARTBEAT_REGISTER,
+    WORD_ORDER,
     JsonLogFormatter,
     ParameterMapping,
     as_number,
@@ -114,7 +116,7 @@ class TestFreshness:
 
     def test_unreadable_heartbeat_is_not_stale(self) -> None:
         """A transport failure is surfaced by the register reads, not here."""
-        assert ingestion.is_stale(None, 1000) is False
+        assert ingestion.is_stale(None, 1000) is True
 
 
 class TestRegisterStore:
@@ -198,6 +200,38 @@ class TestUnitIds:
         assert collect_unit_ids(mappings) == [1, 7]
 
 
+@pytest.mark.parametrize(
+    ("second_tick", "accepted"),
+    [(1_800_000_000, True), (1_800_000_001, False), (0, False)],
+)
+def test_fleet_heartbeat_requires_every_unit_on_one_tick(
+    second_tick: int, accepted: bool
+) -> None:
+    """A mixed or unready Modbus unit must not create a fleet batch."""
+    first_tick = 1_800_000_000
+    client = Mock()
+
+    def read_result(address: int, *, count: int, device_id: int) -> Mock:
+        assert address == HEARTBEAT_REGISTER
+        assert count == 2
+        tick = first_tick if device_id == 1 else second_tick
+        registers = ModbusClientMixin.convert_to_registers(
+            tick, ModbusClientMixin.DATATYPE.UINT32, word_order=WORD_ORDER
+        )
+        result = Mock(registers=registers)
+        result.isError.return_value = False
+        return result
+
+    client.read_holding_registers.side_effect = read_result
+    mappings = [
+        mapping(modbus_unit_id=1),
+        mapping(mapping_id=2, wellhead_id=2, modbus_unit_id=7),
+    ]
+    heartbeat = ingestion.read_fleet_heartbeat(client, mappings)
+    assert (heartbeat == first_tick) is accepted
+    assert client.read_holding_registers.call_count == 2
+
+
 class TestReadingRow:
     """The insert tuple must stay aligned with the SQL column order."""
 
@@ -210,7 +244,7 @@ class TestReadingRow:
             mapping_id=5,
             raw_value=6.5,
         )
-        assert reading.as_row() == (now, 3, 4, 5, 6.5)
+        assert reading.as_row() == (now, 3, 4, 5, 6.5, "synthetic_reduced_order_model")
 
         columns = (
             ingestion.INSERT_READING_SQL.split("(", 1)[1].split(")", 1)[0].split(",")
@@ -221,6 +255,7 @@ class TestReadingRow:
             "parameter_type_id",
             "mapping_id",
             "raw_value",
+            "source_kind",
         ]
 
 
@@ -259,3 +294,21 @@ class TestJsonLogFormatter:
             )
         payload = json.loads(JsonLogFormatter("svc").format(record))
         assert "ValueError: boom" in payload["error"]
+
+
+def test_invalid_modbus_value_rejects_the_entire_poll() -> None:
+    client = Mock()
+    client.read_holding_registers.return_value = Mock(
+        registers=gateway.encode_value(float("nan"), "float")
+    )
+    client.read_holding_registers.return_value.isError.return_value = False
+    with pytest.raises(ValueError, match="Nonfinite"):
+        ingestion.poll_once(client, [mapping()], datetime.now(timezone.utc))
+
+
+def test_model_heartbeat_age_is_bounded() -> None:
+    now = datetime(2026, 9, 30, 12, 0, tzinfo=timezone.utc)
+    epoch = int(now.timestamp())
+    assert ingestion.current_heartbeat(epoch - 10, now, 5) == epoch - 10
+    assert ingestion.current_heartbeat(epoch - 11, now, 5) is None
+    assert ingestion.current_heartbeat(epoch + 3, now, 5) is None
