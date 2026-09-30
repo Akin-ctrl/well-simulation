@@ -47,3 +47,7 @@ This is the right lightweight production path. It keeps model ticks fast while g
 ## Implementation on 2026-09-29
 
 The service keeps active lifecycle state in memory. No physical process state or durable snapshot exists yet. Snapshot recovery belongs to Milestone 7.
+
+## Implementation on 2026-09-29
+
+The process state now advances in memory. A restart deliberately initializes a new synthetic run and reports `cold_start_no_snapshot`. Durable snapshots remain Milestone 7 work.

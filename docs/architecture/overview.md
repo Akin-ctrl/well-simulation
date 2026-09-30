@@ -13,13 +13,15 @@ Wellhead simulator
   -> TypeScript API and React dashboard
 ```
 
-The current simulator generates synthetic telemetry. It does not yet maintain
-a physics-aware or behavior-aware model of the wellhead. A separate twin-core
-service reads active assets and recent historian values. It runs a fixed-step
-scheduler but has no process equations or model telemetry yet.
+The current Modbus simulator still generates independent synthetic telemetry.
+A separate twin-core service reads active assets and recent historian values.
+It also calculates a deterministic process state for each well on a fixed
+one-second step. Its model output is not yet sent through Modbus or stored in
+the historian.
 
 The [Milestone 4 design](../design/twin-core-milestone-4.md) explains the
-new service boundary, timing, data quality, and failure behavior.
+service boundary and data quality rules. The [Milestone 5 design](../design/twin-core-milestone-5.md)
+explains the process equations, units, and limits.
 
 ## Current Dashboard Layer
 

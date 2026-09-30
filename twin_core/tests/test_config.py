@@ -11,8 +11,8 @@ from twin_core.config import ParameterOverride, load_defaults, resolve_parameter
 
 def test_all_synthetic_defaults_load_with_valid_ranges() -> None:
     defaults = load_defaults()
-    assert defaults.version == "0.1.0"
-    assert len(defaults.parameters) == 16
+    assert defaults.version == "0.2.0"
+    assert len(defaults.parameters) == 21
     assert defaults.parameters["ambient_temperature"].unit == "degrees F"
     for spec in defaults.parameters.values():
         assert spec.minimum <= spec.default <= spec.maximum
@@ -63,3 +63,23 @@ def test_invalid_versioned_default_is_rejected(tmp_path: Path) -> None:
     path.write_text(json.dumps(document), encoding="utf-8")
     with pytest.raises(ValueError, match="max_flow_rate"):
         load_defaults(path)
+
+
+def test_per_well_variation_is_stable_and_overrides_win() -> None:
+    defaults = load_defaults()
+    first = resolve_parameters(defaults, {}, {}, 7)
+    assert first == resolve_parameters(defaults, {}, {}, 7)
+    assert (
+        first["reservoir_pressure_proxy"]
+        != resolve_parameters(defaults, {}, {}, 8)["reservoir_pressure_proxy"]
+    )
+    assert 0.92 * 3200 <= first["reservoir_pressure_proxy"] <= 1.08 * 3200
+    assert 0.85 * 1.2 <= first["productivity_index"] <= 1.15 * 1.2
+    assert 0.90 * 18 <= first["choke_coefficient"] <= 1.10 * 18
+    overridden = resolve_parameters(
+        defaults,
+        {"reservoir_pressure_proxy": 3300},
+        {"reservoir_pressure_proxy": ParameterOverride(3400, "psi", "database")},
+        7,
+    )
+    assert overridden["reservoir_pressure_proxy"] == 3400

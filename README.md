@@ -5,12 +5,10 @@ telemetry, serves it over a Modbus TCP gateway, stores the readings in
 PostgreSQL and TimescaleDB, checks them against alarm rules, and shows the
 result on a React dashboard.
 
-This is not a digital twin. It is a SCADA-style simulation and data acquisition
-platform.
-
-The next big piece of work is replacing the random telemetry generator with a
-process model that holds state. That model would track the condition of each
-wellhead, respond to control inputs, run what-if scenarios, and forecast.
+The Modbus readings still come from a random simulator. A separate twin-core
+service now runs an uncalibrated, stateful process model for each well. Its output
+is available through an internal read API and does not yet feed Modbus, the
+historian, or the dashboard.
 
 ## Why This Exists
 
@@ -30,9 +28,8 @@ This repository currently implements the telemetry and monitoring foundation. Th
   Alarm Center.
 - Health, readiness, and metrics endpoints for the API, telemetry services,
   and the new twin-core service boundary.
-- A twin-core skeleton with fixed service ticks, validated synthetic model
-  defaults, read-only state, and source-labelled historian telemetry. It has
-  no physical process model yet.
+- A twin-core service with one-second process steps, deterministic per-well
+  variation, bounded model state, and separate source-labelled historian reads.
 - Docker-based local orchestration.
 
 ## Current Dashboard Scope
@@ -63,13 +60,13 @@ The target system is a lightweight wellhead digital twin with:
 An audit of this project found problems in the pipeline, the schema, access
 control, and the documentation. Repair phases 0 to 8 are complete. Phase 9
 reconciles the remaining documentation and checks startup from a clean copy.
-The [implementation roadmap](docs/roadmap.md) is the tracked plan for feature
-work. The [remediation roadmap](docs/remediation-roadmap.md) records the repair.
+The local `docs/roadmap.md` records feature work, and the local
+`docs/remediation-roadmap.md` records the repair. Both are ignored by Git.
+The committed design documents and ADRs record the implemented decisions.
 
-The twin-core service boundary is now in place. The next work is the process
-model itself. That model will make a change like closing a choke affect pressure
-and flow. Model telemetry, comparison with observed readings, forecasts, and
-what-if scenarios follow in later milestones.
+The reduced-order process model now responds to synthetic choke, valve, and
+pump inputs. Milestone 6 will connect its output to the Modbus gateway and
+historian. Snapshots, forecasts, and what-if APIs follow in later milestones.
 
 ## Quick Start
 
@@ -136,8 +133,9 @@ control API, and metadata editing are not built.
 - `docs/adr/README.md`: the architecture decision records
 - `docs/openapi/README.md`: the API contracts
 - `docs/design/twin-core-milestone-4.md`: the twin-core skeleton design
-- `docs/roadmap.md`: the tracked feature plan
-- `docs/remediation-roadmap.md`: the repair record
+- `docs/design/twin-core-milestone-5.md`: the process model equations and limits
+- `docs/roadmap.md`: the local feature plan (ignored by Git)
+- `docs/remediation-roadmap.md`: the local repair record (ignored by Git)
 
 ## What the numbers mean
 
@@ -146,8 +144,9 @@ each parameter's configured normal range. About one in ten draws use a wider
 range; only some of those values fall outside the normal range and exercise the
 alarm rules.
 
-Nothing is modelled. Tubing pressure is not related to flow rate, and there is
-no choke to close. Anything that looks like a trend is noise.
+Those stored readings are still independent noise. The separate twin-core
+model links flow, pressure, choke position, temperature, water cut, and slow
+degradation, but its results are not yet the stored readings.
 
 Two more things are compressed for a demo rather than set the way a plant would
 set them:
@@ -169,8 +168,9 @@ daemon. The Compose health check requires TCP database readiness, which avoids
 the startup race found in an earlier clean-start check.
 The API contract is written down under `docs/openapi`.
 
-It is not production ready. The twin-core service exists, but its physical
-process model does not. The API, gateway, ingestion, and twin-core services
-expose metrics, but no metrics collection stack is deployed.
+It is not production ready. The twin-core model uses synthetic, uncalibrated
+parameters and has no durable snapshots or live device control. The API, gateway,
+ingestion, and twin-core services expose metrics, but no metrics collection stack
+is deployed.
 Several accepted ADRs are still unimplemented. The
 [ADR index](docs/adr/README.md) tracks the gap between decisions and code.

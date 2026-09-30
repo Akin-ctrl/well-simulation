@@ -2,7 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-05-31
-- Implementation: Not started
+- Implementation: Implemented
 
 ## Context
 
@@ -161,3 +161,7 @@ blockage_factor_next = blockage_factor
 - A specific well type requires a different inflow model.
 - The model needs multiphase flow, nodal analysis, or detailed reservoir coupling.
 
+
+## Implementation on 2026-09-29
+
+The pure one-second model implements inflow, choke outflow, pump and valve effects, pressure inventory, casing and thermal lag, water drift, and bounded degradation. The equations and their limits are in the Milestone 5 design. No field calibration is claimed.

@@ -63,6 +63,7 @@ def server() -> Generator[ThreadingHTTPServer]:
     registry = ModelRegistry(defaults, {}, NoDatabaseOverrides())
     runtime = TwinRuntime(settings, defaults, registry, FakeHistorian(), TwinMetrics())
     assert runtime.refresh_fleet()
+    assert runtime.registry.tick(datetime.now(timezone.utc)) == (1, 0)
     http_server = create_server("127.0.0.1", 0, runtime)
     thread = threading.Thread(target=http_server.serve_forever, daemon=True)
     thread.start()
@@ -82,12 +83,15 @@ def _get(server: ThreadingHTTPServer, path: str) -> tuple[int, dict[str, object]
         return error.code, json.load(error)
 
 
-def test_state_exposes_no_process_values(server: ThreadingHTTPServer) -> None:
+def test_state_exposes_running_model_values(server: ThreadingHTTPServer) -> None:
     status, body = _get(server, "/wellheads/1/state")
     assert status == 200
-    assert body["status"] == "unavailable"
-    assert body["reason"] == "model_not_implemented"
-    assert body["process"] is None
+    assert body["status"] == "running"
+    assert body["reason"] == "cold_start_no_snapshot"
+    assert isinstance(body["process"], dict)
+    assert body["process"]["flowRateBpd"] > 0
+    assert body["process"]["source"] == "synthetic_reduced_order_model"
+    assert body["process"]["fieldCalibrated"] is False
 
 
 def test_latest_telemetry_is_labelled_as_existing_simulator_output(
@@ -107,6 +111,7 @@ def test_unknown_well_and_unready_service_are_explicit(
     status, body = _get(server, "/ready")
     assert status == 503
     assert body["reason"] == "tick_loop_not_current"
+    assert body["modelStatus"] == "lagging"
 
 
 def test_write_method_is_rejected(server: ThreadingHTTPServer) -> None:

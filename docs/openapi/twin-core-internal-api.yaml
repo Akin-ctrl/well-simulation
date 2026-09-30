@@ -1,12 +1,13 @@
 openapi: 3.1.0
 info:
   title: Twin-Core Internal API
-  version: 0.2.0
+  version: 0.3.0
   summary: Internal API for the wellhead twin-core service.
   description: |
     Health, readiness, metrics, lifecycle state, and existing simulator
-    telemetry reads are implemented. Process state remains unavailable until
-    the reduced-order model is built. Controls, forecasts, and scenarios below
+    telemetry reads are implemented. Process state is a synthetic, uncalibrated
+    reduced-order model, separate from the current historian simulator.
+    Controls, forecasts, and scenarios below
     are planned endpoints, not available in the running service.
 servers:
   - url: http://twin-core:8000
@@ -34,11 +35,11 @@ paths:
   /ready:
     get:
       tags: [Health]
-      summary: Service readiness, separate from physical model availability.
+      summary: Fleet, scheduler, and model readiness.
       operationId: getTwinReadiness
       responses:
         "200":
-          description: Fleet metadata and fixed-step loop are current.
+          description: All active wells have running model state.
           content:
             application/json:
               schema:
@@ -76,7 +77,7 @@ paths:
   /wellheads/{wellheadId}/state:
     get:
       tags: [State]
-      summary: Current model lifecycle state, with no physical output yet.
+      summary: Current synthetic model lifecycle and process state.
       operationId: getWellheadState
       parameters:
         - $ref: "#/components/parameters/WellheadId"
@@ -207,6 +208,7 @@ components:
         - modelVersion
         - modelStatus
         - activeWellheads
+        - runningWellheads
         - reason
         - timestamp
       properties:
@@ -220,8 +222,11 @@ components:
           type: string
         modelStatus:
           type: string
-          const: unavailable
+          enum: [running, lagging, degraded, unavailable]
         activeWellheads:
+          type: integer
+          minimum: 0
+        runningWellheads:
           type: integer
           minimum: 0
         reason:
@@ -237,6 +242,7 @@ components:
         - status
         - reason
         - tickIndex
+        - skippedTicks
         - lastTickAt
         - process
       properties:
@@ -253,6 +259,9 @@ components:
         tickIndex:
           type: integer
           minimum: 0
+        skippedTicks:
+          type: integer
+          minimum: 0
         lastTickAt:
           oneOf:
             - type: string
@@ -264,8 +273,10 @@ components:
             - type: "null"
     ProcessState:
       type: object
-      description: Physical model output, absent throughout Milestone 4.
+      description: Synthetic model output. It is not historian telemetry or a field measurement.
       required:
+        - source
+        - fieldCalibrated
         - simulatedAt
         - reservoirPressureProxyPsi
         - tubingPressurePsi
@@ -277,11 +288,18 @@ components:
         - swabValveOpen
         - pumpOn
         - emergencyShutdown
+        - pumpFlowFactor
         - wellheadTemperatureF
         - waterCutPercent
         - blockageFactor
         - corrosionFactor
       properties:
+        source:
+          type: string
+          const: synthetic_reduced_order_model
+        fieldCalibrated:
+          type: boolean
+          const: false
         simulatedAt:
           type: string
           format: date-time
@@ -307,6 +325,10 @@ components:
           type: boolean
         emergencyShutdown:
           type: boolean
+        pumpFlowFactor:
+          type: number
+          minimum: 0
+          maximum: 1
         wellheadTemperatureF:
           type: number
         waterCutPercent:

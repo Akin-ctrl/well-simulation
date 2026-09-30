@@ -2,7 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-05-31
-- Implementation: Not started
+- Implementation: Partial
 
 ## Context
 
@@ -39,3 +39,7 @@ The first twin version should favour clarity and causality. Each wellhead needs 
 - Model state snapshots should be stored separately from raw telemetry.
 - Unit tests should verify model response to control changes and faults.
 
+
+## Implementation on 2026-09-29
+
+A deterministic per-well process state now runs in twin-core. The Modbus simulator still feeds the historian, and durable snapshots remain Milestone 7 work.

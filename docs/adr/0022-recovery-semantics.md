@@ -71,3 +71,7 @@ The system should expose model status values such as:
 ## Implementation on 2026-09-29
 
 The scheduler bounds catch-up and records skipped time. Snapshot restoration, recovery events, and model recovery status still need the Milestone 7 schema.
+
+## Implementation on 2026-09-29
+
+A new process run starts from a synthetic balance and is labelled `cold_start_no_snapshot`. Scheduler gaps increment a per-well counter without integrating missed time. Snapshot restoration and durable recovery events remain Milestone 7 work.

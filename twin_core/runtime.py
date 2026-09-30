@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import threading
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from twin_core.config import ModelDefaults, ServiceSettings
 from twin_core.database import (
@@ -14,11 +14,12 @@ from twin_core.database import (
     TelemetrySnapshot,
 )
 from twin_core.metrics import TwinMetrics
+from twin_core.model import MODEL_STEP_SECONDS
 from twin_core.scheduler import plan_ticks
 from twin_core.state import ModelRegistry, WellheadState
 
 logger = logging.getLogger(__name__)
-TICK_INTERVAL_SECONDS = 1.0
+TICK_INTERVAL_SECONDS = MODEL_STEP_SECONDS
 MAX_READY_TICK_AGE_SECONDS = 3.0
 RETRY_FLEET_SECONDS = 5.0
 MAX_CONCURRENT_TELEMETRY_READS = 8
@@ -29,7 +30,7 @@ class ReadCapacityError(RuntimeError):
 
 
 class TwinRuntime:
-    """Own the operational lifecycle of the twin-core skeleton."""
+    """Own the operational lifecycle of the reduced-order twin core."""
 
     def __init__(
         self,
@@ -79,6 +80,7 @@ class TwinRuntime:
 
         self.metrics.active_wellheads.set(self.registry.count())
         self.metrics.invalid_parameters.set(self.registry.invalid_count())
+        self.metrics.running_wellheads.set(self.registry.running_count())
         self._set_fleet_ok(True)
         if not ids:
             logger.warning("No active wellheads are available")
@@ -118,10 +120,11 @@ class TwinRuntime:
 
         count = self.registry.count()
         invalid = self.registry.invalid_count()
+        running = self.registry.running_count()
         tick_current = (
             last_tick is not None and now - last_tick <= MAX_READY_TICK_AGE_SECONDS
         )
-        ready = fleet_ok and count > 0 and invalid == 0 and tick_current
+        ready = fleet_ok and count > 0 and running == count and tick_current
         if not fleet_ok:
             reason = "historian_unavailable"
         elif count == 0:
@@ -130,23 +133,38 @@ class TwinRuntime:
             reason = "invalid_model_parameters"
         elif not tick_current:
             reason = "tick_loop_not_current"
+        elif running != count:
+            reason = "model_not_running"
         else:
-            reason = "service_ready_model_unavailable"
+            reason = "service_ready_model_running"
+        if not fleet_ok or count == 0:
+            model_status = "unavailable"
+        elif running > 0 and not tick_current:
+            model_status = "lagging"
+        elif running == count:
+            model_status = "running"
+        elif running > 0:
+            model_status = "degraded"
+        else:
+            model_status = "unavailable"
         self.metrics.ready.set(1 if ready else 0)
         return ready, {
             "status": "ready" if ready else "not_ready",
             "service": "twin-core",
             "modelVersion": self.defaults.version,
-            "modelStatus": "unavailable",
+            "modelStatus": model_status,
             "activeWellheads": count,
+            "runningWellheads": running,
             "reason": reason,
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
 
     def run(self) -> None:
         """Refresh the fleet and execute bounded one-second service ticks."""
-        next_due = time.monotonic() + TICK_INTERVAL_SECONDS
-        next_refresh = time.monotonic()
+        anchor_monotonic = time.monotonic()
+        anchor_utc = datetime.now(timezone.utc)
+        next_due = anchor_monotonic + TICK_INTERVAL_SECONDS
+        next_refresh = anchor_monotonic
         while not self._stop.is_set():
             now = time.monotonic()
             if now >= next_refresh:
@@ -163,23 +181,30 @@ class TwinRuntime:
                 now, next_due, TICK_INTERVAL_SECONDS, self.settings.max_catchup_steps
             )
             next_due = batch.next_due
-            if batch.steps:
-                self.metrics.lag_seconds.set(batch.lag_seconds)
-                for _ in range(batch.steps):
-                    self.registry.tick(datetime.now(timezone.utc))
-                    self.metrics.ticks.inc()
-                with self._lock:
-                    self._last_tick_monotonic = time.monotonic()
-
             if batch.skipped:
+                self.registry.record_gap(batch.skipped)
                 self.metrics.skipped_ticks.inc(batch.skipped)
                 logger.warning(
-                    "Skipped delayed service ticks",
+                    "Skipped delayed model ticks",
                     extra={
                         "skipped_ticks": batch.skipped,
                         "lag_seconds": batch.lag_seconds,
                     },
                 )
+            if batch.steps:
+                self.metrics.lag_seconds.set(batch.lag_seconds)
+                for index in range(batch.steps):
+                    scheduled = (
+                        batch.next_due - (batch.steps - index) * TICK_INTERVAL_SECONDS
+                    )
+                    at = anchor_utc + timedelta(seconds=scheduled - anchor_monotonic)
+                    advanced, failed = self.registry.tick(at)
+                    self.metrics.ticks.inc()
+                    self.metrics.model_steps.inc(advanced)
+                    self.metrics.model_step_errors.inc(failed)
+                self.metrics.running_wellheads.set(self.registry.running_count())
+                with self._lock:
+                    self._last_tick_monotonic = time.monotonic()
 
             wait_seconds = max(0.0, min(next_due, next_refresh) - time.monotonic())
             self._stop.wait(wait_seconds)

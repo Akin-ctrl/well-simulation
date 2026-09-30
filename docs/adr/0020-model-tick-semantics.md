@@ -57,3 +57,7 @@ The service must not apply one large elapsed-time update after a pause. Instead,
 ## Implementation on 2026-09-29
 
 The service runs a one-second fixed scheduler with bounded catch-up, skipped-tick logging, and lag metrics. No physical model step, model telemetry emission, or state snapshot is produced yet.
+
+## Implementation on 2026-09-29
+
+The fixed scheduler now executes a pure one-second process step for each active well. Each skipped tick is counted per well and never replayed as a large step. Telemetry emission and durable snapshots remain later milestones.

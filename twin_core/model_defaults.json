@@ -1,5 +1,5 @@
 {
-  "modelVersion": "0.1.0",
+  "modelVersion": "0.2.0",
   "description": "Synthetic defaults for the first reduced-order wellhead model. These are not field-calibrated values.",
   "parameters": {
     "reservoir_pressure_proxy": {
@@ -31,7 +31,7 @@
     },
     "choke_coefficient": {
       "description": "Choke and pressure drop to outflow conversion",
-      "unit": "model coefficient",
+      "unit": "bbl/day/sqrt(psi)",
       "default": 18,
       "minimum": 1,
       "maximum": 100,
@@ -40,7 +40,7 @@
     },
     "pressure_gain_coefficient": {
       "description": "Pressure response to flow imbalance",
-      "unit": "psi per flow imbalance/sec",
+      "unit": "psi per (bbl/day) per sec",
       "default": 0.002,
       "minimum": 0.0001,
       "maximum": 0.02,
@@ -143,6 +143,51 @@
       "default": 5000,
       "minimum": 100,
       "maximum": 50000,
+      "changeLive": false,
+      "requiresRestart": true
+    },
+    "pump_off_flow_factor": {
+      "description": "Residual natural flow when pump is off",
+      "unit": "fraction",
+      "default": 0.55,
+      "minimum": 0,
+      "maximum": 1,
+      "changeLive": false,
+      "requiresRestart": true
+    },
+    "pump_response_rate": {
+      "description": "Pump flow response speed",
+      "unit": "1/sec",
+      "default": 0.03,
+      "minimum": 0.001,
+      "maximum": 0.2,
+      "changeLive": false,
+      "requiresRestart": true
+    },
+    "casing_pressure_fraction": {
+      "description": "Casing target relative to tubing pressure",
+      "unit": "fraction",
+      "default": 0.65,
+      "minimum": 0,
+      "maximum": 1,
+      "changeLive": false,
+      "requiresRestart": true
+    },
+    "casing_response_rate": {
+      "description": "Casing pressure lag speed",
+      "unit": "1/sec",
+      "default": 0.02,
+      "minimum": 0.001,
+      "maximum": 0.2,
+      "changeLive": false,
+      "requiresRestart": true
+    },
+    "max_corrosion_factor": {
+      "description": "Upper synthetic corrosion index bound",
+      "unit": "index",
+      "default": 2,
+      "minimum": 1,
+      "maximum": 5,
       "changeLive": false,
       "requiresRestart": true
     }

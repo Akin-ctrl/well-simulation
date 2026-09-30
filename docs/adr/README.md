@@ -27,13 +27,13 @@ previously written down.
 | --- | --- | --- |
 | [0001](0001-project-positioning.md) | Position The Project As A Wellhead Monitoring Simulation Before Digital Twin | Implemented |
 | [0002](0002-lightweight-digital-twin-architecture.md) | Use A Layered Lightweight Digital Twin Architecture | Partial |
-| [0003](0003-stateful-process-model.md) | Make A Stateful Process Model The Twin Core | Not started |
+| [0003](0003-stateful-process-model.md) | Make A Stateful Process Model The Twin Core | Partial |
 | [0004](0004-industrial-interface.md) | Keep Modbus TCP As The Industrial Edge Interface | Implemented |
 | [0005](0005-data-historian.md) | Use PostgreSQL And TimescaleDB As The Historian | Implemented |
 | [0006](0006-schema-management.md) | Use SQL Migrations As The Canonical Schema Source | Implemented |
 | [0007](0007-control-and-what-if-boundaries.md) | Separate Live Control From What-If Simulation | Not started |
 | [0008](0008-production-deployment-baseline.md) | Use A Containerized Service Baseline | Implemented |
-| [0009](0009-model-fidelity.md) | Start With A Lightweight Deterministic Model | Not started |
+| [0009](0009-model-fidelity.md) | Start With A Lightweight Deterministic Model | Partial |
 | [0010](0010-model-runtime.md) | Run The Twin Core As A Separate Python Service | Implemented |
 | [0011](0011-twin-core-communication.md) | Use Internal HTTP Plus Durable Database Persistence | Partial |
 | [0012](0012-state-storage.md) | Keep Active Twin State In Memory With Durable Snapshots | Partial |
@@ -43,11 +43,11 @@ previously written down.
 | [0016](0016-api-contract.md) | Use REST APIs Documented With OpenAPI | Implemented |
 | [0017](0017-observability-baseline.md) | Use Structured Logs, Health Checks, And Metrics As The Observability Baseline | Implemented |
 | [0018](0018-deployment-target.md) | Use Docker Compose As The First Production-Grade Deployment Target | Implemented |
-| [0019](0019-model-equations.md) | Use A Reduced-Order Mechanistic Wellhead Model | Not started |
+| [0019](0019-model-equations.md) | Use A Reduced-Order Mechanistic Wellhead Model | Implemented |
 | [0020](0020-model-tick-semantics.md) | Use Fixed Timestep Model Updates | Partial |
 | [0021](0021-model-parameterization.md) | Use Version-Controlled Defaults With Database Overrides | Partial |
 | [0022](0022-recovery-semantics.md) | Restore From Snapshots And Mark Recovery Gaps | Partial |
-| [0023](0023-default-parameter-set.md) | Use Documented Synthetic Engineering Defaults | Partial |
+| [0023](0023-default-parameter-set.md) | Use Documented Synthetic Engineering Defaults | Implemented |
 | [0024](0024-twin-persistence-schema.md) | Use Relational Twin Metadata With Time-Series Run Outputs | Not started |
 | [0025](0025-forecast-horizon-confidence.md) | Use Short Operational Forecasts With Heuristic Confidence | Not started |
 | [0026](0026-retention-and-compression.md) | Use Tiered Retention And TimescaleDB Compression | Implemented |

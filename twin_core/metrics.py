@@ -16,6 +16,21 @@ class TwinMetrics:
             "Fixed-step service ticks completed",
             registry=self.registry,
         )
+        self.model_steps = Counter(
+            "well_sim_twin_model_steps_total",
+            "One-second physical model steps completed across all wells",
+            registry=self.registry,
+        )
+        self.model_step_errors = Counter(
+            "well_sim_twin_model_step_errors_total",
+            "Physical model steps that failed validation or calculation",
+            registry=self.registry,
+        )
+        self.running_wellheads = Gauge(
+            "well_sim_twin_running_wellheads",
+            "Active wellheads with a running physical model",
+            registry=self.registry,
+        )
         self.skipped_ticks = Counter(
             "well_sim_twin_skipped_ticks_total",
             "Fixed-step ticks skipped after the catch-up limit",

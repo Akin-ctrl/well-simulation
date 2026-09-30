@@ -19,7 +19,7 @@ none of those.
 - A PostgreSQL and TimescaleDB historian
 - Alarm evaluation in SQL
 - A public TypeScript API
-- A separate twin-core service skeleton with no physical model yet
+- A separate twin-core service with an uncalibrated per-well process model
 - A React dashboard with an overview, analytics, per-wellhead detail pages, and
   an Alarm Center
 
@@ -32,10 +32,11 @@ acknowledge or shelve actions because the data model cannot store those states.
 - `architecture/production-readiness.md`: what production-grade means here
 - `adr/README.md`: the ADR format and the index
 - `demo/demo-script.md`: the demo flow for a portfolio review
-- `design/twin-core-milestone-4.md`: the new service design and its limits
+- `design/twin-core-milestone-4.md`: the service boundary and its limits
+- `design/twin-core-milestone-5.md`: the process model equations and limits
 - `openapi/README.md`: the API contracts and the rules for changing them
-- `roadmap.md`: the tracked feature plan
-- `remediation-roadmap.md`: the repair record
+- `roadmap.md`: the local feature plan (ignored by Git)
+- `remediation-roadmap.md`: the local repair record (ignored by Git)
 
 ## Documentation backlog
 

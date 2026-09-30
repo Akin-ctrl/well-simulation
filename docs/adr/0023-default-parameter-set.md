@@ -1,8 +1,8 @@
 # ADR 0023: Use Documented Synthetic Engineering Defaults
 
-- Status: Accepted
+- Status: Accepted, amended
 - Date: 2026-05-31
-- Implementation: Partial
+- Implementation: Implemented
 
 ## Context
 
@@ -82,3 +82,23 @@ The variation must be deterministic across restarts unless explicitly changed by
 ## Implementation on 2026-09-29
 
 All 16 documented defaults load from a version-controlled file with units and bounds. Deterministic per-well variation will arrive with the process model in Milestone 5.
+
+## Amendment 2026-09-29: complete the response parameters
+
+The original 16 defaults remain. The implemented model also needs five bounded
+values that the first table did not name:
+
+| Parameter | Unit | Default | Valid range | Purpose |
+| --- | --- | ---: | --- | --- |
+| `pump_off_flow_factor` | fraction | 0.55 | 0 to 1 | Residual natural flow without pumping |
+| `pump_response_rate` | 1/sec | 0.03 | 0.001 to 0.2 | Pump response speed |
+| `casing_pressure_fraction` | fraction | 0.65 | 0 to 1 | Casing target relative to tubing pressure |
+| `casing_response_rate` | 1/sec | 0.02 | 0.001 to 0.2 | Casing pressure response speed |
+| `max_corrosion_factor` | index | 2 | 1 to 5 | Bound on synthetic corrosion progression |
+
+The `choke_coefficient` unit is more precisely bbl/day/sqrt(psi), and the
+`pressure_gain_coefficient` unit is psi per (bbl/day) per second. These clarify
+the original model coefficient labels; their numeric defaults do not change.
+The versioned file is the active source for all 21 defaults and their ranges.
+Stable per-well variation and bounds are implemented. These values are still
+uncalibrated demonstration parameters.

@@ -2,7 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-05-31
-- Implementation: Not started
+- Implementation: Partial
 
 ## Context
 
@@ -62,3 +62,7 @@ The first version should model:
 - Model equations and assumptions must be documented.
 - Tests should verify basic control-response behavior.
 
+
+## Implementation on 2026-09-29
+
+The reduced-order deterministic model now runs in twin-core. Existing Modbus telemetry is still random until Milestone 6 connects the sources.

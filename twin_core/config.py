@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 import os
@@ -147,13 +148,37 @@ def parse_environment_overrides(raw: str) -> Mapping[str, object]:
     return _object(json.loads(raw), "TWIN_MODEL_OVERRIDES_JSON")
 
 
+def stable_fraction(wellhead_id: int, key: str) -> float:
+    """Return a stable, process-independent fraction for one well and purpose."""
+    if wellhead_id <= 0 or not key:
+        raise ValueError("Variation requires a positive wellhead id and key")
+    digest = hashlib.blake2b(
+        f"{wellhead_id}:{key}".encode("utf-8"), digest_size=8
+    ).digest()
+    return int.from_bytes(digest, "big") / (1 << 64)
+
+
 def resolve_parameters(
     defaults: ModelDefaults,
     environment: Mapping[str, object],
     per_well: Mapping[str, ParameterOverride],
+    wellhead_id: int | None = None,
 ) -> dict[str, float]:
-    """Apply global values, then per-well values with matching units."""
+    """Apply stable well variation, then global and per-well overrides."""
     resolved = {key: spec.default for key, spec in defaults.parameters.items()}
+    if wellhead_id is not None:
+        for key, fraction, spread in (
+            (
+                "reservoir_pressure_proxy",
+                stable_fraction(wellhead_id, "reservoir"),
+                0.08,
+            ),
+            ("productivity_index", stable_fraction(wellhead_id, "productivity"), 0.15),
+            ("choke_coefficient", stable_fraction(wellhead_id, "choke"), 0.10),
+        ):
+            spec = defaults.parameters[key]
+            varied = spec.default * (1.0 + (2.0 * fraction - 1.0) * spread)
+            resolved[key] = spec.validate(min(max(varied, spec.minimum), spec.maximum))
     for source in (environment, per_well):
         unknown = set(source) - set(defaults.parameters)
         if unknown:

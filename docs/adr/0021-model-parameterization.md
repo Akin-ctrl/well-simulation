@@ -83,3 +83,7 @@ Each model parameter should define:
 ## Implementation on 2026-09-29
 
 Versioned defaults and validated global overrides load now. A typed per-well override source is ready, but the database table and adapter belong to Milestone 7.
+
+## Implementation on 2026-09-29
+
+The model now consumes validated typed parameters. Stable per-well variation is applied before global and future database overrides. Runtime parameter changes are rejected with `restart_required`. The database override table remains Milestone 7 work.

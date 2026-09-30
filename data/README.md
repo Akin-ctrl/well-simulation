@@ -94,7 +94,7 @@ The readings are random values inside each parameter's configured range. About
 one in ten draws use a wider range; only some of those values fall outside the
 normal range and exercise the alarm rules.
 
-There is no physics in these readings. Nothing links tubing pressure to flow
-rate, and closing a choke would change nothing. The separate twin-core service
-now has a scheduler and typed state, but no process equations or model output.
-Replacing the random source with model output is later work.
+There is no physics in these stored readings. Nothing links their tubing
+pressure to flow rate. The separate twin-core service now calculates synthetic
+process state with linked pressure, flow, temperature, and degradation. Its
+output will replace the random Modbus source in Milestone 6.

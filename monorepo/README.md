@@ -92,4 +92,5 @@ cd packages/ui && ../../node_modules/.bin/biome lint . && ../../node_modules/.bi
   but it does not compare every response field against running endpoints.
 - Auth has login, logout, current-user, and administrator-only user creation.
   Existing sessions are not revoked immediately when an administrator changes a role.
-- The twin-core skeleton is running, but its process equations are not built.
+- Twin-core calculates synthetic process state, but its output is not yet the
+  source for Modbus, the historian, or the dashboard.
