@@ -1,0 +1,63 @@
+# Tooling configuration for the Python services and repository scripts.
+#
+# CODING_STANDARDS_COMMITMENT.md requires PEP 8 discipline, type hints on public
+# APIs, and docstrings on non-trivial modules and functions. This file is what
+# makes those requirements checkable rather than aspirational.
+
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+src = ["data/src", "twin_core", "scripts"]
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # import ordering
+    "B",    # bugbear: likely bugs and design problems
+    "C90",  # mccabe complexity
+    "N",    # pep8 naming
+    "D",    # docstrings (Standard 4)
+    "ANN",  # type annotations (Standard 7)
+    "ASYNC",
+    "S",    # bandit security rules (Standard 10)
+    "SIM",  # simplification
+    "RET",  # return consistency
+    "ARG",  # unused arguments
+    "PTH",  # prefer pathlib
+    "RUF",
+]
+ignore = [
+    "D203",  # incompatible with D211
+    "D213",  # incompatible with D212
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Test names and assertions are the documentation; assert is the point.
+"data/tests/*" = ["D100", "D101", "D102", "D103", "D104", "S101"]
+"twin_core/tests/*" = ["D100", "D101", "D102", "D103", "D104", "S101"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
+
+[tool.ruff.lint.pydocstyle]
+convention = "pep257"
+
+[tool.mypy]
+python_version = "3.12"
+files = ["data/src", "data/tests", "twin_core", "scripts"]
+mypy_path = "data/src"
+strict = true
+warn_unreachable = true
+# Missing third-party types must not be mistaken for missing types in our own
+# code. psycopg2 is covered by types-psycopg2; pymodbus ships only partial
+# annotations, so its constructors read as untyped. Narrowly exempt calls into
+# those packages rather than relaxing strictness across the codebase.
+ignore_missing_imports = true
+untyped_calls_exclude = ["pymodbus", "psycopg2"]
+
+[tool.pytest.ini_options]
+testpaths = ["data/tests", "twin_core/tests"]
+pythonpath = [".", "data/src"]
+addopts = "-q"

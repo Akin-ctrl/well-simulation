@@ -1,15 +1,11 @@
 import { hc, type ClientResponse } from 'hono/client';
-import type { AppType } from '@corsight/api/src/_app';
-import type { ApiErr, ApiRes } from '@corsight/dto/res/response';
-import { ApiError } from '@corsight/dto/error';
-import { removeUndefined } from '@corsight/utils/misc';
-import { SERVER_BASE_URL } from '@corsight/utils/configs';
+import type { AppType } from '@well-simulation/api/src/_app';
+import type { ApiErr, ApiRes } from '@well-simulation/dto/res/response';
+import { ApiError } from '@well-simulation/dto/error';
+import { removeUndefined } from '@well-simulation/utils/misc';
+import { SERVER_BASE_URL } from '@well-simulation/utils/configs';
 
-const isServer = typeof window === 'undefined';
-
-const baseUrl = isServer ? SERVER_BASE_URL : '/api';
-
-const client = hc<AppType>(baseUrl, {
+const client = hc<AppType>(SERVER_BASE_URL, {
   fetch: (input: RequestInfo | URL, init?: RequestInit) => {
     return fetch(input, { ...init, credentials: 'include' });
   },
@@ -77,6 +73,15 @@ async function fetchFn<T>(
       throw new ApiError(
         jsonParseError,
         'Malformed JSON response from API',
+        /**
+         * The typed client for the dashboard API.
+         *
+         * Wraps Hono's RPC client so every call goes through one place that unwraps the
+         * response envelope and turns a failure into an ApiError carrying the status.
+         * Routes depend on that status: the dashboard layout signs a user out on a 401
+         * and shows an error on anything else.
+         */
+
         response.status
       );
     }
@@ -107,11 +112,7 @@ async function fetchFn<T>(
     }
 
     const successfulBody = responseBody as ApiRes<T> | ErrorResponseBody;
-    if (
-      isRecord(successfulBody) &&
-      'error' in successfulBody &&
-      successfulBody.error
-    ) {
+    if (isRecord(successfulBody) && 'error' in successfulBody && successfulBody.error) {
       throw new ApiError(
         successfulBody.error,
         successfulBody.msg || 'API returned an error',

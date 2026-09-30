@@ -1,21 +1,19 @@
-import { Input } from '@corsight/ui/input';
-import { Button } from '@corsight/ui/button';
+import { Input } from '@well-simulation/ui/input';
+import { Button } from '@well-simulation/ui/button';
 import { Link, redirect, useFetcher } from 'react-router';
 import { routes } from '../config/routes';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { registerSchema } from '@corsight/dto/req/auth';
-import { type SToType } from '@corsight/dto';
+import { registerSchema } from '@well-simulation/dto/req/auth';
+import { type SToType } from '@well-simulation/dto';
 import type { Route } from './+types/_auth.register';
 import { client, fetchFn } from '../utils/api';
-import type { ApiError } from '@corsight/dto/error';
-import { toast } from '@corsight/ui/toast';
-import { Password } from '@corsight/ui/password';
+import type { ApiError } from '@well-simulation/dto/error';
+import { toast } from '@well-simulation/ui/toast';
+import { Password } from '@well-simulation/ui/password';
 
 export async function clientAction(args: Route.ClientActionArgs) {
-  const formData = (await args.request.json()) as SToType<
-    typeof registerSchema
-  >;
+  const formData = (await args.request.json()) as SToType<typeof registerSchema>;
   try {
     await fetchFn(client.auth.register.$post({ json: formData }));
     return redirect(routes.auth.login);
@@ -49,7 +47,8 @@ export default function Register() {
             encType: 'application/json',
           });
         })}
-        className='max-w-md flex flex-col gap-3 mt-32 mx-auto w-full'>
+        className='max-w-md flex flex-col gap-3 mt-32 mx-auto w-full'
+      >
         <Input
           {...form.register('username')}
           placeholder='Enter username'

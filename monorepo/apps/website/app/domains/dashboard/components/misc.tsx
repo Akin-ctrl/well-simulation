@@ -1,4 +1,4 @@
-import { cn } from '@corsight/utils/cn';
+import { cn } from '@well-simulation/utils/cn';
 import type { ReactNode } from 'react';
 
 export const Title = ({
@@ -10,7 +10,7 @@ export const Title = ({
 }) => {
   return (
     <>
-      <title>{`${children} | Corsight`}</title>
+      <title>{`${children} | Well Simulation`}</title>
       <h4 className={cn('font-semibold italic', className)}>{children}</h4>
     </>
   );

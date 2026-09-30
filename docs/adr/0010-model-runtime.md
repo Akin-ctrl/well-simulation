@@ -2,6 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-05-31
+- Implementation: Implemented
 
 ## Context
 
@@ -43,3 +44,6 @@ Python is the best fit for the model layer now and leaves room for NumPy, SciPy,
 - The current simulator should evolve toward or be replaced by this service.
 - The twin core should be tested independently from API and Modbus code.
 
+## Implementation on 2026-09-29
+
+The separate Python service runs in Docker Compose. It owns its own state, scheduler, internal HTTP listener, logs, and metrics. The process equations remain Milestone 5 work.

@@ -4,8 +4,10 @@ This directory contains committed API specifications for the wellhead monitoring
 
 ## Specifications
 
-- `public-api.yaml` — dashboard-facing TypeScript/Hono API implemented by `monorepo/apps/api`.
-- `twin-core-internal-api.yaml` — planned internal Python twin-core API. This is a design contract, not an implemented service yet.
+- `public-api.yaml`: dashboard-facing TypeScript/Hono API implemented by `monorepo/apps/api`.
+- `twin-core-internal-api.yaml`: implemented internal reads and operational
+  endpoints for the Python twin-core service. Control, forecast, and scenario
+  operations remain planned.
 
 ## Rules
 

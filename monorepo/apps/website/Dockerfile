@@ -15,7 +15,6 @@ COPY packages/db/package.json packages/db/package.json
 COPY packages/dto/package.json packages/dto/package.json
 COPY packages/eslint-config/package.json packages/eslint-config/package.json
 COPY packages/tsconfig/package.json packages/tsconfig/package.json
-COPY packages/typescript-config/package.json packages/typescript-config/package.json
 COPY packages/ui/package.json packages/ui/package.json
 COPY packages/utils/package.json packages/utils/package.json
 COPY apps/api/package.json apps/api/package.json
@@ -24,7 +23,7 @@ RUN pnpm install --frozen-lockfile
 
 # Copy remaining source files and build only the dashboard app.
 COPY . .
-RUN pnpm --filter @corsight/website exec react-router build
+RUN pnpm --filter @well-simulation/website exec react-router build
 
 FROM nginx:1.27-alpine AS runner
 

@@ -2,6 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-05-31
+- Implementation: Partial
 
 ## Context
 
@@ -30,7 +31,7 @@ Start with **Option C: deterministic/rule-based stateful process model**.
 
 ## Rationale
 
-The first twin version should prioritize clarity and causality. Each wellhead should have model state such as tubing pressure, casing pressure, flow rate, choke position, valve states, pump state, water cut, temperature, and degradation factors.
+The first twin version should favour clarity and causality. Each wellhead needs model state. That covers tubing pressure, casing pressure, flow rate, choke position, valve states, pump state, water cut, temperature, and degradation factors.
 
 ## Consequences
 
@@ -38,3 +39,14 @@ The first twin version should prioritize clarity and causality. Each wellhead sh
 - Model state snapshots should be stored separately from raw telemetry.
 - Unit tests should verify model response to control changes and faults.
 
+
+## Implementation on 2026-09-29
+
+A deterministic per-well process state now runs in twin-core. The Modbus simulator still feeds the historian, and durable snapshots remain Milestone 7 work.
+
+## Implementation update on 2026-09-30
+
+Milestone 6 replaced the random Modbus source with the current model state.
+The gateway now reads one complete model fleet snapshot. Ingestion stores the
+supported values with a model source label. Durable model state snapshots remain
+Milestone 7 work.

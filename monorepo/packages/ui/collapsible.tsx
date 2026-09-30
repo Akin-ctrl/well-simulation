@@ -1,6 +1,6 @@
 import React from 'react';
 import * as CollapsiblePrimitive from '@radix-ui/react-collapsible';
-import { cn } from '@corsight/utils/cn';
+import { cn } from '@well-simulation/utils/cn';
 
 const Collapsible = CollapsiblePrimitive.Root;
 
@@ -15,7 +15,8 @@ const CollapsibleContent = React.forwardRef<
   <CollapsiblePrimitive.CollapsibleContent
     ref={ref}
     className='data-[state=closed]:animate-collapsible-up data-[state=open]:animate-collapsible-down text-body-medium overflow-hidden transition-all'
-    {...props}>
+    {...props}
+  >
     <div className={cn('pb-4 pt-0', className)}>{children}</div>
   </CollapsiblePrimitive.CollapsibleContent>
 ));

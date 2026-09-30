@@ -3,8 +3,11 @@
 venv/
 __pycache__/
 *.py[cod]
+
+# Planning documents kept local, not published.
 CODING_STANDARDS_COMMITMENT.md
 docs/roadmap.md
+docs/remediation-roadmap.md
 
 # Dependencies
 node_modules

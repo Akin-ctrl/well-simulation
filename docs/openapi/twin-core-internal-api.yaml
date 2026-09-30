@@ -1,19 +1,21 @@
 openapi: 3.1.0
 info:
   title: Twin-Core Internal API
-  version: 0.1.0
-  summary: Planned internal API for the future lightweight wellhead twin-core service.
+  version: 0.4.0
+  summary: Internal API for the wellhead twin-core service.
   description: |
-    This is a design contract for the next implementation phase. The twin-core
-    service does not exist yet. These endpoints describe the minimum credible
-    boundary needed to evolve the current monitoring simulation into a lightweight
-    digital twin without pretending to be a full high-fidelity reservoir simulator.
+    Health, readiness, metrics, lifecycle state, complete model fleet snapshots,
+    and source-labelled historian telemetry reads are implemented. Process
+    values are synthetic and uncalibrated.
+    Controls, forecasts, and scenarios below
+    are planned endpoints, not available in the running service.
 servers:
   - url: http://twin-core:8000
-    description: Planned Docker Compose service address.
+    description: Internal Docker Compose service address.
 tags:
   - name: Health
   - name: State
+  - name: Telemetry
   - name: Controls
   - name: Forecasts
   - name: Scenarios
@@ -21,7 +23,7 @@ paths:
   /health:
     get:
       tags: [Health]
-      summary: Planned liveness check.
+      summary: Process liveness check.
       operationId: getTwinHealth
       responses:
         "200":
@@ -33,25 +35,73 @@ paths:
   /ready:
     get:
       tags: [Health]
-      summary: Planned readiness check.
+      summary: Fleet, scheduler, and model readiness.
       operationId: getTwinReadiness
       responses:
         "200":
-          description: Twin-core has loaded model defaults and can serve state.
+          description: All active wells have running model state.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ReadinessResponse"
+  /metrics:
+    get:
+      tags: [Health]
+      summary: Prometheus-compatible service metrics.
+      operationId: getTwinMetrics
+      responses:
+        "200":
+          description: Twin-core service counters and gauges.
+          content:
+            text/plain:
+              schema:
+                type: string
+  /model-snapshot:
+    get:
+      tags: [Telemetry]
+      summary: Complete current model fleet for the internal Modbus gateway.
+      operationId: getModelSnapshot
+      responses:
+        "200":
+          description: Every active well has a running model state.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ModelFleetSnapshot"
+        "503":
+          description: A model tick or active well is not ready.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /wellheads/{wellheadId}/latest-telemetry:
+    get:
+      tags: [Telemetry]
+      summary: Latest source-labelled readings from the historian.
+      operationId: getWellheadLatestTelemetry
+      parameters:
+        - $ref: "#/components/parameters/WellheadId"
+      responses:
+        "200":
+          description: Per-parameter latest readings with quality and timestamps.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TelemetrySnapshot"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/HistorianUnavailable"
   /wellheads/{wellheadId}/state:
     get:
       tags: [State]
-      summary: Planned endpoint for current model state.
+      summary: Current synthetic model lifecycle and process state.
       operationId: getWellheadState
       parameters:
         - $ref: "#/components/parameters/WellheadId"
       responses:
         "200":
-          description: Current state of the reduced-order wellhead model.
+          description: Current lifecycle state and optional physical model state.
           content:
             application/json:
               schema:
@@ -148,6 +198,12 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/ErrorResponse"
+    HistorianUnavailable:
+      description: Historian read failed, timed out, or read capacity was full.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
   schemas:
     HealthResponse:
       type: object
@@ -164,15 +220,34 @@ components:
           format: date-time
     ReadinessResponse:
       type: object
-      required: [status, service, modelVersion, timestamp]
+      required:
+        - status
+        - service
+        - modelVersion
+        - modelStatus
+        - activeWellheads
+        - runningWellheads
+        - reason
+        - timestamp
       properties:
         status:
           type: string
-          const: ready
+          enum: [ready, not_ready]
         service:
           type: string
           const: twin-core
         modelVersion:
+          type: string
+        modelStatus:
+          type: string
+          enum: [running, lagging, degraded, unavailable]
+        activeWellheads:
+          type: integer
+          minimum: 0
+        runningWellheads:
+          type: integer
+          minimum: 0
+        reason:
           type: string
         timestamp:
           type: string
@@ -182,23 +257,86 @@ components:
       required:
         - wellheadId
         - modelVersion
-        - simulatedAt
-        - pressurePsi
-        - temperatureC
-        - flowRateBpd
-        - chokePositionPercent
-        - valveState
+        - status
+        - reason
+        - tickIndex
+        - skippedTicks
+        - lastTickAt
+        - process
       properties:
         wellheadId:
           type: integer
+          minimum: 1
         modelVersion:
           type: string
+        status:
+          type: string
+          enum: [initializing, running, lagging, recovering, degraded, unavailable]
+        reason:
+          type: string
+        tickIndex:
+          type: integer
+          minimum: 0
+        skippedTicks:
+          type: integer
+          minimum: 0
+        lastTickAt:
+          oneOf:
+            - type: string
+              format: date-time
+            - type: "null"
+        process:
+          oneOf:
+            - $ref: "#/components/schemas/ProcessState"
+            - type: "null"
+    ProcessState:
+      type: object
+      description: Synthetic model output. It is not historian telemetry or a field measurement.
+      required:
+        - source
+        - fieldCalibrated
+        - simulatedAt
+        - reservoirPressureProxyPsi
+        - tubingPressurePsi
+        - casingPressurePsi
+        - flowRateBpd
+        - chokePositionPercent
+        - masterValveOpen
+        - wingValveOpen
+        - swabValveOpen
+        - pumpOn
+        - emergencyShutdown
+        - pumpFlowFactor
+        - wellheadTemperatureF
+        - waterCutPercent
+        - blockageFactor
+        - corrosionFactor
+        - annulusPressurePsi
+        - annulusTemperatureF
+        - oilRateBpd
+        - waterRateBpd
+        - gasRateScfd
+        - gasOilRatioScfStb
+        - sandDetectorPpm
+        - corrosionRateMpy
+        - h2sLevelPpm
+        - co2LevelPercent
+        - vibrationMmS
+      properties:
+        source:
+          type: string
+          const: synthetic_reduced_order_model
+        fieldCalibrated:
+          type: boolean
+          const: false
         simulatedAt:
           type: string
           format: date-time
-        pressurePsi:
+        reservoirPressureProxyPsi:
           type: number
-        temperatureC:
+        tubingPressurePsi:
+          type: number
+        casingPressurePsi:
           type: number
         flowRateBpd:
           type: number
@@ -206,9 +344,22 @@ components:
           type: number
           minimum: 0
           maximum: 100
-        valveState:
-          type: string
-          enum: [open, closed]
+        masterValveOpen:
+          type: boolean
+        wingValveOpen:
+          type: boolean
+        swabValveOpen:
+          type: boolean
+        pumpOn:
+          type: boolean
+        emergencyShutdown:
+          type: boolean
+        pumpFlowFactor:
+          type: number
+          minimum: 0
+          maximum: 1
+        wellheadTemperatureF:
+          type: number
         waterCutPercent:
           type: number
           minimum: 0
@@ -217,10 +368,141 @@ components:
           type: number
           minimum: 0
           maximum: 1
-        confidence:
+        corrosionFactor:
+          type: number
+        annulusPressurePsi:
           type: number
           minimum: 0
-          maximum: 1
+        annulusTemperatureF:
+          type: number
+        oilRateBpd:
+          type: number
+          minimum: 0
+        waterRateBpd:
+          type: number
+          minimum: 0
+        gasRateScfd:
+          type: number
+          minimum: 0
+        gasOilRatioScfStb:
+          type: number
+          minimum: 0
+        sandDetectorPpm:
+          type: number
+          minimum: 0
+        corrosionRateMpy:
+          type: number
+          minimum: 0
+        h2sLevelPpm:
+          type: number
+          minimum: 0
+        co2LevelPercent:
+          type: number
+          minimum: 0
+          maximum: 100
+        vibrationMmS:
+          type: number
+          minimum: 0
+    ModelFleetSnapshot:
+      type: object
+      required: [source, fieldCalibrated, modelVersion, wellheads]
+      properties:
+        source:
+          type: string
+          const: synthetic_reduced_order_model
+        fieldCalibrated:
+          type: boolean
+          const: false
+        modelVersion:
+          type: string
+        wellheads:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/WellheadState"
+    TelemetrySnapshot:
+      type: object
+      required:
+        - wellheadId
+        - observedAt
+        - source
+        - modelGenerated
+        - quality
+        - complete
+        - expectedParameterCount
+        - availableParameterCount
+        - readings
+      properties:
+        wellheadId:
+          type: integer
+          minimum: 1
+        observedAt:
+          type: string
+          format: date-time
+        source:
+          type: string
+          enum: [synthetic_random_simulator, synthetic_reduced_order_model, mixed, unknown]
+        modelGenerated:
+          type: boolean
+        quality:
+          type: string
+          enum: [fresh, stale, partial, missing, invalid, clock_skew]
+        complete:
+          type: boolean
+        expectedParameterCount:
+          type: integer
+          minimum: 0
+        availableParameterCount:
+          type: integer
+          minimum: 0
+        readings:
+          type: array
+          items:
+            $ref: "#/components/schemas/TelemetryReading"
+    TelemetryReading:
+      type: object
+      required:
+        - code
+        - unit
+        - value
+        - sourceTimestamp
+        - insertedAt
+        - ageSeconds
+        - quality
+        - source
+      properties:
+        code:
+          type: string
+        unit:
+          oneOf:
+            - type: string
+            - type: "null"
+        value:
+          oneOf:
+            - type: number
+            - type: "null"
+        sourceTimestamp:
+          oneOf:
+            - type: string
+              format: date-time
+            - type: "null"
+        insertedAt:
+          oneOf:
+            - type: string
+              format: date-time
+            - type: "null"
+        ageSeconds:
+          oneOf:
+            - type: number
+            - type: "null"
+        quality:
+          type: string
+          enum: [fresh, stale, missing, invalid, clock_skew]
+        source:
+          oneOf:
+            - type: string
+              enum: [synthetic_random_simulator, synthetic_reduced_order_model]
+            - type: "null"
     ControlInput:
       type: object
       additionalProperties: false
@@ -277,14 +559,14 @@ components:
             $ref: "#/components/schemas/ForecastPoint"
     ForecastPoint:
       type: object
-      required: [timestamp, pressurePsi, temperatureC, flowRateBpd, confidence]
+      required: [timestamp, pressurePsi, temperatureF, flowRateBpd, confidence]
       properties:
         timestamp:
           type: string
           format: date-time
         pressurePsi:
           type: number
-        temperatureC:
+        temperatureF:
           type: number
         flowRateBpd:
           type: number
@@ -333,10 +615,7 @@ components:
             $ref: "#/components/schemas/ForecastPoint"
     ErrorResponse:
       type: object
+      required: [error]
       properties:
-        msg:
-          type: string
-        status:
-          type: integer
         error:
           type: string

@@ -2,6 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-05-31
+- Implementation: Partial
 
 ## Context
 
@@ -35,7 +36,7 @@ Use **Option D: restore latest valid snapshots, use bounded catch-up for small g
 
 ## Rationale
 
-The system should be honest about what it simulated. Small runtime delays can be handled with bounded catch-up, but larger downtime should be exposed as a recovery gap rather than silently replayed as if the model had been continuously operating.
+The system should be honest about what it simulated. Small runtime delays can be handled with bounded catch-up. Longer downtime should be shown as a recovery gap, not replayed as though the model had been running the whole time.
 
 ## Recovery Flow
 
@@ -67,3 +68,10 @@ The system should expose model status values such as:
 - Metrics should include recovery count and simulation lag.
 - The model avoids generating fake continuity across downtime.
 
+## Implementation on 2026-09-29
+
+The scheduler bounds catch-up and records skipped time. Snapshot restoration, recovery events, and model recovery status still need the Milestone 7 schema.
+
+## Implementation on 2026-09-29
+
+A new process run starts from a synthetic balance and is labelled `cold_start_no_snapshot`. Scheduler gaps increment a per-well counter without integrating missed time. Snapshot restoration and durable recovery events remain Milestone 7 work.

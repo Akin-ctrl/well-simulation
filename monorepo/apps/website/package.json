@@ -1,25 +1,25 @@
 {
-  "name": "@corsight/website",
+  "name": "@well-simulation/website",
   "private": true,
   "version": "0.0.0",
   "type": "module",
   "scripts": {
     "dev": "react-router dev",
     "build": "tsc -b && vite build",
+    "check-types": "react-router typegen && tsc",
     "lint": "eslint .",
     "preview": "vite preview"
   },
   "dependencies": {
-    "@corsight/api": "workspace:*",
-    "@corsight/dto": "workspace:*",
-    "@corsight/ui": "workspace:*",
-    "@corsight/utils": "workspace:*",
+    "@well-simulation/api": "workspace:*",
+    "@well-simulation/dto": "workspace:*",
+    "@well-simulation/ui": "workspace:*",
+    "@well-simulation/utils": "workspace:*",
     "@hookform/resolvers": "^5.2.2",
     "@react-router/fs-routes": "^7.9.5",
     "@react-router/node": "^7.9.5",
     "@react-router/serve": "^7.9.5",
     "@tailwindcss/vite": "^4.0.6",
-    "@tanstack/react-query": "^5.90.7",
     "autoprefixer": "^10.4.21",
     "class-variance-authority": "^0.7.1",
     "hono": "^4.9.8",
@@ -36,7 +36,7 @@
     "zod": "^4.1.12"
   },
   "devDependencies": {
-    "@corsight/tsconfig": "workspace:*",
+    "@well-simulation/tsconfig": "workspace:*",
     "@eslint/js": "^9.36.0",
     "@react-router/dev": "^7.9.5",
     "@types/node": "^24.6.0",

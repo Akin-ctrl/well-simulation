@@ -17,8 +17,13 @@ Show that the project is an industrial wellhead monitoring simulation evolving i
 2. Open the dashboard:
 
    ```text
-   http://localhost:8082
+   http://localhost:8090
    ```
+
+   This step is currently blocked in the production image. The page returns
+   HTTP 200 but stays blank because its Content Security Policy blocks the
+   React Router startup scripts. Do not present the later UI steps as verified
+   until a browser can render them.
 
 3. Confirm live telemetry:
 
@@ -28,34 +33,49 @@ Show that the project is an industrial wellhead monitoring simulation evolving i
    - water cut
    - valve/pump status
 
-4. Inspect active alarms:
+4. Inspect the current implemented dashboard:
+
+   - fleet overview
+   - analytics charts
+   - per-wellhead detail page
+   - Alarm Center and active alarms on affected wellheads
+
+5. Inspect active alarms:
 
    - high pressure
    - high temperature
    - high water cut
    - high vibration or degradation indicators
 
-5. Run or inspect a what-if scenario:
+6. Explain what is simulated:
+
+   ```text
+   Readings are random values based on configured ranges. Pressure does not
+   cause flow to change. The two-minute and five-minute chart buckets and
+   alarm thresholds are chosen for a short demo, not a real plant.
+   ```
+
+7. Explain the target what-if scenario:
 
    ```text
    Close choke on WH-001 from 80% to 50%.
    ```
 
-6. Expected behavior:
+8. Expected future behavior:
 
    - flow rate decreases
    - tubing pressure rises
    - forecast confidence may decrease if operating state becomes unstable
    - alarms may trigger if thresholds are crossed
 
-7. Inspect the data layer:
+9. Inspect the data layer:
 
    - raw readings in TimescaleDB
-   - model state snapshots
-   - forecast/scenario outputs
    - alarm events
+   - future model state snapshots
+   - future forecast/scenario outputs
 
-8. Inspect architecture decisions:
+10. Inspect architecture decisions:
 
    ```text
    docs/adr/
@@ -63,5 +83,6 @@ Show that the project is an industrial wellhead monitoring simulation evolving i
 
 ## Current Status
 
-This is the target demo flow. Some pieces still need implementation and integration before the full flow works end-to-end.
-
+The overview, analytics, per-wellhead detail pages, Alarm Center, live telemetry,
+and active alarm data are implemented. Stateful twin behavior, predictions, and
+what-if scenarios are still target capabilities, not current features.

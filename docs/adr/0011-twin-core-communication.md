@@ -2,6 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-05-31
+- Implementation: Partial
 
 ## Context
 
@@ -43,3 +44,13 @@ HTTP keeps control, forecast, scenario, and latest telemetry calls explicit and 
 - The Modbus gateway should read latest telemetry from `twin-core` over HTTP.
 - The public dashboard should call the TypeScript API, not `twin-core` directly.
 
+## Implementation on 2026-09-29
+
+The service exposes internal read-only HTTP for health, readiness, metrics, state, and current telemetry. Durable twin snapshots, commands, forecasts, and scenarios are still planned.
+
+## Implementation on 2026-09-30
+
+The Modbus gateway now reads a complete, read-only model fleet snapshot over
+internal HTTP. It converts the supported model fields into Modbus registers;
+ingestion still polls Modbus and writes source-labelled readings to TimescaleDB.
+Durable model state snapshots, commands, forecasts, and scenarios remain planned.

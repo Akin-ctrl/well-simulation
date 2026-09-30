@@ -1,8 +1,6 @@
 import Cookie from 'js-cookie';
 
-const isStorageAvailable = (
-  type: 'localStorage' | 'sessionStorage'
-): boolean => {
+const isStorageAvailable = (type: 'localStorage' | 'sessionStorage'): boolean => {
   try {
     const storage = window[type];
     const x = '__storage_test__';
@@ -52,11 +50,8 @@ export const storage = {
         clear: () => inMemoryStorage.clear(),
       },
   cookieStorage: {
-    set: <Item>(
-      key: string,
-      value: Item,
-      options?: (typeof Cookie)['attributes']
-    ) => Cookie?.set(key, JSON.stringify(value), options),
+    set: <Item>(key: string, value: Item, options?: (typeof Cookie)['attributes']) =>
+      Cookie?.set(key, JSON.stringify(value), options),
     get: <Item>(key: string): Item | undefined => {
       const item = Cookie?.get(key);
       if (!item) return undefined;

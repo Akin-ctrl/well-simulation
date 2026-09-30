@@ -1,10 +1,14 @@
-import { BellIcon, LogOutIcon, MoonIcon, SunIcon, UserRoundIcon } from 'lucide-react';
+import { BellIcon, LogOutIcon, UserRoundIcon } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
-import { Button } from '@corsight/ui/button';
-import { toast } from '@corsight/ui/toast';
+import { Button } from '@well-simulation/ui/button';
+import { toast } from '@well-simulation/ui/toast';
 import { routes } from '~/config/routes';
 import { client, fetchFn } from '~/utils/api';
+
+/**
+ * The dashboard header: who is signed in, and how to sign out.
+ */
 
 export type HeaderUser = {
   firstName?: string | null;
@@ -39,18 +43,7 @@ function Header({ user }: { user: HeaderUser }) {
       <div className='flex justify-end container items-center gap-4 px-4 h-14'>
         <BellIcon className='size-5' />
 
-        <div className='gap-1 hidden'>
-          <button>
-            <MoonIcon className='size-5' />
-          </button>
-
-          <button className=''>
-            <SunIcon className='size-5' />
-          </button>
-        </div>
-
-        <div
-          className=' flex items-center gap-2 border border-border-default pl-1! pr-3! py-1! rounded-full!'>
+        <div className=' flex items-center gap-2 border border-border-default pl-1! pr-3! py-1! rounded-full!'>
           <div className='p-1.5 rounded-full bg-neutral-200'>
             <UserRoundIcon className='size-4' />
           </div>
@@ -63,7 +56,8 @@ function Header({ user }: { user: HeaderUser }) {
           variant='outline'
           size='sm'
           isLoading={isLoggingOut}
-          onClick={handleLogout}>
+          onClick={handleLogout}
+        >
           <LogOutIcon className='size-4' />
           Logout
         </Button>

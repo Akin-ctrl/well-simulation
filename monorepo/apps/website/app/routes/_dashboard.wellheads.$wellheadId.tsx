@@ -5,23 +5,17 @@ import {
   MapPinIcon,
   RadioTowerIcon,
 } from 'lucide-react';
-import {
-  Line,
-  LineChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from 'recharts';
+import { Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { Link, useLoaderData } from 'react-router';
 import type {
   LatestReading,
   TrendPoint,
   WellheadDetailResponse,
-} from '@corsight/dto/res/dashboard';
+} from '@well-simulation/dto/res/dashboard';
 import { Title } from '../domains/dashboard/components/misc';
 import { routes } from '../config/routes';
 import { client, fetchFn } from '../utils/api';
+import { REFRESH_INTERVALS, useAutoRefresh } from '../hooks/use-auto-refresh';
 
 type LoaderArgs = {
   params: {
@@ -202,6 +196,7 @@ function TrendPanel({
 
 export default function WellheadDetail() {
   const data = useLoaderData() as WellheadDetailResponse;
+  useAutoRefresh(REFRESH_INTERVALS.wellhead);
   const pressureData = multiSeries(data.pressureTrend, [
     'tubing_pressure',
     'casing_pressure',
@@ -222,7 +217,8 @@ export default function WellheadDetail() {
         <div>
           <Link
             to={routes.dashboard.overview}
-            className='mb-2 inline-flex items-center gap-2 text-sm text-fgColor-muted hover:text-fgColor-default'>
+            className='mb-2 inline-flex items-center gap-2 text-sm text-fgColor-muted hover:text-fgColor-default'
+          >
             <ArrowLeftIcon className='size-4' />
             Back to overview
           </Link>
@@ -284,7 +280,8 @@ export default function WellheadDetail() {
               return (
                 <div
                   key={reading.parameterCode ?? reading.parameterTypeId}
-                  className='rounded-lg bg-neutral-100 p-3'>
+                  className='rounded-lg bg-neutral-100 p-3'
+                >
                   <div className='flex items-start justify-between gap-3'>
                     <div>
                       <p className='text-sm font-medium'>
@@ -295,7 +292,9 @@ export default function WellheadDetail() {
                         {formatNumber(reading.normalMax)} {reading.canonicalUnit}
                       </p>
                     </div>
-                    <p className={`text-xs capitalize ${statusClass(status)}`}>{status}</p>
+                    <p className={`text-xs capitalize ${statusClass(status)}`}>
+                      {status}
+                    </p>
                   </div>
                   <p className='mt-3 text-lg font-semibold'>
                     {formatNumber(reading.rawValue)} {reading.canonicalUnit}
@@ -316,11 +315,17 @@ export default function WellheadDetail() {
             {data.activeAlarms.length ? (
               data.activeAlarms.map((alarm) => (
                 <div
-                  key={alarm.eventId ?? `${alarm.parameterDisplayName}-${alarm.triggeredAt}`}
-                  className='border-b border-b-neutral-200 pb-3 last:border-b-0 last:pb-0'>
+                  key={
+                    alarm.eventId ??
+                    `${alarm.parameterDisplayName}-${alarm.triggeredAt}`
+                  }
+                  className='border-b border-b-neutral-200 pb-3 last:border-b-0 last:pb-0'
+                >
                   <div className='flex items-center justify-between gap-3'>
                     <p className='font-medium'>{alarm.parameterDisplayName}</p>
-                    <p className={`text-xs uppercase ${severityClass(alarm.severityLevel)}`}>
+                    <p
+                      className={`text-xs uppercase ${severityClass(alarm.severityLevel)}`}
+                    >
                       {alarm.severityLevel ?? 'unknown'}
                     </p>
                   </div>
@@ -334,7 +339,9 @@ export default function WellheadDetail() {
                 </div>
               ))
             ) : (
-              <p className='text-sm text-fgColor-muted'>No active alarms for this well.</p>
+              <p className='text-sm text-fgColor-muted'>
+                No active alarms for this well.
+              </p>
             )}
           </div>
         </section>

@@ -2,7 +2,7 @@ import * as React from 'react';
 import { Slot } from '@radix-ui/react-slot';
 import { cva, type VariantProps } from 'class-variance-authority';
 
-import { cn } from '@corsight/utils/cn';
+import { cn } from '@well-simulation/utils/cn';
 import { Spinner } from './spinner';
 
 const buttonVariants = cva(
@@ -69,7 +69,8 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
         className={cn(buttonVariants({ variant, size, icon, className }))}
         ref={ref}
         disabled={isLoading || disabled}
-        {...props}>
+        {...props}
+      >
         {isLoading ? (
           <>
             {/* trick to have exact btn width when btn is loading */}
@@ -77,7 +78,8 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
             <span
               className={cn(
                 'absolute inset-0 flex h-full w-full items-center justify-center'
-              )}>
+              )}
+            >
               <Spinner className='scale-75' />
             </span>
           </>

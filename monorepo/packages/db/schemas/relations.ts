@@ -70,23 +70,20 @@ export const alarmruleRelations = relations(alarmrule, ({ one, many }) => ({
   alarmevents: many(alarmevent),
 }));
 
-export const parameterreadingRelations = relations(
-  parameterreading,
-  ({ one }) => ({
-    deviceparametermapping: one(deviceparametermapping, {
-      fields: [parameterreading.mappingId],
-      references: [deviceparametermapping.mappingId],
-    }),
-    parametertype: one(parametertype, {
-      fields: [parameterreading.parameterTypeId],
-      references: [parametertype.parameterTypeId],
-    }),
-    wellhead: one(wellhead, {
-      fields: [parameterreading.wellheadId],
-      references: [wellhead.wellheadId],
-    }),
-  })
-);
+export const parameterreadingRelations = relations(parameterreading, ({ one }) => ({
+  deviceparametermapping: one(deviceparametermapping, {
+    fields: [parameterreading.mappingId],
+    references: [deviceparametermapping.mappingId],
+  }),
+  parametertype: one(parametertype, {
+    fields: [parameterreading.parameterTypeId],
+    references: [parametertype.parameterTypeId],
+  }),
+  wellhead: one(wellhead, {
+    fields: [parameterreading.wellheadId],
+    references: [wellhead.wellheadId],
+  }),
+}));
 
 export const alarmeventRelations = relations(alarmevent, ({ one }) => ({
   alarmrule: one(alarmrule, {

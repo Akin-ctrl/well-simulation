@@ -1,5 +1,7 @@
 import z from 'zod';
 
+import { ROLES } from '../auth/roles';
+
 export const MIN_PASSWORD_LENGTH = 12;
 
 const passwordSchema = z
@@ -17,6 +19,9 @@ export const registerSchema = z
     email: z.email({ error: 'Please enter a valid email address' }),
     password: passwordSchema,
     confirmPassword: z.string(),
+    // Only an administrator reaches this endpoint (ADR 0033), so the role is
+    // theirs to set. Omitting it creates the least-privileged account.
+    role: z.enum(ROLES).optional(),
   })
   .refine((data) => data.password === data.confirmPassword, {
     message: 'Passwords do not match',

@@ -1,17 +1,24 @@
 {
-  "name": "@corsight/dto",
+  "name": "@well-simulation/dto",
   "version": "1.0.0",
-  "description": "Corsight dto package",
+  "description": "Shared dto for the wellhead monitoring simulation",
   "main": "index.js",
   "type": "module",
+  "scripts": {
+    "check-types": "tsc --noEmit",
+    "lint": "eslint ."
+  },
   "author": "Osayame Emmanuel",
   "license": "MIT",
   "dependencies": {
     "zod": "^4.1.12"
   },
+  "private": true,
   "devDependencies": {
-    "eslint-config-custom": "*",
-    "tsconfig": "*"
-  },
-  "private": true
+    "@repo/eslint-config": "workspace:*",
+    "eslint": "^9.36.0",
+    "typescript-eslint": "^8.45.0",
+    "@eslint/js": "^9.36.0",
+    "globals": "^16.4.0"
+  }
 }

@@ -1,20 +1,20 @@
-# Corsight Web Monorepo
+# Well Simulation Web Monorepo
 
 This monorepo contains the TypeScript web/API layer for the Wellhead Monitoring Simulation.
 
-The wider repository is evolving toward a lightweight wellhead digital twin, but this monorepo is not the twin core. Its role is to provide the operator-facing dashboard, API boundary, shared contracts, database access layer, and reusable UI components that make the telemetry simulation understandable and demoable.
+The wider repository is heading toward a lightweight wellhead digital twin. This monorepo is not the twin core. It holds the operator dashboard, the API boundary, the shared contracts, the database access layer, and the UI components.
 
 ## What Lives Here
 
-| Path | Purpose |
-| --- | --- |
-| `apps/api` | Hono API used by the dashboard. Handles auth, dashboard reads, health, and readiness endpoints. |
-| `apps/website` | React Router/Vite dashboard served behind Nginx in Docker Compose. |
-| `packages/db` | Drizzle database schema, query helper, and migration tooling. |
-| `packages/dto` | Shared request/response DTOs and validation schemas. |
-| `packages/ui` | Shared React UI primitives used by the dashboard. |
-| `packages/utils` | Shared utility functions and runtime configuration helpers. |
-| `packages/tsconfig` | Shared TypeScript configuration. |
+| Path                | Purpose                                                                                        |
+| ------------------- | ---------------------------------------------------------------------------------------------- |
+| `apps/api`          | Hono API used by the dashboard. Handles auth, dashboard reads, health, readiness, and metrics. |
+| `apps/website`      | React Router/Vite dashboard served behind Nginx in Docker Compose.                             |
+| `packages/db`       | Drizzle database schema, query helper, and migration tooling.                                  |
+| `packages/dto`      | Shared request/response DTOs and validation schemas.                                           |
+| `packages/ui`       | Shared React UI primitives used by the dashboard.                                              |
+| `packages/utils`    | Shared utility functions and runtime configuration helpers.                                    |
+| `packages/tsconfig` | Shared TypeScript configuration.                                                               |
 
 ## Current Runtime Shape
 
@@ -32,14 +32,18 @@ Hono API
 PostgreSQL/TimescaleDB historian
 ```
 
-Telemetry still originates from the Python simulator and Modbus ingestion services under `../data`. The future `twin-core` service will live outside this monorepo unless a later ADR changes that boundary.
+Telemetry still originates from the Python simulator and Modbus ingestion
+services under `../data`. The new `twin-core` service lives at
+`../twin_core`. It is separate from this monorepo and does not yet feed the
+Modbus gateway or the public API.
 
 ## API Contracts
 
 Committed API contracts live in `../docs/openapi`:
 
 - `../docs/openapi/public-api.yaml` documents the dashboard-facing API implemented by `apps/api`.
-- `../docs/openapi/twin-core-internal-api.yaml` documents the planned internal API for the future Python twin-core service.
+- `../docs/openapi/twin-core-internal-api.yaml` documents the implemented
+  read-only twin-core endpoints and labels future operations as planned.
 
 These contracts are intentionally lightweight. They are designed to support portfolio review, implementation planning, and future CI validation without pretending that the project already has a complete industrial control API.
 
@@ -49,8 +53,8 @@ From `monorepo/`:
 
 ```sh
 npx --yes pnpm@10.11.1 install
-npx --yes pnpm@10.11.1 --filter @corsight/api dev
-npx --yes pnpm@10.11.1 --filter @corsight/website dev
+npx --yes pnpm@10.11.1 --filter @well-simulation/api dev
+npx --yes pnpm@10.11.1 --filter @well-simulation/website dev
 ```
 
 For the full stack, prefer the root Docker Compose file:
@@ -82,7 +86,11 @@ cd packages/ui && ../../node_modules/.bin/biome lint . && ../../node_modules/.bi
 
 ## Known Gaps
 
-- The dashboard still contains placeholder views that need live data integration.
-- The API contract is hand-maintained; schema validation in CI is not wired yet.
-- Auth has login/register and secure cookie issuance, but still needs logout and current-user endpoints.
-- The future twin-core service is documented but not implemented yet.
+- The dashboard shows monitoring data but has no physical model state,
+  forecasts, or what-if scenario forms because those capabilities are not built.
+- The API contract is hand-maintained. CI validates its structure and references,
+  but it does not compare every response field against running endpoints.
+- Auth has login, logout, current-user, and administrator-only user creation.
+  Existing sessions are not revoked immediately when an administrator changes a role.
+- Twin-core calculates synthetic process state, but its output is not yet the
+  source for Modbus, the historian, or the dashboard.

@@ -5,7 +5,7 @@
     "build": {
       "dependsOn": ["^build"],
       "inputs": ["$TURBO_DEFAULT$", ".env*"],
-      "outputs": [".next/**", "!.next/cache/**"]
+      "outputs": ["dist/**", "build/**"]
     },
     "lint": {
       "dependsOn": ["^lint"]
@@ -25,7 +25,19 @@
     "server": {
       "persistent": true,
       "cache": false
+    },
+    "test": {
+      "dependsOn": ["^build"],
+      "cache": false
     }
   },
-  "globalEnv": ["DATABASE_URL"]
+  "globalEnv": [
+    "DATABASE_URL",
+    "JWT_SECRET",
+    "SERVER_BASE_URL",
+    "COOKIE_SECURE",
+    "TRUSTED_PROXY_IPS",
+    "ALLOWED_ORIGINS",
+    "NODE_ENV"
+  ]
 }

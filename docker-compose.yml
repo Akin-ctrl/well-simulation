@@ -8,30 +8,81 @@ services:
       - POSTGRES_DB=${POSTGRES_DB}
     ports:
       - "5434:5432"
+    # Schema is applied by the migrator service, not by mounting SQL into
+    # /docker-entrypoint-initdb.d. That directory runs only on first
+    # initialisation of the volume, so every schema change previously required
+    # `docker compose down -v` and destroyed the historian.
     volumes:
       - timescaledb_data:/var/lib/postgresql/data
-      - ./data/sql/init.sql:/docker-entrypoint-initdb.d/init.sql
-      - ./data/sql/views.sql:/docker-entrypoint-initdb.d/views.sql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 5s
       timeout: 5s
       retries: 5
+    restart: unless-stopped
     networks:
       - wellnet
-  pgadmin:
-    image: dpage/pgadmin4
-    container_name: wellhead_pgadmin
-    environment:
-      - PGADMIN_DEFAULT_EMAIL=${PGADMIN_DEFAULT_EMAIL}
-      - PGADMIN_DEFAULT_PASSWORD=${PGADMIN_DEFAULT_PASSWORD}
-    ports:
-      - "5050:80"
-    volumes:
-      - pgadmin_data:/var/lib/pgadmin
+  # pgadmin:
+  #   image: dpage/pgadmin4
+  #   container_name: wellhead_pgadmin
+  #   environment:
+  #     - PGADMIN_DEFAULT_EMAIL=${PGADMIN_DEFAULT_EMAIL}
+  #     - PGADMIN_DEFAULT_PASSWORD=${PGADMIN_DEFAULT_PASSWORD}
+  #   ports:
+  #     - "5050:80"
+  #   volumes:
+  #     - pgadmin_data:/var/lib/pgadmin
+  #   depends_on:
+  #     db:
+  #       condition: service_healthy
+  #   networks:
+  #     - wellnet
+
+  # Applies the ordered SQL migrations, then exits. Every service that reads or
+  # writes the schema waits for it to finish successfully.
+  migrator:
+    build: ./data/src
+    container_name: wellhead_migrator
+    command: python schema.py
+    restart: "no"
     depends_on:
       db:
         condition: service_healthy
+    volumes:
+      - ./data/sql:/sql:ro
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_HOST: db
+      POSTGRES_PORT: "5432"
+      TWIN_DB_USER: ${TWIN_DB_USER}
+      TWIN_DB_PASSWORD: ${TWIN_DB_PASSWORD}
+    networks:
+      - wellnet
+
+  twin-core:
+    build: ./twin_core
+    container_name: well_simulation_twin_core
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      migrator:
+        condition: service_completed_successfully
+    environment:
+      POSTGRES_HOST: db
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: ${POSTGRES_DB}
+      TWIN_DB_USER: ${TWIN_DB_USER}
+      TWIN_DB_PASSWORD: ${TWIN_DB_PASSWORD}
+      TWIN_SERVICE_PORT: "8000"
+      TWIN_MAX_CATCHUP_STEPS: "5"
+      TWIN_FLEET_REFRESH_SECONDS: "30"
+      TELEMETRY_INTERVAL_SECONDS: ${TELEMETRY_INTERVAL_SECONDS:-5}
+      TWIN_MODEL_OVERRIDES_JSON: ${TWIN_MODEL_OVERRIDES_JSON:-}
+    expose:
+      - "8000"
     networks:
       - wellnet
 
@@ -39,10 +90,16 @@ services:
     build: ./data/src
     container_name: modbus_gateway
     command: python modbus_gateway.py
+    # Readiness fails when twin-core is unavailable; heartbeat stops advancing.
+    restart: unless-stopped
     ports:
       - "5020:5020"
     depends_on:
       db:
+        condition: service_healthy
+      migrator:
+        condition: service_completed_successfully
+      twin-core:
         condition: service_healthy
     networks:
       - wellnet
@@ -54,16 +111,22 @@ services:
       POSTGRES_PORT: "5432"
       MODBUS_PORT: ${MODBUS_PORT}
       MODBUS_BIND_HOST: "0.0.0.0"
+      TELEMETRY_INTERVAL_SECONDS: ${TELEMETRY_INTERVAL_SECONDS:-5}
+      SERVICE_PORT: "9102"
+      TWIN_CORE_SNAPSHOT_URL: http://twin-core:8000/model-snapshot
 
   ingestion:
     build: ./data/src
     container_name: database_ingestion
     command: python database_ingestion.py
+    restart: unless-stopped
     depends_on:
       db:
         condition: service_healthy
+      migrator:
+        condition: service_completed_successfully
       modbus:
-        condition: service_started
+        condition: service_healthy
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -72,6 +135,8 @@ services:
       POSTGRES_PORT: "5432"
       MODBUS_HOST: modbus
       MODBUS_PORT: ${MODBUS_PORT}
+      TELEMETRY_INTERVAL_SECONDS: ${TELEMETRY_INTERVAL_SECONDS:-5}
+      SERVICE_PORT: "9101"
 
     networks:
       - wellnet
@@ -80,16 +145,35 @@ services:
     build:
       context: ./monorepo
       dockerfile: apps/api/Dockerfile
-    container_name: corsight_api
+    container_name: well_simulation_api
     depends_on:
       db:
         condition: service_healthy
+      migrator:
+        condition: service_completed_successfully
     environment:
       NODE_ENV: production
       DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
       JWT_SECRET: ${JWT_SECRET}
-    ports:
-      - "3000:3000"
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      # The dashboard's nginx is the only thing that should speak for a client.
+      TRUSTED_PROXY_IPS: ${TRUSTED_PROXY_IPS:-}
+    # Port 3000 is deliberately not published: the dashboard proxies /api, and
+    # exposing the API directly bypasses that proxy and the rate limiter's
+    # trusted-proxy handling. Add a compose override for direct local access.
+    expose:
+      - "3000"
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 15s
+      timeout: 3s
+      retries: 3
+      start_period: 20s
     networks:
       - wellnet
 
@@ -97,12 +181,19 @@ services:
     build:
       context: ./monorepo
       dockerfile: apps/website/Dockerfile
-    container_name: corsight_dashboard
+    container_name: well_simulation_dashboard
     depends_on:
-      - api
+      api:
+        condition: service_healthy
     ports:
-      - "8082:80"
+      - "8090:80"
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/"]
+      interval: 15s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
     networks:
       - wellnet
 

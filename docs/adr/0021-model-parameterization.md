@@ -2,10 +2,11 @@
 
 - Status: Accepted
 - Date: 2026-05-31
+- Implementation: Partial
 
 ## Context
 
-The reduced-order mechanistic model needs parameters such as productivity index, choke coefficient, downstream pressure, pressure gain coefficient, thermal response rate, water cut drift rate, and degradation coefficients.
+The reduced-order mechanistic model needs a set of parameters. These include productivity index, choke coefficient, downstream pressure, pressure gain coefficient, thermal response rate, water cut drift rate, and degradation coefficients.
 
 These values must be explicit, reviewable, tunable, and validated. Hardcoded magic numbers would make the model less credible and harder to operate.
 
@@ -79,3 +80,10 @@ Each model parameter should define:
 - Invalid per-well parameters should prevent that wellhead model from running or mark it unavailable.
 - Future calibration can write proposed parameter updates without changing model code.
 
+## Implementation on 2026-09-29
+
+Versioned defaults and validated global overrides load now. A typed per-well override source is ready, but the database table and adapter belong to Milestone 7.
+
+## Implementation on 2026-09-29
+
+The model now consumes validated typed parameters. Stable per-well variation is applied before global and future database overrides. Runtime parameter changes are rejected with `restart_required`. The database override table remains Milestone 7 work.

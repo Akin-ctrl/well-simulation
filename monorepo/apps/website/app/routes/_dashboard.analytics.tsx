@@ -11,12 +11,13 @@ import {
 } from 'recharts';
 import { useLoaderData } from 'react-router';
 import type {
-  DailyAlarmCount,
+  AlarmCount,
   DashboardAnalyticsResponse,
   TrendPoint,
-} from '@corsight/dto/res/dashboard';
+} from '@well-simulation/dto/res/dashboard';
 import { Title } from '../domains/dashboard/components/misc';
 import { client, fetchFn } from '../utils/api';
+import { REFRESH_INTERVALS, useAutoRefresh } from '../hooks/use-auto-refresh';
 
 type MultiMetricPoint = {
   date: string;
@@ -58,7 +59,9 @@ const SEVERITY_COLORS: Record<string, string> = {
 };
 
 export async function clientLoader() {
-  const response = await fetchFn<DashboardAnalyticsResponse>(client.dashboard.analytics.$get());
+  const response = await fetchFn<DashboardAnalyticsResponse>(
+    client.dashboard.analytics.$get()
+  );
   return response.data;
 }
 
@@ -102,12 +105,12 @@ function multiSeries(points: TrendPoint[], metricCodes: string[]): MultiMetricPo
   return [...buckets.values()];
 }
 
-function alarmSegments(counts: DailyAlarmCount[]): AlarmSegment[] {
+function alarmSegments(counts: AlarmCount[]): AlarmSegment[] {
   const totals = new Map<string, number>();
 
   for (const count of counts) {
     const severity = count.severityLevel?.toLowerCase() ?? 'unknown';
-    totals.set(severity, (totals.get(severity) ?? 0) + (count.totalAlarmsTriggered ?? 0));
+    totals.set(severity, (totals.get(severity) ?? 0) + (count.alarmsTriggered ?? 0));
   }
 
   if (!totals.size) {
@@ -158,7 +161,12 @@ function MultiMetricChart({
           tickLine={false}
           tickFormatter={(value: number) => formatNumber(value)}
         />
-        <Tooltip formatter={(value: number, name: string) => [formatNumber(value), METRIC_LABELS[name] ?? name]} />
+        <Tooltip
+          formatter={(value: number, name: string) => [
+            formatNumber(value),
+            METRIC_LABELS[name] ?? name,
+          ]}
+        />
         {metricCodes.map((metricCode) => (
           <Line
             key={metricCode}
@@ -177,6 +185,7 @@ function MultiMetricChart({
 
 function Analytics() {
   const data = useLoaderData() as DashboardAnalyticsResponse;
+  useAutoRefresh(REFRESH_INTERVALS.analytics);
   const pressureData = multiSeries(data.pressureTrend, [
     'tubing_pressure',
     'casing_pressure',
@@ -190,7 +199,7 @@ function Analytics() {
     'water_cut',
     'gas_oil_ratio',
   ]);
-  const alarmData = alarmSegments(data.dailyAlarmCounts);
+  const alarmData = alarmSegments(data.alarmCounts);
   const alarmTotal = totalAlarms(alarmData);
 
   return (
@@ -232,7 +241,9 @@ function Analytics() {
         <div className='card'>
           <div className='mb-4'>
             <h2 className='font-semibold'>Alarm Severity</h2>
-            <p className='text-sm text-fgColor-muted'>Five-minute alarm counts by severity.</p>
+            <p className='text-sm text-fgColor-muted'>
+              Five-minute alarm counts by severity.
+            </p>
           </div>
           <div className='relative h-56'>
             <ResponsiveContainer>
@@ -243,7 +254,8 @@ function Analytics() {
                   outerRadius={80}
                   innerRadius={65}
                   paddingAngle={5}
-                  cornerRadius={5}>
+                  cornerRadius={5}
+                >
                   {alarmData.map((segment) => (
                     <Cell
                       key={segment.name}
@@ -253,7 +265,12 @@ function Analytics() {
                     />
                   ))}
                 </Pie>
-                <Tooltip formatter={(value: number, name: string) => [formatNumber(value), name]} />
+                <Tooltip
+                  formatter={(value: number, name: string) => [
+                    formatNumber(value),
+                    name,
+                  ]}
+                />
               </PieChart>
             </ResponsiveContainer>
             <div className='absolute left-0 top-0 flex h-full w-full flex-col items-center justify-center'>

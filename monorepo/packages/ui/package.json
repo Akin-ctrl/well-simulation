@@ -1,13 +1,15 @@
 {
-  "name": "@corsight/ui",
+  "name": "@well-simulation/ui",
   "version": "0.0.0",
   "main": "./index.js",
   "private": true,
   "scripts": {
-    "lint": "biome lint .",
-    "type-check": "tsc --noEmit"
+    "lint": "eslint .",
+    "check-types": "tsc --noEmit"
   },
   "devDependencies": {
+    "@eslint/js": "^9.36.0",
+    "@repo/eslint-config": "workspace:*",
     "@testing-library/dom": "^10.4.0",
     "@testing-library/react": "^16.2.0",
     "@types/node": "^22.10.2",
@@ -15,15 +17,20 @@
     "@types/react-dom": "^19.2.2",
     "@vitejs/plugin-react": "^4.7.0",
     "autoprefixer": "^10.4.21",
+    "eslint": "^9.36.0",
+    "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "globals": "^16.4.0",
     "jsdom": "^26.0.0",
     "typescript": "^5.8.3",
+    "typescript-eslint": "^8.45.0",
     "vite": "^6.0.0",
     "vitest": "^3.0.5",
     "web-vitals": "^4.2.4"
   },
   "dependencies": {
-    "@corsight/tsconfig": "workspace:*",
-    "@corsight/utils": "workspace:*",
+    "@well-simulation/tsconfig": "workspace:*",
+    "@well-simulation/utils": "workspace:*",
     "@hookform/resolvers": "^5.1.1",
     "@radix-ui/react-collapsible": "^1.1.12",
     "@radix-ui/react-dialog": "^1.1.15",

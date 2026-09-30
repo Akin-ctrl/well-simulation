@@ -1,0 +1,12 @@
+{
+  "extends": "../tsconfig/base.json",
+  "include": ["."],
+  "exclude": ["node_modules", "dist", "build"],
+  "compilerOptions": {
+    "noEmit": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "target": "ES2022",
+    "lib": ["ES2022"]
+  }
+}

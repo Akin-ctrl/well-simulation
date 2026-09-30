@@ -1,2 +1,10 @@
-pymodbus == 2.5.3
-psycopg2-binary
+# pymodbus 3.11.x is the newest line that still exposes a synchronous
+# datastore. 3.12+ moved ModbusDeviceContext to async-only accessors, which
+# the threaded gateway would need restructuring to use.
+pymodbus == 3.11.4
+psycopg2-binary == 2.9.10
+
+# Used by the migrator to hash the generated bootstrap administrator password.
+# Verified to produce hashes the API bcryptjs accepts.
+bcrypt == 4.2.1
+prometheus-client == 0.23.1

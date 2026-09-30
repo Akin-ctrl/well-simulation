@@ -2,6 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-05-31
+- Implementation: Implemented
 
 ## Context
 
@@ -51,7 +52,7 @@ This provides a model that is explainable in documentation, testable in code, an
 
 ## Model Boundary
 
-The model is intended for operational simulation and decision support demonstrations. It is **not** a certified reservoir engineering model and should not be described as a replacement for specialist tools such as OLGA, PIPESIM, Eclipse, or similar high-fidelity simulators.
+The model is for operational simulation and decision support demonstrations. It is **not** a certified reservoir engineering model. Do not describe it as a replacement for OLGA, PIPESIM, Eclipse, or any other high-fidelity simulator.
 
 ## Version-One Model Structure
 
@@ -160,3 +161,19 @@ blockage_factor_next = blockage_factor
 - A specific well type requires a different inflow model.
 - The model needs multiphase flow, nodal analysis, or detailed reservoir coupling.
 
+
+## Implementation on 2026-09-29
+
+The pure one-second model implements inflow, choke outflow, pump and valve effects, pressure inventory, casing and thermal lag, water drift, and bounded degradation. The equations and their limits are in the Milestone 5 design. No field calibration is claimed.
+
+## Amendment 2026-09-30: Add dimensioned reference-well diagnostics
+
+The original reduced-order pressure and liquid-flow model remains the one-second
+state engine. Version 0.3.0 derives oil, water, and gas rates plus the seven
+previously omitted seeded signals from its current pressure, temperature,
+water cut, flow, and pump state. The sealed outer annulus adds its own
+pressure and temperature state. The equations, units, assumptions, and
+validation boundary are in the
+[reference-well design](../design/reference-well-physics.md). These quantities
+are synthetic and uncalibrated. The extension does not turn the model into a
+field-validated multiphase or well-integrity simulator.

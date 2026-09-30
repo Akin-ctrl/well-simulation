@@ -1,80 +1,65 @@
 import { Hono, type Context } from 'hono';
-import { db } from '@corsight/db/query';
-import { users } from '@corsight/db/schemas/user';
+import { db } from '@well-simulation/db/query';
+import { users } from '@well-simulation/db/schemas/user';
 import { zValidator } from '@hono/zod-validator';
-import { loginSchema, registerSchema } from '@corsight/dto/req/auth';
+import { loginSchema, registerSchema } from '@well-simulation/dto/req/auth';
+import { DEFAULT_ROLE } from '@well-simulation/dto/auth/roles';
 import { responseHandler } from '../utils/handler';
+import { requireCapability, sessionUserId } from '../middleware/authorize';
 import bcryptjs from 'bcryptjs';
 import { HTTPException } from 'hono/http-exception';
 import { deleteCookie, setCookie } from 'hono/cookie';
 import { sign } from 'hono/jwt';
 
+import { config } from '../config';
+import { recordAuditEvent } from '../audit';
+
 const AUTH_COOKIE_NAME = 'auth_token';
-const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24;
+const BCRYPT_ROUNDS = 11;
 
 type UserRecord = typeof users.$inferSelect;
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null;
-}
-
-function requireJwtSecret() {
-  const secret = process.env.JWT_SECRET;
-  if (!secret) {
-    throw new HTTPException(500, { message: 'Authentication is not configured' });
-  }
-  return secret;
-}
-
 function publicUser(user: UserRecord) {
-  const { encryptedPassword, ...safeUser } = user;
+  // Destructured purely to drop the hash from the response. The underscore
+  // marks it as deliberately unused; removing it would leak the password hash.
+  const { encryptedPassword: _encryptedPassword, ...safeUser } = user;
   return safeUser;
 }
 
-function sessionUserId(c: Context) {
-  const session = c.get('session') as unknown;
-  if (!isRecord(session) || typeof session.sub !== 'string') {
-    throw new HTTPException(401, { message: 'Unauthorized' });
-  }
-
-  const userId = Number.parseInt(session.sub, 10);
-  if (!Number.isInteger(userId)) {
-    throw new HTTPException(401, { message: 'Unauthorized' });
-  }
-
-  return userId;
-}
-
 async function issueSession(c: Context, user: UserRecord) {
-  const expiresAtSeconds = Math.floor(Date.now() / 1000) + SESSION_MAX_AGE_SECONDS;
+  const expiresAtSeconds = Math.floor(Date.now() / 1000) + config.sessionMaxAgeSeconds;
   const token = await sign(
     {
       sub: String(user.id),
       email: user.email,
-      role: user.role ?? 'USER',
+      role: user.role ?? DEFAULT_ROLE,
       exp: expiresAtSeconds,
     },
-    requireJwtSecret()
+    config.jwtSecret
   );
 
   setCookie(c, AUTH_COOKIE_NAME, token, {
     httpOnly: true,
     sameSite: 'Lax',
-    secure: process.env.NODE_ENV === 'production',
+    secure: config.cookieSecure,
     path: '/',
-    maxAge: SESSION_MAX_AGE_SECONDS,
+    maxAge: config.sessionMaxAgeSeconds,
   });
 }
 
 export const authRouter = new Hono()
+  // Creating a user is an administrative action, not self-service. ADR 0033
+  // closed open registration: an unauthenticated write endpoint on an
+  // operations dashboard handed every caller a view of the whole fleet.
   .post(
     '/register',
+    requireCapability('user:manage'),
     zValidator('json', registerSchema),
     (c) => {
       const payload = c.req.valid('json');
 
       return responseHandler(async () => {
-        const encryptedPassword = await bcryptjs.hash(payload.password, 11);
+        const encryptedPassword = await bcryptjs.hash(payload.password, BCRYPT_ROUNDS);
 
         const user = await db
           .insert(users)
@@ -84,6 +69,7 @@ export const authRouter = new Hono()
             userName: payload.username,
             email: payload.email,
             encryptedPassword: encryptedPassword,
+            role: payload.role ?? DEFAULT_ROLE,
           })
           .returning();
 
@@ -91,6 +77,15 @@ export const authRouter = new Hono()
         if (!createdUser) {
           throw new HTTPException(500, { message: 'User registration failed' });
         }
+
+        await recordAuditEvent(c, {
+          action: 'user.create',
+          outcome: 'success',
+          actorUserId: sessionUserId(c),
+          subjectType: 'user',
+          subjectId: createdUser.id,
+          detail: { role: createdUser.role ?? DEFAULT_ROLE },
+        });
 
         return { user: publicUser(createdUser) };
       })(c);
@@ -110,6 +105,15 @@ export const authRouter = new Hono()
       });
 
       if (!user) {
+        // Recorded even though no account matched. If rows only appeared for
+        // real accounts, the presence of one would disclose that the account
+        // exists (ADR 0034).
+        await recordAuditEvent(c, {
+          action: 'auth.login',
+          outcome: 'failure',
+          actorIdentifier: payload.emailOrUsername,
+          detail: { reason: 'unknown_identifier' },
+        });
         throw new HTTPException(401, { message: 'Invalid credentials' });
       }
 
@@ -118,13 +122,29 @@ export const authRouter = new Hono()
         throw new HTTPException(401, { message: 'Invalid credentials' });
       }
 
-      const isPasswordValid = await bcryptjs.compare(payload.password, encryptedPassword);
+      const isPasswordValid = await bcryptjs.compare(
+        payload.password,
+        encryptedPassword
+      );
 
       if (!isPasswordValid) {
+        await recordAuditEvent(c, {
+          action: 'auth.login',
+          outcome: 'failure',
+          actorUserId: user.id,
+          actorIdentifier: payload.emailOrUsername,
+          detail: { reason: 'bad_password' },
+        });
         throw new HTTPException(401, { message: 'Invalid credentials' });
       }
 
       await issueSession(c, user);
+      await recordAuditEvent(c, {
+        action: 'auth.login',
+        outcome: 'success',
+        actorUserId: user.id,
+        actorIdentifier: payload.emailOrUsername,
+      });
       return { user: publicUser(user) };
     })(c);
   })
@@ -145,11 +165,19 @@ export const authRouter = new Hono()
     })(c);
   })
   .post('/logout', (c) => {
-    deleteCookie(c, AUTH_COOKIE_NAME, {
-      path: '/',
-    });
-
     return responseHandler(async () => {
+      // Read the session before the cookie is cleared, so the event carries an
+      // actor rather than being anonymous.
+      const userId = sessionUserId(c);
+
+      deleteCookie(c, AUTH_COOKIE_NAME, { path: '/' });
+
+      await recordAuditEvent(c, {
+        action: 'auth.logout',
+        outcome: 'success',
+        actorUserId: userId,
+      });
+
       return { authenticated: false };
     }, 'Logged out')(c);
   });

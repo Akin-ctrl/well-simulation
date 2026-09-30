@@ -1,5 +1,5 @@
-import {clsx, type ClassValue} from 'clsx';
-import {extendTailwindMerge} from 'tailwind-merge';
+import { clsx, type ClassValue } from 'clsx';
+import { extendTailwindMerge } from 'tailwind-merge';
 
 const customFontSizeRegex = /^(title|display|body|caption|subtitle)(-.*)?$/;
 
@@ -16,8 +16,8 @@ const customTwMerge = extendTailwindMerge({
   // ↓ Add values to existing class groups or define new ones
   extend: {
     classGroups: {
-      'font-size': [{text: ['base', isCustomFontSize]}],
-      'text-color': [{text: [isCustomFontColor]}],
+      'font-size': [{ text: ['base', isCustomFontSize] }],
+      'text-color': [{ text: [isCustomFontColor] }],
     },
   },
 });

@@ -1,6 +1,6 @@
 import * as React from 'react';
 import * as ScrollAreaPrimitive from '@radix-ui/react-scroll-area';
-import { cn } from '@corsight/utils/cn';
+import { cn } from '@well-simulation/utils/cn';
 
 const ScrollArea = React.forwardRef<
   React.ElementRef<typeof ScrollAreaPrimitive.Root>,
@@ -8,10 +8,9 @@ const ScrollArea = React.forwardRef<
 >(({ className, children, ...props }, ref) => (
   <ScrollAreaPrimitive.Root
     className={cn('relative overflow-hidden', className)}
-    {...props}>
-    <ScrollAreaPrimitive.Viewport
-      className='h-full w-full rounded-[inherit]'
-      ref={ref}>
+    {...props}
+  >
+    <ScrollAreaPrimitive.Viewport className='h-full w-full rounded-[inherit]' ref={ref}>
       {children}
     </ScrollAreaPrimitive.Viewport>
     <ScrollBar />
@@ -29,13 +28,13 @@ const ScrollBar = React.forwardRef<
     orientation={orientation}
     className={cn(
       'flex touch-none select-none transition-colors',
-      orientation === 'vertical' &&
-        'h-full w-2 border-l border-l-transparent p-[1px]',
+      orientation === 'vertical' && 'h-full w-2 border-l border-l-transparent p-[1px]',
       orientation === 'horizontal' &&
         'h-2 flex-col border-t border-t-transparent p-[1px]',
       className
     )}
-    {...props}>
+    {...props}
+  >
     <ScrollAreaPrimitive.ScrollAreaThumb className='bg-border-muted relative flex-1 rounded-full' />
   </ScrollAreaPrimitive.ScrollAreaScrollbar>
 ));
