@@ -1,0 +1,57 @@
+name: Bug report
+description: Something fails, crashes, or behaves differently from the docs.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        For a security problem, use the private vulnerability report instead.
+        A public issue tells everyone before it is fixed.
+  - type: dropdown
+    id: service
+    attributes:
+      label: Which part is affected?
+      options:
+        - api
+        - dashboard
+        - twin-core
+        - modbus gateway
+        - ingestion
+        - migrator or database schema
+        - docker compose or startup
+        - CI
+        - not sure
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect to happen?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. docker compose up --build
+        2. ...
+    validations:
+      required: true
+  - type: input
+    id: commit
+    attributes:
+      label: Commit
+      description: The output of `git rev-parse --short HEAD`.
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: From `docker compose logs <service>`. Remove any passwords or secrets first.
+      render: shell

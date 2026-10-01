@@ -1,0 +1,32 @@
+name: Model behaviour
+description: A twin reading looks physically wrong or inconsistent.
+labels: ["model"]
+body:
+  - type: input
+    id: model-version
+    attributes:
+      label: Model version
+      description: The `modelVersion` in `twin_core/model_defaults.json`, for example 0.3.0.
+    validations:
+      required: true
+  - type: input
+    id: wellhead
+    attributes:
+      label: Wellhead
+      description: The wellhead ID, or "all" if the whole fleet shows it.
+    validations:
+      required: true
+  - type: textarea
+    id: signals
+    attributes:
+      label: Which signals, and what values?
+      description: The signal names, the values you saw, their units, and the time.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What should they be, and why?
+      description: The expected value or range, and the reasoning or reference behind it.
+    validations:
+      required: true
