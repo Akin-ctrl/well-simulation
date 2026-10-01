@@ -1,0 +1,40 @@
+{
+  "name": "well-simulation",
+  "image": "mcr.microsoft.com/devcontainers/python:1-3.12-bookworm",
+
+  "features": {
+    // Node 22 and pnpm 10.11.1, matching monorepo/.nvmrc and the packageManager field.
+    "ghcr.io/devcontainers/features/node:2": {
+      "version": "22",
+      "pnpmVersion": "10.11.1"
+    },
+    // The stack runs with Docker Compose, so the container needs its own Docker daemon.
+    "ghcr.io/devcontainers/features/docker-in-docker:4": {}
+  },
+
+  // The ports docker-compose.yml publishes.
+  "forwardPorts": [8090, 5020, 5434],
+  "portsAttributes": {
+    "8090": { "label": "Dashboard", "onAutoForward": "notify" },
+    "5020": { "label": "Modbus TCP gateway" },
+    "5434": { "label": "TimescaleDB" }
+  },
+
+  "onCreateCommand": "bash .devcontainer/post-create.sh",
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "charliermarsh.ruff",
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode",
+        "ms-azuretools.vscode-docker"
+      ]
+    }
+  },
+
+  // Docker-in-Docker needs more room than the default machine.
+  "hostRequirements": { "cpus": 4, "memory": "8gb", "storage": "32gb" }
+}
