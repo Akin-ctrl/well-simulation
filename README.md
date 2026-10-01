@@ -172,3 +172,8 @@ ingestion, and twin-core services expose metrics, but no metrics collection stac
 is deployed.
 Several accepted ADRs are still unimplemented. The
 [ADR index](docs/adr/README.md) tracks the gap between decisions and code.
+
+## Licence
+
+Licensed under the [Apache License 2.0](LICENSE). Copyright notices are in
+[NOTICE](NOTICE).
