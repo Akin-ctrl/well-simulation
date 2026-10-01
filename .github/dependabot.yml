@@ -1,0 +1,9 @@
+# Version updates for the pinned GitHub Actions only. Security updates for npm
+# and pip need no entry here, and adding them would also switch on routine
+# version bumps for every package.
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
