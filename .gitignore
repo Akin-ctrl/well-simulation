@@ -8,6 +8,7 @@ __pycache__/
 CODING_STANDARDS_COMMITMENT.md
 docs/roadmap.md
 docs/remediation-roadmap.md
+docs/github-hardening-checklist.md
 
 # Dependencies
 node_modules

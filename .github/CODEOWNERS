@@ -1,0 +1,4 @@
+# Every pull request needs approval from @Akin-ctrl.
+# The main-protection ruleset lets admins bypass this, so the owner can
+# still merge their own work. Nobody else can merge without that review.
+* @Akin-ctrl
