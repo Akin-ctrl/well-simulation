@@ -7,10 +7,14 @@ import {
   parametertype,
   wellhead,
 } from '@well-simulation/db/schemas/schema';
-import type {
-  DashboardAnalyticsResponse,
-  DashboardOverviewResponse,
-  WellheadDetailResponse,
+import {
+  ALARM_SEVERITIES,
+  type ActiveAlarmTotals,
+  type ActiveAlarmsResponse,
+  type AlarmSeverity,
+  type DashboardAnalyticsResponse,
+  type DashboardOverviewResponse,
+  type WellheadDetailResponse,
 } from '@well-simulation/dto/res/dashboard';
 import {
   mv5minAlarmCounts,
@@ -26,6 +30,8 @@ import { HTTPException } from 'hono/http-exception';
 
 const RECENT_READING_LIMIT = 24;
 const ACTIVE_ALARM_LIMIT = 12;
+/** Rows in the Alarm Center list. The totals always cover every alarm. */
+const ALARM_CENTER_LIMIT = 50;
 const ANALYTICS_TREND_LIMIT = 144;
 
 async function countRows(
@@ -133,6 +139,46 @@ async function activeAlarms(limit = ACTIVE_ALARM_LIMIT) {
     .from(vActiveAlarms)
     .orderBy(desc(vActiveAlarms.triggeredAt))
     .limit(limit);
+}
+
+/**
+ * Position of an alarm's severity in ALARM_SEVERITIES, or the list length for
+ * a level the list does not name, so unknown levels sort last.
+ */
+const severityRank = sql`case ${vActiveAlarms.severityLevel} ${sql.join(
+  ALARM_SEVERITIES.map((level, rank) => sql`when ${level} then ${rank}`),
+  sql` `
+)} else ${ALARM_SEVERITIES.length} end`;
+
+/**
+ * The Alarm Center's list: most severe first, then oldest first.
+ *
+ * The list is capped, so the cut must follow the order the operator works in.
+ * Sorting newest first and cutting there would drop an old critical alarm
+ * while showing a recent warning.
+ */
+async function rankedActiveAlarms(limit: number) {
+  return db
+    .select()
+    .from(vActiveAlarms)
+    .orderBy(severityRank, asc(vActiveAlarms.triggeredAt), asc(vActiveAlarms.eventId))
+    .limit(limit);
+}
+
+/** Counts over every active alarm, independent of the list's cap. */
+async function activeAlarmTotals(): Promise<ActiveAlarmTotals> {
+  const critical: AlarmSeverity = 'CRITICAL';
+  const warning: AlarmSeverity = 'WARNING';
+  const [row] = await db
+    .select({
+      total: sql<number>`count(*)::int`,
+      critical: sql<number>`(count(*) filter (where ${vActiveAlarms.severityLevel} = ${critical}))::int`,
+      warning: sql<number>`(count(*) filter (where ${vActiveAlarms.severityLevel} = ${warning}))::int`,
+      affectedWellheads: sql<number>`count(distinct ${vActiveAlarms.wellheadId})::int`,
+    })
+    .from(vActiveAlarms);
+
+  return row ?? { total: 0, critical: 0, warning: 0, affectedWellheads: 0 };
 }
 
 async function activeAlarmsForWellhead(wellheadId: number) {
@@ -316,7 +362,12 @@ export const dashboardRouter = new Hono()
   )
   .get('/active-alarms', (c) =>
     responseHandler(async () => {
-      return { alarms: await activeAlarms(50) };
+      const [totals, alarms] = await Promise.all([
+        activeAlarmTotals(),
+        rankedActiveAlarms(ALARM_CENTER_LIMIT),
+      ]);
+      const response: ActiveAlarmsResponse = { totals, alarms };
+      return response;
     })(c)
   )
   .get('/wellheads/:wellheadId', (c) =>

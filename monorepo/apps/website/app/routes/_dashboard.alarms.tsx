@@ -1,6 +1,6 @@
 import { AlertTriangleIcon } from 'lucide-react';
 import { Link, useLoaderData } from 'react-router';
-import type { ActiveAlarm } from '@well-simulation/dto/res/dashboard';
+import type { ActiveAlarmsResponse } from '@well-simulation/dto/res/dashboard';
 
 import { client, fetchFn } from '../utils/api';
 import { routes } from '../config/routes';
@@ -16,28 +16,17 @@ import { REFRESH_INTERVALS, useAutoRefresh } from '../hooks/use-auto-refresh';
  * There are deliberately no acknowledge or shelve controls. The backend has no
  * alarm lifecycle model, so those buttons could not record anything. ADR 0032
  * decided that a control which pretends to work is worse than its absence.
+ *
+ * The API returns the list already ranked, most severe first and then oldest
+ * first, and caps it. The tiles therefore use the API's totals, which count
+ * every active alarm, rather than counting the rows on screen.
  */
 
-type AlarmsData = { alarms: ActiveAlarm[] };
-
-const SEVERITY_ORDER: Record<string, number> = { CRITICAL: 0, WARNING: 1 };
-
 export async function clientLoader() {
-  const response = await fetchFn<AlarmsData>(client.dashboard['active-alarms'].$get());
+  const response = await fetchFn<ActiveAlarmsResponse>(
+    client.dashboard['active-alarms'].$get()
+  );
   return response.data;
-}
-
-/** Most severe first, then oldest first within a severity. */
-function ranked(alarms: ActiveAlarm[]): ActiveAlarm[] {
-  return [...alarms].sort((a, b) => {
-    const severity =
-      (SEVERITY_ORDER[a.severityLevel ?? ''] ?? 99) -
-      (SEVERITY_ORDER[b.severityLevel ?? ''] ?? 99);
-    if (severity !== 0) return severity;
-    return (
-      new Date(a.triggeredAt ?? 0).getTime() - new Date(b.triggeredAt ?? 0).getTime()
-    );
-  });
 }
 
 /** How long an alarm has been open, which is what makes it urgent or not. */
@@ -66,13 +55,8 @@ function formatValue(value: number | null | undefined): string {
 }
 
 function AlarmCenter() {
-  const data = useLoaderData() as AlarmsData;
+  const { totals, alarms } = useLoaderData() as ActiveAlarmsResponse;
   useAutoRefresh(REFRESH_INTERVALS.alarms);
-
-  const alarms = ranked(data.alarms);
-  const critical = alarms.filter((a) => a.severityLevel === 'CRITICAL').length;
-  const warning = alarms.filter((a) => a.severityLevel === 'WARNING').length;
-  const affectedWells = new Set(alarms.map((a) => a.wellheadId)).size;
 
   return (
     <div className='space-y-5'>
@@ -87,9 +71,9 @@ function AlarmCenter() {
 
       <div className='grid gap-4 md:grid-cols-3'>
         {[
-          { label: 'Critical', value: critical },
-          { label: 'Warning', value: warning },
-          { label: 'Wellheads affected', value: affectedWells },
+          { label: 'Critical', value: totals.critical },
+          { label: 'Warning', value: totals.warning },
+          { label: 'Wellheads affected', value: totals.affectedWellheads },
         ].map((tile) => (
           <div key={tile.label} className='card py-3! px-5! rounded-lg'>
             <p className='text-sm text-fgColor-muted'>{tile.label}</p>
@@ -98,9 +82,16 @@ function AlarmCenter() {
         ))}
       </div>
 
-      {alarms.length === 0 ? (
+      {alarms.length < totals.total && (
+        <p className='text-sm text-fgColor-muted'>
+          Showing the first {alarms.length} of {totals.total} active alarms, most severe
+          first.
+        </p>
+      )}
+
+      {totals.total === 0 ? (
         <div className='card p-6! text-sm text-fgColor-muted'>
-          No active alarms. Every parameter is inside its configured range.
+          No active alarms. None of the configured alarm rules is currently triggered.
         </div>
       ) : (
         <div className='card overflow-x-auto'>

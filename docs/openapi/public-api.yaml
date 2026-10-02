@@ -188,7 +188,7 @@ paths:
   /dashboard/active-alarms:
     get:
       tags: [Dashboard]
-      summary: Return active alarm events.
+      summary: Return totals over all active alarms and a capped, ranked list of them.
       operationId: getActiveAlarms
       security:
         - cookieAuth: []
@@ -463,12 +463,35 @@ components:
           type: integer
         data:
           type: object
-          required: [alarms]
+          required: [totals, alarms]
           properties:
+            totals:
+              $ref: "#/components/schemas/ActiveAlarmTotals"
             alarms:
               type: array
+              description: >-
+                At most 50 active alarms, most severe first and then oldest
+                first. It can hold fewer rows than totals.total.
+              maxItems: 50
               items:
                 $ref: "#/components/schemas/ActiveAlarm"
+    ActiveAlarmTotals:
+      type: object
+      description: Counts over every active alarm, not only the listed ones.
+      required: [total, critical, warning, affectedWellheads]
+      properties:
+        total:
+          type: integer
+          minimum: 0
+        critical:
+          type: integer
+          minimum: 0
+        warning:
+          type: integer
+          minimum: 0
+        affectedWellheads:
+          type: integer
+          minimum: 0
     DashboardAnalyticsResponse:
       type: object
       required: [msg, data, status]

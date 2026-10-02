@@ -49,6 +49,37 @@ export type ActiveAlarm = {
   alarmRuleId?: number | null;
 };
 
+/**
+ * Alarm severities, most urgent first.
+ *
+ * The database stores severity as free text, so this list is the one place
+ * that says which levels exist and in what order an operator should deal with
+ * them. The API sorts by it and the Alarm Center relies on that order. A level
+ * that is not listed here sorts after all of these.
+ */
+export const ALARM_SEVERITIES = ['CRITICAL', 'WARNING'] as const;
+
+export type AlarmSeverity = (typeof ALARM_SEVERITIES)[number];
+
+/** Counts over every active alarm, not only the ones returned in the list. */
+export type ActiveAlarmTotals = {
+  total: number;
+  critical: number;
+  warning: number;
+  affectedWellheads: number;
+};
+
+/**
+ * The Alarm Center's data.
+ *
+ * `alarms` is capped, most severe first and then oldest first, so it can hold
+ * fewer rows than `totals.total`. Counts must come from `totals`.
+ */
+export type ActiveAlarmsResponse = {
+  totals: ActiveAlarmTotals;
+  alarms: ActiveAlarm[];
+};
+
 export type DashboardOverviewResponse = {
   summary: DashboardSummary;
   latestReadings: LatestReading[];
