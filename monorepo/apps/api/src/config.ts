@@ -30,7 +30,7 @@ function readJwtSecret(): string {
  * Whether session cookies carry the `Secure` flag.
  *
  * Previously tied to `NODE_ENV === 'production'`, which the compose stack sets
- * while serving plain HTTP on port 8082. That works only because browsers treat
+ * while serving plain HTTP on port 8090. That works only because browsers treat
  * localhost as a secure context; on any real host without TLS the browser drops
  * the cookie and login silently fails. Driving it from an explicit variable
  * makes the deployment state the truth rather than inferring it.
