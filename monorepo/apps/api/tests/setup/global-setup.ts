@@ -72,15 +72,39 @@ export async function setup(): Promise<void> {
   try {
     applyMigrations();
   } catch (cause) {
-    const detail =
-      cause instanceof Error && 'stderr' in cause
-        ? String((cause as { stderr?: Buffer }).stderr ?? '')
-        : '';
     throw new Error(
       `Failed to apply migrations to the test database.\n` +
-        `Ensure the migrator's dependencies are installed:  pip install -r requirements-dev.txt\n${detail}`
+        `Ensure the migrator's dependencies are installed:  pip install -r requirements-dev.txt\n` +
+        describeMigratorFailure(cause)
     );
   }
+}
+
+/**
+ * Report everything the failed migrator run left behind.
+ *
+ * The migrator writes its JSON log to stdout, not stderr, so reporting stderr
+ * alone hid its own "Migration failed" message. A spawn failure (python3
+ * missing) or a kill signal leaves both streams empty, and only `code`,
+ * `status`, or `signal` explain it.
+ */
+function describeMigratorFailure(cause: unknown): string {
+  if (!(cause instanceof Error)) return `Unknown failure: ${String(cause)}`;
+  const failure = cause as Error & {
+    code?: string;
+    status?: number | null;
+    signal?: string | null;
+    stdout?: Buffer | string;
+    stderr?: Buffer | string;
+  };
+  return [
+    `error: ${failure.message}`,
+    `code: ${failure.code ?? 'none'}`,
+    `exit status: ${failure.status ?? 'none'}`,
+    `signal: ${failure.signal ?? 'none'}`,
+    `stdout:\n${String(failure.stdout ?? '').trim() || '(empty)'}`,
+    `stderr:\n${String(failure.stderr ?? '').trim() || '(empty)'}`,
+  ].join('\n');
 }
 
 export async function teardown(): Promise<void> {
