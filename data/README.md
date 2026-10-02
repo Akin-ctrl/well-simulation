@@ -43,11 +43,14 @@ live interface.
 
 ## Telling stale data from fresh
 
-The gateway writes zero to heartbeat register 1900 before changing values, then
-writes the model tick's UTC epoch second after the complete register update.
-Ingestion reads it before and after a poll. A missing, unchanged, too-old, or
-changed-mid-poll heartbeat prevents an insert. `timestamp_utc` is the model
-tick, while `inserted_at` is the database arrival time. Both are UTC.
+The gateway writes zero to the status registers 1900 to 1904 before changing
+values. After the complete register update it writes the model tick's UTC epoch
+second (1900 and 1901) and the model version (1902 to 1904, major, minor, and
+patch) in one write. Ingestion reads all five before and after a poll. A
+missing, unchanged, too-old, or changed-mid-poll heartbeat or version prevents
+an insert. `timestamp_utc` is the model tick, while `inserted_at` is the
+database arrival time. Both are UTC. `model_version` records which model
+calculated the reading.
 
 ## Alarms
 

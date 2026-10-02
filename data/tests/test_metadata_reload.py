@@ -7,6 +7,8 @@ These cover the timer, the change detection, and the register clearing.
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 import psycopg2
 import pytest
 from pytest import MonkeyPatch
@@ -14,11 +16,16 @@ from pytest import MonkeyPatch
 import modbus_gateway as gateway
 from telemetry_common import (
     HEARTBEAT_REGISTER,
+    STATUS_BLOCK_REGISTERS,
     DatabaseSettings,
     MetadataReloader,
+    ModelVersion,
     ParameterMapping,
     mappings_changed,
 )
+
+NOW = datetime(2026, 10, 2, 12, 0, tzinfo=timezone.utc)
+VERSION = ModelVersion(0, 3, 0)
 
 # Never used to connect: every test that touches the loader replaces it.
 SETTINGS = DatabaseSettings(
@@ -127,7 +134,9 @@ class TestRegisterClearing:
         """ADR 0035: the old address must not keep serving a stale reading."""
         store = gateway.RegisterStore([mapping(modbus_register=0)])
         store.apply_batch(
-            [{"wellhead_id": 1, "parameters": {"tubing_pressure": 1234.5}}]
+            [{"wellhead_id": 1, "parameters": {"tubing_pressure": 1234.5}}],
+            NOW,
+            VERSION,
         )
         assert store.context[1].getValues(3, 0, 2) != [0, 0]
 
@@ -136,20 +145,28 @@ class TestRegisterClearing:
         assert store.context[1].getValues(3, 0, 2) == [0, 0]
 
     def test_the_heartbeat_is_cleared_too(self) -> None:
-        """A surviving heartbeat would tell ingestion the data is fresh."""
+        """A surviving heartbeat or version would tell ingestion the data is fresh."""
         store = gateway.RegisterStore([mapping()])
-        store.apply_batch([{"wellhead_id": 1, "parameters": {}}])
-        assert store.context[1].getValues(3, HEARTBEAT_REGISTER, 2) != [0, 0]
+        store.apply_batch([{"wellhead_id": 1, "parameters": {}}], NOW, VERSION)
+        block = store.context[1].getValues(
+            3, HEARTBEAT_REGISTER, STATUS_BLOCK_REGISTERS
+        )
+        assert block != [0] * STATUS_BLOCK_REGISTERS
 
         store.replace_mappings([mapping()])
 
-        assert store.context[1].getValues(3, HEARTBEAT_REGISTER, 2) == [0, 0]
+        block = store.context[1].getValues(
+            3, HEARTBEAT_REGISTER, STATUS_BLOCK_REGISTERS
+        )
+        assert block == [0] * STATUS_BLOCK_REGISTERS
 
     def test_the_new_mappings_are_addressable(self) -> None:
         store = gateway.RegisterStore([mapping(modbus_register=0)])
         store.replace_mappings([mapping(modbus_register=200)])
 
-        store.apply_batch([{"wellhead_id": 1, "parameters": {"tubing_pressure": 42.0}}])
+        store.apply_batch(
+            [{"wellhead_id": 1, "parameters": {"tubing_pressure": 42.0}}], NOW, VERSION
+        )
 
         assert store.context[1].getValues(3, 200, 2) != [0, 0]
         assert store.context[1].getValues(3, 0, 2) == [0, 0]

@@ -10,7 +10,7 @@ from typing import Any
 from urllib.parse import urlsplit
 from urllib.request import urlopen
 
-from telemetry_common import HEARTBEAT_REGISTER, ParameterMapping
+from telemetry_common import HEARTBEAT_REGISTER, ModelVersion, ParameterMapping
 
 # The gateway owns the conversion from model fields to the existing Modbus map.
 # Types and units are defined by parameterType metadata, not inferred here.
@@ -48,9 +48,10 @@ MAX_SNAPSHOT_BYTES = 1_000_000
 
 @dataclass(frozen=True)
 class ModelBatch:
-    """A checked model instant and all mapped readings at that instant."""
+    """A checked model instant, the model that produced it, and its readings."""
 
     simulated_at: datetime
+    model_version: ModelVersion
     telemetry: list[dict[str, object]]
 
 
@@ -159,8 +160,7 @@ def parse_model_snapshot(
     root = _object(payload, "snapshot")
     if not _source_is_model(root):
         raise ValueError("Unexpected model source")
-    if not isinstance(root.get("modelVersion"), str) or not root["modelVersion"]:
-        raise ValueError("Missing model version")
+    model_version = ModelVersion.parse(root.get("modelVersion"))
     wellheads = root.get("wellheads")
     if not isinstance(wellheads, list) or not expected_ids:
         raise ValueError("Missing model fleet")
@@ -182,7 +182,7 @@ def parse_model_snapshot(
     age = (now - common_time).total_seconds()
     if age < -2 or age > max_age_seconds:
         raise ValueError("Model snapshot is stale or in the future")
-    return ModelBatch(common_time, telemetry)
+    return ModelBatch(common_time, model_version, telemetry)
 
 
 def fetch_model_snapshot(

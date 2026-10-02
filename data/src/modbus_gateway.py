@@ -5,7 +5,7 @@ from __future__ import annotations
 import threading
 import time
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime
 
 import psycopg2
 from pymodbus.client.mixin import ModbusClientMixin
@@ -19,9 +19,11 @@ from pymodbus.server import StartTcpServer
 from model_source import fetch_model_snapshot, supported_mappings
 from telemetry_common import (
     HEARTBEAT_REGISTER,
+    STATUS_BLOCK_REGISTERS,
     WORD_ORDER,
     DatabaseSettings,
     MetadataReloader,
+    ModelVersion,
     ParameterMapping,
     ServiceHealth,
     collect_unit_ids,
@@ -166,9 +168,12 @@ class RegisterStore:
             ] = mapping
 
     def apply_batch(
-        self, telemetry: list[dict[str, object]], at: datetime | None = None
+        self,
+        telemetry: list[dict[str, object]],
+        at: datetime,
+        model_version: ModelVersion,
     ) -> None:
-        """Write one telemetry batch into the register image."""
+        """Write one telemetry batch, then publish its tick and model version."""
         self.clear_heartbeat()
         for data_point in telemetry:
             wellhead_id = data_point["wellhead_id"]
@@ -195,17 +200,28 @@ class RegisterStore:
                     encode_value(value, mapping.data_type),
                 )
 
-        self.write_heartbeat(at or datetime.now(timezone.utc))
+        self.write_heartbeat(at, model_version)
 
     def clear_heartbeat(self) -> None:
-        """Mark a register update in progress before changing any value."""
-        for unit_id in self.unit_ids:
-            self._write(unit_id, HEARTBEAT_REGISTER, [0, 0])
+        """Mark a register update in progress before changing any value.
 
-    def write_heartbeat(self, timestamp: datetime) -> None:
-        """Publish the time of the latest batch to every device context."""
-        payload = ModbusClientMixin.convert_to_registers(
-            int(timestamp.timestamp()), DATATYPE.UINT32, word_order=WORD_ORDER
+        Zeroes the whole status block, so the model version is unpublished too
+        until the new batch is complete.
+        """
+        for unit_id in self.unit_ids:
+            self._write(unit_id, HEARTBEAT_REGISTER, [0] * STATUS_BLOCK_REGISTERS)
+
+    def write_heartbeat(self, timestamp: datetime, model_version: ModelVersion) -> None:
+        """Publish the batch's tick time and model version to every unit.
+
+        Both go in one five-register write, so a reader can never pair a new
+        heartbeat with the previous model version.
+        """
+        payload = (
+            ModbusClientMixin.convert_to_registers(
+                int(timestamp.timestamp()), DATATYPE.UINT32, word_order=WORD_ORDER
+            )
+            + model_version.to_registers()
         )
         for unit_id in self.unit_ids:
             self._write(unit_id, HEARTBEAT_REGISTER, payload)
@@ -259,7 +275,7 @@ def run_model_source(
             batch = fetch_model_snapshot(settings.twin_core_url, expected_ids, max_age)
             if last_tick is not None and batch.simulated_at <= last_tick:
                 raise ValueError("Model tick has not advanced")
-            store.apply_batch(batch.telemetry, batch.simulated_at)
+            store.apply_batch(batch.telemetry, batch.simulated_at, batch.model_version)
         except Exception:
             BATCH_ERRORS.inc()
             health.ready = False

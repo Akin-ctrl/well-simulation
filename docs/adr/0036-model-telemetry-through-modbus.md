@@ -154,3 +154,101 @@ and Faraday-law calculation described in the
 The outputs are synthetic estimates, not field measurements. Model source
 labelling and `fieldCalibrated: false` remain required. Old random readings keep
 their original source until retention removes them.
+
+## Amendment 2026-10-02: Publish the model version with the heartbeat
+
+### The problem
+
+A stored reading recorded its tick time and its source kind, but not which
+model version calculated it. Twin-core already reports `modelVersion` in every
+fleet snapshot. After a model change, the historian could not tell readings
+from version 0.3.0 apart from readings made by the next version. The
+[reference-well design](../design/reference-well-physics.md) listed this as a
+gap for Milestone 7.
+
+### Options considered
+
+**Carry the version through Modbus (chosen).** The gateway already publishes a
+status value (the heartbeat) that ingestion checks before and after every
+poll. The version can travel in the same block. This keeps Modbus as the only
+path from the model to the historian. It costs three registers, a migration,
+and a register-map change that both services must follow.
+
+**Ingestion asks twin-core over HTTP.** This needs no register change. But it
+gives ingestion a second source of truth beside Modbus. While twin-core
+restarts, the HTTP answer and the registers can describe different models,
+and ingestion would gain a new dependency on twin-core.
+
+**Leave it for Milestone 7.** [ADR 0024](0024-twin-persistence-schema.md)
+plans model definition tables with a version. Linking readings to them there
+would design the link once. Every reading stored until then would carry no
+version, so the gap would keep growing.
+
+### Decision
+
+**Registers.** The heartbeat and the version form one status block of five
+holding registers on every mapped unit:
+
+| Offset | Content | Encoding |
+| --- | --- | --- |
+| 1900 to 1901 | Model tick, UTC epoch seconds | unsigned 32 bit, shared `WORD_ORDER` |
+| 1902 | Major version | unsigned 16 bit |
+| 1903 | Minor version | unsigned 16 bit |
+| 1904 | Patch version | unsigned 16 bit |
+
+Version text such as `0.3.0` becomes the registers `0, 3, 0`. An all-zero
+version means "not published", just as a zero heartbeat does, so version
+`0.0.0` is reserved and rejected. Each part must fit in 16 bits.
+
+**Logic.** `telemetry_common.ModelVersion` is the one definition of the text
+and register forms. The gateway parses `modelVersion` from the snapshot and
+rejects a batch whose version cannot be encoded. It zeroes the whole status
+block before changing any value, then writes the heartbeat and version in one
+five-register write after all values are in place. Ingestion reads the block
+with one Read Holding Registers request (function code 03, offset 1900,
+quantity 5), so both parts come from one moment on the server. Every unit must
+report the same tick and the same version, before and after the poll. A
+heartbeat with a zero or malformed version rejects the batch, and a version
+that changes between the two reads discards it.
+
+**Schema.** Migration `0008_reading_model_version.sql` adds
+`parameterReading.model_version` with the domain type `model_version_text`. A
+domain is a named type that carries its own check; this one accepts only
+`major.minor.patch` digits. Rows written before the migration keep `NULL`,
+meaning "not recorded". Their version cannot be recovered, so it is not
+backfilled.
+
+### Trap: do not turn the domain into a table constraint
+
+TimescaleDB 2.19 refuses to add any table CHECK constraint, even one marked
+`NOT VALID`, once a hypertable holds compressed chunks. `parameterReading`
+compresses readings older than one day (migration 0005), so a constraint
+migration fails on any volume that has run for more than a day. This was tested
+on 2026-10-02. Adding a column of a domain type is allowed and still rejects a
+malformed value on insert. **Do not reintroduce a table constraint for this
+column.** For the same reason, the rule "random simulator rows have no
+version" is not enforced in the database. It spans two columns, which a domain
+cannot check. Ingestion is the only writer and sets the version on every model
+row.
+
+### Consequences
+
+**Good.**
+
+- Every new reading names the model version that produced it.
+- Milestone 7 can join `model_version` to the version in
+  `twin_model_definition` without changing the reading format again.
+
+**Costs.**
+
+- The status read grows from two registers to five per unit, still one request.
+- The register map gains a reserved range (1900 to 1904) that metadata must
+  never map. The existing mapping check already rejects signal registers at
+  1899 and above.
+
+**Accepted risks.**
+
+- Readings stored before 2026-10-02 have no recorded version. Retention removes
+  them within seven days.
+- A twin-core redeploy discards the batch in progress. Ingestion resumes at the
+  next tick under the new version, leaving a visible gap.

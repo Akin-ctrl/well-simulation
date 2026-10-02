@@ -15,9 +15,11 @@ from pymodbus.client.mixin import ModbusClientMixin
 from model_source import supported_mappings
 from telemetry_common import (
     HEARTBEAT_REGISTER,
+    STATUS_BLOCK_REGISTERS,
     WORD_ORDER,
     DatabaseSettings,
     MetadataReloader,
+    ModelVersion,
     ParameterMapping,
     ServiceHealth,
     as_number,
@@ -53,8 +55,9 @@ DATATYPE = ModbusClientMixin.DATATYPE
 
 INSERT_READING_SQL = """
 INSERT INTO parameterReading (
-    timestamp_utc, wellhead_id, parameter_type_id, mapping_id, raw_value, source_kind
-) VALUES (%s, %s, %s, %s, %s, %s)
+    timestamp_utc, wellhead_id, parameter_type_id, mapping_id, raw_value, source_kind,
+    model_version
+) VALUES (%s, %s, %s, %s, %s, %s, %s)
 """
 
 logger = configure_logging("database_ingestion")
@@ -90,8 +93,9 @@ class Reading:
     parameter_type_id: int
     mapping_id: int
     raw_value: float
+    model_version: ModelVersion
 
-    def as_row(self) -> tuple[datetime, int, int, int, float, str]:
+    def as_row(self) -> tuple[datetime, int, int, int, float, str, str]:
         """Return the tuple expected by INSERT_READING_SQL."""
         return (
             self.timestamp_utc,
@@ -100,7 +104,16 @@ class Reading:
             self.mapping_id,
             self.raw_value,
             "synthetic_reduced_order_model",
+            str(self.model_version),
         )
+
+
+@dataclass(frozen=True)
+class GatewayStatus:
+    """The tick time and model version the gateway published together."""
+
+    heartbeat: int
+    model_version: ModelVersion
 
 
 def decode_registers(registers: list[int], data_type: str) -> float | None:
@@ -128,10 +141,15 @@ def is_stale(heartbeat: int | None, last_heartbeat: int | None) -> bool:
     return heartbeat is None or heartbeat == last_heartbeat
 
 
-def read_heartbeat(client: ModbusTcpClient, unit_id: int) -> int | None:
-    """Read the model tick epoch seconds, or None while the image is invalid."""
+def read_status(client: ModbusTcpClient, unit_id: int) -> GatewayStatus | None:
+    """Read the tick time and model version, or None while either is unpublished.
+
+    One Read Holding Registers request covers the whole status block (offset
+    1900, quantity 5), so the heartbeat and the version come from one moment on
+    the server.
+    """
     result = client.read_holding_registers(
-        HEARTBEAT_REGISTER, count=REGISTERS_PER_VALUE, device_id=unit_id
+        HEARTBEAT_REGISTER, count=STATUS_BLOCK_REGISTERS, device_id=unit_id
     )
     if result.isError():
         MODBUS_READ_ERRORS.labels(kind="heartbeat").inc()
@@ -141,7 +159,9 @@ def read_heartbeat(client: ModbusTcpClient, unit_id: int) -> int | None:
     heartbeat = int(
         as_number(
             ModbusClientMixin.convert_from_registers(
-                result.registers, DATATYPE.UINT32, word_order=WORD_ORDER
+                result.registers[:REGISTERS_PER_VALUE],
+                DATATYPE.UINT32,
+                word_order=WORD_ORDER,
             ),
             "heartbeat",
         )
@@ -158,22 +178,38 @@ def read_heartbeat(client: ModbusTcpClient, unit_id: int) -> int | None:
         )
         return None
 
-    return heartbeat
+    # A heartbeat without a version breaks the gateway's contract, which writes
+    # both in one call. Treat it like a zero heartbeat: nothing is stored.
+    try:
+        model_version = ModelVersion.from_registers(
+            list(result.registers[REGISTERS_PER_VALUE:])
+        )
+    except ValueError:
+        model_version = None
+    if model_version is None:
+        MODBUS_READ_ERRORS.labels(kind="heartbeat").inc()
+        logger.error(
+            "Gateway published a heartbeat without a valid model version",
+            extra={"unit_id": unit_id},
+        )
+        return None
+
+    return GatewayStatus(heartbeat, model_version)
 
 
-def read_fleet_heartbeat(
+def read_fleet_status(
     client: ModbusTcpClient, mappings: list[ParameterMapping]
-) -> int | None:
-    """Accept a model tick only when every mapped Modbus unit agrees."""
-    common: int | None = None
+) -> GatewayStatus | None:
+    """Accept a tick only when every mapped unit reports the same tick and version."""
+    common: GatewayStatus | None = None
     for unit_id in collect_unit_ids(mappings):
-        heartbeat = read_heartbeat(client, unit_id)
-        if heartbeat is None:
+        status = read_status(client, unit_id)
+        if status is None:
             return None
-        if common is not None and heartbeat != common:
-            logger.warning("Modbus units report different model ticks")
+        if common is not None and status != common:
+            logger.warning("Modbus units report different model ticks or versions")
             return None
-        common = heartbeat
+        common = status
     return common
 
 
@@ -181,6 +217,7 @@ def poll_once(
     client: ModbusTcpClient,
     mappings: list[ParameterMapping],
     timestamp: datetime,
+    model_version: ModelVersion,
 ) -> list[Reading]:
     """Read every mapped register once and return the decoded readings."""
     readings: list[Reading] = []
@@ -221,6 +258,7 @@ def poll_once(
                 parameter_type_id=mapping.parameter_type_id,
                 mapping_id=mapping.mapping_id,
                 raw_value=value,
+                model_version=model_version,
             )
         )
 
@@ -291,7 +329,8 @@ def ingest_forever(
 
             mappings = apply_metadata_reload(reloader, mappings)
 
-            heartbeat = read_fleet_heartbeat(client, mappings)
+            status = read_fleet_status(client, mappings)
+            heartbeat = status.heartbeat if status is not None else None
             if heartbeat is not None:
                 TELEMETRY_AGE.set(max(0.0, now.timestamp() - heartbeat))
 
@@ -311,13 +350,17 @@ def ingest_forever(
                     },
                 )
             else:
-                if heartbeat is None:
+                if heartbeat is None or status is None:
                     raise ValueError("Missing heartbeat before Modbus poll")
                 source_time = datetime.fromtimestamp(heartbeat, timezone.utc)
                 with POLL_DURATION.time():
-                    readings = poll_once(client, mappings, source_time)
-                ending_heartbeat = read_fleet_heartbeat(client, mappings)
-                if ending_heartbeat != heartbeat:
+                    readings = poll_once(
+                        client, mappings, source_time, status.model_version
+                    )
+                # The version must match too: a twin-core redeploy between the
+                # two reads would otherwise label the batch with the wrong model.
+                ending_status = read_fleet_status(client, mappings)
+                if ending_status != status:
                     health.ready = False
                     POLLS_SKIPPED_STALE.inc()
                     logger.warning("Discarding poll changed during Modbus reads")

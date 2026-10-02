@@ -72,11 +72,15 @@ Both encoder and decoder use the shared `WORD_ORDER` constant and a round-trip
 test. The TCP header carries a transaction ID, protocol ID, length, and unit
 ID. It carries no measurement time or quality flag.
 
-Register 1900 is a two-word unsigned UTC epoch second for the model tick. The
-gateway writes zero to the heartbeat before changing any signal register, then
-writes the new tick time after all signal writes complete. Ingestion reads that
-register on every mapped Modbus unit before and after polling. It stores a batch
-only if all units agree on the same nonzero tick in both reads, the tick advances
+Register 1900 is a two-word unsigned UTC epoch second for the model tick.
+Registers 1902, 1903, and 1904 hold the model version's major, minor, and patch
+numbers (added 2026-10-02, see the ADR 0036 amendment). Together they form a
+five-register status block. The gateway writes zero to the whole block before
+changing any signal register, then writes the new tick time and version in one
+write after all signal writes complete. Ingestion reads the block with one
+request (offset 1900, quantity 5) on every mapped Modbus unit before and after
+polling. It stores a batch only if all units agree on the same nonzero tick and
+the same version in both reads, the tick advances
 beyond the last stored tick, and it is no more than twice the telemetry
 interval old (minimum five seconds). A value more than two
 seconds in the future is rejected. The second read detects a batch changed
@@ -84,7 +88,9 @@ mid-poll, including a change on a different unit. The zero marks an update in
 progress or an incomplete write.
 
 `timestamp_utc` in `parameterReading` is the model tick time carried by the
-heartbeat. `inserted_at` is the database insertion time. The new `source_kind`
+heartbeat. `model_version` is the version carried beside it, such as `0.3.0`,
+and is `NULL` for rows stored before migration 0008. `inserted_at` is the
+database insertion time. The new `source_kind`
 column marks old rows as `synthetic_random_simulator` and new rows as
 `synthetic_reduced_order_model`. Historian reads include the source on each
 reading and report `mixed` when old and new values appear together. No
