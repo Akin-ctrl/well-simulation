@@ -77,10 +77,8 @@ The `migrator` service applies the ordered SQL migrations in `data/sql/migration
 before the API or the telemetry services start. Schema changes do **not** require
 recreating the volume.
 
-The dashboard is served at <http://localhost:8090>. The current production
-image returns HTTP 200 but renders a blank page in a real browser because its
-Content Security Policy blocks React Router's inline startup scripts. Sign-in
-will work after that deployment issue is fixed:
+The dashboard is served at <http://localhost:8090>. Sign in with the demo
+account:
 
 | Account | Role | Password |
 | --- | --- | --- |

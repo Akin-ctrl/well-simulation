@@ -20,11 +20,6 @@ Show that the project is an industrial wellhead monitoring simulation evolving i
    http://localhost:8090
    ```
 
-   This step is currently blocked in the production image. The page returns
-   HTTP 200 but stays blank because its Content Security Policy blocks the
-   React Router startup scripts. Do not present the later UI steps as verified
-   until a browser can render them.
-
 3. Confirm live telemetry:
 
    - wellhead pressure

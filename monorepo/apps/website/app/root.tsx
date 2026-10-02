@@ -59,6 +59,21 @@ export default function App() {
   );
 }
 
+/**
+ * Shown while the dashboard's JavaScript loads and its first data request runs.
+ *
+ * Without it, React Router prerenders a default page that also carries an
+ * inline console hint for developers, one more script the CSP would have to
+ * allow.
+ */
+export function HydrateFallback() {
+  return (
+    <div className='flex min-h-screen items-center justify-center text-sm text-fgColor-muted'>
+      Loading the dashboard
+    </div>
+  );
+}
+
 export function ErrorBoundary() {
   return <></>;
 }
