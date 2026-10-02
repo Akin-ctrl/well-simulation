@@ -141,8 +141,9 @@ Every reading is invented. New values are calculated by the reduced-order
 model and passed through Modbus. Older random readings remain labelled in the
 historian until retention removes them. The model links flow, pressure, temperature, water cut, gas, sand, corrosion,
 annulus pressure, and vibration, but it has not been calibrated against a real well.
-No new readings are produced for annulus pressure, gas-oil ratio, sand, corrosion
-rate, H2S, CO2, or vibration because the model has no equations for them.
+Seven of these (annulus pressure, gas-oil ratio, sand, corrosion rate, H2S, CO2,
+and vibration) come from simpler diagnostic equations added in model version
+0.3.0. They are less grounded than the pressure and flow equations.
 
 Two more things are compressed for a demo rather than set the way a plant would
 set them:
