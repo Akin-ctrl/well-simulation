@@ -34,7 +34,7 @@ export const authMiddleware: MiddlewareHandler = async (c, next) => {
 
   if (token) {
     try {
-      const payload = await verify(token, config.jwtSecret);
+      const payload = await verify(token, config.jwtSecret, config.jwtAlgorithm);
       c.set('session', payload);
     } catch {
       deleteCookie(c, 'auth_token');
