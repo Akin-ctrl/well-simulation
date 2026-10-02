@@ -11,7 +11,7 @@
 
 ruff == 0.14.4
 mypy == 1.18.2
-pytest == 8.4.2
+pytest == 9.0.3
 
 # Stubs so strict typing checks our code rather than reporting library gaps.
 types-psycopg2 == 2.9.21.20250915
