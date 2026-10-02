@@ -35,7 +35,8 @@ async function issueSession(c: Context, user: UserRecord) {
       role: user.role ?? DEFAULT_ROLE,
       exp: expiresAtSeconds,
     },
-    config.jwtSecret
+    config.jwtSecret,
+    config.jwtAlgorithm
   );
 
   setCookie(c, AUTH_COOKIE_NAME, token, {

@@ -58,6 +58,8 @@ function readAllowedOrigins(): string[] {
 
 export const config = {
   jwtSecret: readJwtSecret(),
+  // Named on both sign and verify, so a token cannot choose its own algorithm.
+  jwtAlgorithm: 'HS256',
   cookieSecure: readCookieSecure(),
   allowedOrigins: readAllowedOrigins(),
   sessionMaxAgeSeconds: 60 * 60 * 24,
