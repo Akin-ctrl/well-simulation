@@ -1,8 +1,8 @@
 # ADR 0021: Use Version-Controlled Defaults With Database Overrides
 
-- Status: Accepted
+- Status: Accepted, amended
 - Date: 2026-05-31
-- Implementation: Partial
+- Implementation: Complete for the current synthetic model
 
 ## Context
 
@@ -87,3 +87,49 @@ Versioned defaults and validated global overrides load now. A typed per-well ove
 ## Implementation on 2026-09-29
 
 The model now consumes validated typed parameters. Stable per-well variation is applied before global and future database overrides. Runtime parameter changes are rejected with `restart_required`. The database override table remains Milestone 7 work.
+
+## Amendment 2026-10-03: Overrides are edited by SQL until the control milestone
+
+### The problem
+
+Milestone 7 builds the per-well override table and its loader. Something has to
+write the rows. An API in the TypeScript service would either copy the valid
+ranges from `twin_core/model_defaults.json`, so the rule would live in two
+places, or ask twin-core to validate through a new internal write endpoint.
+That endpoint is the same kind of authenticated, audited write path the live
+control API needs.
+
+### Decision
+
+- The table is `wellhead_model_parameter`, defined in the
+  [Milestone 7 design](../design/twin-core-milestone-7.md). Rows are only ever
+  added. A change is a new row; a row with `value` NULL returns the parameter
+  to its default. Each row records `source`, `changed_by`, and `reason`.
+- An administrator edits it with SQL. There is no API or screen in Milestone 7.
+- Twin-core loads the rows on every fleet refresh and validates them with the
+  existing resolver: known key, matching unit, named source, value in range.
+  An invalid value marks only that well unavailable. A changed value on a
+  running well marks it `restart_required`, so live behaviour never changes
+  silently.
+
+### Accepted risks
+
+- `changed_by` and `reason` are typed by hand. They are a record, not a
+  verified actor, so parameter changes are outside the audit trail of
+  [ADR 0034](0034-audit-trail-scope.md) until the control milestone builds an
+  authenticated write path.
+- A wrong value is caught when twin-core loads it, not when it is written. The
+  well shows as unavailable instead of the write being refused.
+
+Calibration, the reason overrides exist, has no real well data to work from
+yet, so overrides are expected to be rare until then.
+
+## Implementation on 2026-10-12
+
+Migration 0010 adds the append-only `wellhead_model_parameter` table. Twin-core
+loads the newest effective row for each well and key during fleet refresh.
+A NULL value removes the per-well override and returns that key to the lower
+precedence environment value or model default.
+The existing resolver checks key, unit, source, and numeric range. Changed
+parameters on a running well require a restart. SQL examples and the limits of
+hand-entered actor names are in [the data guide](../../data/README.md).

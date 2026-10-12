@@ -36,7 +36,7 @@ previously written down.
 | [0009](0009-model-fidelity.md) | Start With A Lightweight Deterministic Model | Partial |
 | [0010](0010-model-runtime.md) | Run The Twin Core As A Separate Python Service | Implemented |
 | [0011](0011-twin-core-communication.md) | Use Internal HTTP Plus Durable Database Persistence | Partial |
-| [0012](0012-state-storage.md) | Keep Active Twin State In Memory With Durable Snapshots | Partial |
+| [0012](0012-state-storage.md) | Keep Active Twin State In Memory With Durable Snapshots | Implemented |
 | [0013](0013-prediction-strategy.md) | Start With On-Demand Forecasts And Evolve To Hybrid Forecasting | Not started |
 | [0014](0014-scenario-execution.md) | Run What-If Scenarios Against Isolated Cloned State | Not started |
 | [0015](0015-control-and-safety.md) | Restrict Live Control To Actuator-Like Variables | Not started |
@@ -45,10 +45,10 @@ previously written down.
 | [0018](0018-deployment-target.md) | Use Docker Compose As The First Production-Grade Deployment Target | Implemented |
 | [0019](0019-model-equations.md) | Use A Reduced-Order Mechanistic Wellhead Model | Implemented |
 | [0020](0020-model-tick-semantics.md) | Use Fixed Timestep Model Updates | Partial |
-| [0021](0021-model-parameterization.md) | Use Version-Controlled Defaults With Database Overrides | Partial |
-| [0022](0022-recovery-semantics.md) | Restore From Snapshots And Mark Recovery Gaps | Partial |
+| [0021](0021-model-parameterization.md) | Use Version-Controlled Defaults With Database Overrides | Implemented |
+| [0022](0022-recovery-semantics.md) | Restore From Snapshots And Mark Recovery Gaps | Implemented |
 | [0023](0023-default-parameter-set.md) | Use Documented Synthetic Engineering Defaults | Implemented |
-| [0024](0024-twin-persistence-schema.md) | Use Relational Twin Metadata With Time-Series Run Outputs | Not started |
+| [0024](0024-twin-persistence-schema.md) | Use Relational Twin Metadata With Time-Series Run Outputs | Partial |
 | [0025](0025-forecast-horizon-confidence.md) | Use Short Operational Forecasts With Heuristic Confidence | Not started |
 | [0026](0026-retention-and-compression.md) | Use Tiered Retention And TimescaleDB Compression | Implemented |
 | [0027](0027-historical-branching.md) | Stage Historical Scenario Branching From Model Snapshots | Not started |
@@ -62,7 +62,7 @@ previously written down.
 | [0035](0035-metadata-reload.md) | How Metadata Changes Reach A Running Service | Implemented |
 | [0036](0036-model-telemetry-through-modbus.md) | Send Model Telemetry Through The Existing Modbus Path | Implemented |
 
-Of 36 decisions: 17 implemented, 10 not started, 9 partial.
+Of 36 decisions: 20 implemented, 9 not started, 7 partial.
 
 The twin-core process model now feeds the Modbus gateway and historian.
-Forecasts, scenarios, and durable model state snapshots remain planned.
+Durable model state snapshots are implemented. Forecasts and scenarios remain planned.

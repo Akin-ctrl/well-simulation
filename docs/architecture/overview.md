@@ -19,6 +19,8 @@ each well on a fixed one-second step. The gateway reads one complete fleet
 snapshot and serves all 18 seeded model signals as Modbus registers.
 Ingestion polls the gateway and stores source-labelled readings. The seven
 diagnostic signals added in model version 0.3.0 remain synthetic estimates.
+Twin-core also saves model state in TimescaleDB and restores compatible state
+after a restart. Recovery decisions and wall-clock jumps are recorded there.
 
 The [Milestone 4 design](../design/twin-core-milestone-4.md) explains the
 service boundary and data quality rules. The [Milestone 5 design](../design/twin-core-milestone-5.md)
@@ -26,7 +28,8 @@ explains the original process equations, units, and limits. The
 [reference-well design](../design/reference-well-physics.md) explains the
 additional phase and diagnostic equations. The
 [Milestone 6 design](../design/twin-core-milestone-6.md) describes the Modbus
-mapping and freshness rules.
+mapping and freshness rules. The [Milestone 7 design](../design/twin-core-milestone-7.md)
+describes snapshots, parameter overrides, and restart recovery.
 
 ## Current Dashboard Layer
 
@@ -62,8 +65,8 @@ Asset metadata
 - **Twin core**: maintains current process state for each wellhead.
 - **Process model**: updates pressure, flow, temperature, valve state, pump state, and degradation over time.
 - **Telemetry adapter**: converts supported model fields into Modbus-readable register values.
-- **Historian**: stores source-labelled readings and alarm events. Model state
-  snapshots and predictions remain planned.
+- **Historian**: stores source-labelled readings, alarm events, model state
+  snapshots, and recovery events. Predictions remain planned.
 - **Control API**: accepts bounded operational inputs.
 - **Scenario API**: runs what-if simulations without mutating live state.
 - **Dashboard**: shows live state, historical trends, alarms, predictions, and scenario outputs.

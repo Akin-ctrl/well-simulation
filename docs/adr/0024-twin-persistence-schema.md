@@ -1,8 +1,8 @@
 # ADR 0024: Use Relational Twin Metadata With Time-Series Run Outputs
 
-- Status: Accepted
+- Status: Accepted, amended
 - Date: 2026-05-31
-- Implementation: Not started
+- Implementation: Milestone 7 tables complete; later tables remain planned
 
 ## Context
 
@@ -196,3 +196,42 @@ Suggested fields:
 - JSONB payloads should not replace high-value query columns.
 - Retention and compression policies still need separate decisions.
 
+
+## Amendment 2026-10-03: Milestone 7 creates only the tables it writes
+
+### The problem
+
+This record lists nine tables. In Milestone 7 only three would be written: the
+state snapshots, the recovery events, and the per-well parameter overrides. The
+prediction and scenario tables would stay empty until Milestone 8. The control
+table would stay empty with no milestone planned to write it, because no
+milestone built the control API. Phase 3.9 of the repair work removed database
+objects that nothing used, for this reason.
+
+### Decision
+
+- Milestone 7 creates `twin_state_snapshot`, `twin_recovery_event`, and
+  `wellhead_model_parameter`. Their columns are in the
+  [Milestone 7 design](../design/twin-core-milestone-7.md).
+- `prediction_run`, `prediction_point`, `scenario_run`, and `scenario_point`
+  arrive in Milestone 8, with the code that writes them.
+- `control_command` arrives with the live control API, in a new milestone after
+  Milestone 8.
+- `twin_model_definition` and `wellhead_model_config` are not created while the
+  code runs one model version. Snapshots, recovery events, overrides, and
+  readings each record their model version as text, which a definition table
+  can join to later.
+- The snapshot table names its columns with units, such as
+  `tubing_pressure_psi`, following the reading and model payload conventions,
+  rather than the bare names suggested above.
+
+The suggested tables above remain the intended shape for later milestones.
+
+## Implementation on 2026-10-12
+
+Migration 0010 creates only the three Milestone 7 tables listed in the
+amendment. Snapshots and recovery events are TimescaleDB hypertables. The
+snapshot stores queryable pressure, flow, temperature, damage, and status
+columns next to the complete JSONB process state. The Drizzle schema mirrors
+these three tables. Forecast, scenario, and control tables remain for their
+own milestones.

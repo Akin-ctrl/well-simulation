@@ -14,6 +14,7 @@ import {
   primaryKey,
   bigserial,
   bigint,
+  jsonb,
 } from 'drizzle-orm/pg-core';
 
 export const field = pgTable(
@@ -191,6 +192,109 @@ export const parameterreading = pgTable(
       columns: [table.parameterReadingId, table.timestampUtc],
       name: 'parameterreading_pkey',
     }),
+  ]
+);
+
+// Migration 0010 owns the Timescale hypertables and the model_version_text
+// domain. Drizzle mirrors their columns for typed application reads.
+export const twinStateSnapshot = pgTable(
+  'twin_state_snapshot',
+  {
+    snapshotId: bigserial('snapshot_id', { mode: 'bigint' }).notNull(),
+    simulatedAt: timestamp('simulated_at', {
+      withTimezone: true,
+      mode: 'string',
+    }).notNull(),
+    wellheadId: integer('wellhead_id')
+      .notNull()
+      .references(() => wellhead.wellheadId),
+    modelVersion: text('model_version').notNull(),
+    parameterFingerprint: text('parameter_fingerprint').notNull(),
+    status: text('status').notNull(),
+    tickIndex: bigint('tick_index', { mode: 'bigint' }).notNull(),
+    skippedTicks: bigint('skipped_ticks', { mode: 'bigint' }).notNull(),
+    tubingPressurePsi: doublePrecision('tubing_pressure_psi').notNull(),
+    casingPressurePsi: doublePrecision('casing_pressure_psi').notNull(),
+    flowRateBpd: doublePrecision('flow_rate_bpd').notNull(),
+    wellheadTemperatureF: doublePrecision('wellhead_temperature_f').notNull(),
+    waterCutPercent: doublePrecision('water_cut_percent').notNull(),
+    chokePositionPercent: doublePrecision('choke_position_percent').notNull(),
+    blockageFactor: doublePrecision('blockage_factor').notNull(),
+    corrosionFactor: doublePrecision('corrosion_factor').notNull(),
+    state: jsonb('state').$type<Record<string, unknown>>().notNull(),
+    insertedAt: timestamp('inserted_at', { withTimezone: true, mode: 'string' })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    primaryKey({
+      columns: [table.snapshotId, table.simulatedAt],
+      name: 'twin_state_snapshot_pkey',
+    }),
+    index('ix_twin_state_snapshot_well_time').on(
+      table.wellheadId,
+      table.simulatedAt.desc()
+    ),
+  ]
+);
+
+export const twinRecoveryEvent = pgTable(
+  'twin_recovery_event',
+  {
+    eventId: bigserial('event_id', { mode: 'bigint' }).notNull(),
+    occurredAt: timestamp('occurred_at', { withTimezone: true, mode: 'string' })
+      .defaultNow()
+      .notNull(),
+    wellheadId: integer('wellhead_id').references(() => wellhead.wellheadId),
+    eventType: text('event_type').notNull(),
+    modelVersion: text('model_version').notNull(),
+    snapshotSimulatedAt: timestamp('snapshot_simulated_at', {
+      withTimezone: true,
+      mode: 'string',
+    }),
+    gapSeconds: doublePrecision('gap_seconds'),
+    details: jsonb('details').$type<Record<string, unknown>>().default({}).notNull(),
+  },
+  (table) => [
+    primaryKey({
+      columns: [table.eventId, table.occurredAt],
+      name: 'twin_recovery_event_pkey',
+    }),
+    index('ix_twin_recovery_event_well_time').on(
+      table.wellheadId,
+      table.occurredAt.desc()
+    ),
+  ]
+);
+
+export const wellheadModelParameter = pgTable(
+  'wellhead_model_parameter',
+  {
+    parameterOverrideId: serial('parameter_override_id').primaryKey().notNull(),
+    wellheadId: integer('wellhead_id')
+      .notNull()
+      .references(() => wellhead.wellheadId),
+    modelVersion: text('model_version').notNull(),
+    parameterKey: text('parameter_key').notNull(),
+    value: doublePrecision('value'),
+    unit: text('unit'),
+    source: text('source').notNull(),
+    changedBy: text('changed_by').notNull(),
+    reason: text('reason').notNull(),
+    validFrom: timestamp('valid_from', { withTimezone: true, mode: 'string' })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    unique(
+      'wellhead_model_parameter_wellhead_id_model_version_parameter_key_valid_from_key'
+    ).on(table.wellheadId, table.modelVersion, table.parameterKey, table.validFrom),
+    index('ix_wellhead_model_parameter_current').on(
+      table.wellheadId,
+      table.modelVersion,
+      table.parameterKey,
+      table.validFrom.desc()
+    ),
   ]
 );
 

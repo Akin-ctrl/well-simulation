@@ -61,7 +61,7 @@ class ParameterOverride:
 
 
 class ParameterOverrideSource(Protocol):
-    """Boundary for per-well overrides stored in the future model tables."""
+    """Boundary for validated per-well database parameter overrides."""
 
     def load(
         self, wellhead_ids: Sequence[int], model_version: str
@@ -70,12 +70,12 @@ class ParameterOverrideSource(Protocol):
 
 
 class NoDatabaseOverrides:
-    """Use defaults until Milestone 7 adds the model parameter table."""
+    """Use defaults in isolated model tests without a database."""
 
     def load(
         self, _wellhead_ids: Sequence[int], _model_version: str
     ) -> Mapping[int, Mapping[str, ParameterOverride]]:
-        """Return no per-well overrides while no model table exists."""
+        """Return no per-well overrides for an isolated model run."""
         return {}
 
 

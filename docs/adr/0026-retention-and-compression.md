@@ -62,3 +62,10 @@ Retention should be configurable by deployment environment:
 - Operators should understand that forecast points are not permanent historical truth.
 - Retention policies must be documented in deployment docs.
 
+## Implementation on 2026-10-12
+
+Migration 0010 gives `twin_state_snapshot` a 90-day retention policy and
+compression after 7 days. `twin_recovery_event` has a 2-year retention policy.
+The prediction, scenario, and control rows in the table above remain plans for
+later milestones.
+

@@ -9,7 +9,7 @@ Call it a wellhead monitoring simulation, or a SCADA-style industrial telemetry
 platform.
 
 Do not call it a finished digital twin yet. It has a stateful synthetic process
-model, but no field calibration, durable model snapshots, forecast API, or
+model and durable model snapshots, but no field calibration, forecast API, or
 what-if scenarios.
 
 ## What is built
@@ -20,6 +20,7 @@ what-if scenarios.
 - Alarm evaluation in SQL
 - A public TypeScript API
 - A separate twin-core service with an uncalibrated per-well process model
+- Durable model snapshots and recorded restart recovery
 - A React dashboard with an overview, analytics, per-wellhead detail pages, and
   an Alarm Center
 
@@ -35,6 +36,7 @@ acknowledge or shelve actions because the data model cannot store those states.
 - `design/twin-core-milestone-4.md`: the service boundary and its limits
 - `design/twin-core-milestone-5.md`: the process model equations and limits
 - `design/twin-core-milestone-6.md`: model telemetry through Modbus
+- `design/twin-core-milestone-7.md`: twin persistence and restore
 - `design/reference-well-physics.md`: phase and diagnostic equations
 - `openapi/README.md`: the API contracts and the rules for changing them
 - `roadmap.md`: the local feature plan (ignored by Git)

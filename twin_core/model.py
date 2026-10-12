@@ -219,6 +219,34 @@ def _flow(
     return min(flow, parameters.max_flow_rate)
 
 
+def balance_pressure(
+    controls: ControlInputs,
+    parameters: ModelParameters,
+    pump_factor: float,
+    blockage_factor: float,
+) -> float:
+    """Find the tubing pressure where synthetic inflow equals choke outflow."""
+    lower = parameters.downstream_pressure
+    upper = min(parameters.reservoir_pressure_proxy, parameters.max_tubing_pressure)
+    inflow_at_bound = parameters.productivity_index * max(
+        parameters.reservoir_pressure_proxy - upper, 0.0
+    )
+    outflow_at_bound = _flow(upper, controls, parameters, pump_factor, blockage_factor)
+    if inflow_at_bound > outflow_at_bound + 0.01:
+        raise ValueError("No operating balance exists below the pressure bound")
+    for _ in range(EQUILIBRIUM_SEARCH_STEPS):
+        pressure = (lower + upper) / 2.0
+        inflow = parameters.productivity_index * max(
+            parameters.reservoir_pressure_proxy - pressure, 0.0
+        )
+        outflow = _flow(pressure, controls, parameters, pump_factor, blockage_factor)
+        if inflow > outflow:
+            lower = pressure
+        else:
+            upper = pressure
+    return (lower + upper) / 2.0
+
+
 def initial_state(
     wellhead_id: int,
     parameters: ModelParameters,
@@ -235,26 +263,8 @@ def initial_state(
     blockage = max(blockage, parameters.min_blockage_factor)
     corrosion = 1.0 + 0.01 * stable_fraction(wellhead_id, "corrosion")
     corrosion = min(corrosion, parameters.max_corrosion_factor)
-    lower = parameters.downstream_pressure
-    upper = min(parameters.reservoir_pressure_proxy, parameters.max_tubing_pressure)
     initial_pump_factor = 1.0 if controls.pump_on else parameters.pump_off_flow_factor
-    inflow_at_bound = parameters.productivity_index * max(
-        parameters.reservoir_pressure_proxy - upper, 0.0
-    )
-    outflow_at_bound = _flow(upper, controls, parameters, initial_pump_factor, blockage)
-    if inflow_at_bound > outflow_at_bound + 0.01:
-        raise ValueError("No operating balance exists below the pressure bound")
-    for _ in range(EQUILIBRIUM_SEARCH_STEPS):
-        pressure = (lower + upper) / 2.0
-        inflow = parameters.productivity_index * max(
-            parameters.reservoir_pressure_proxy - pressure, 0.0
-        )
-        outflow = _flow(pressure, controls, parameters, initial_pump_factor, blockage)
-        if inflow > outflow:
-            lower = pressure
-        else:
-            upper = pressure
-    tubing = (lower + upper) / 2.0
+    tubing = balance_pressure(controls, parameters, initial_pump_factor, blockage)
     flow = _flow(tubing, controls, parameters, initial_pump_factor, blockage)
     casing = parameters.downstream_pressure + parameters.casing_pressure_fraction * (
         tubing - parameters.downstream_pressure

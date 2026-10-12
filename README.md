@@ -131,6 +131,7 @@ control API, and metadata editing are not built.
 - `docs/design/twin-core-milestone-4.md`: the twin-core skeleton design
 - `docs/design/twin-core-milestone-5.md`: the process model equations and limits
 - `docs/design/twin-core-milestone-6.md`: the model-to-Modbus data path
+- `docs/design/twin-core-milestone-7.md`: twin persistence design and verification
 - `docs/design/reference-well-physics.md`: the phase and diagnostic equations
 - `docs/roadmap.md`: the local feature plan (ignored by Git)
 - `docs/remediation-roadmap.md`: the local repair record (ignored by Git)

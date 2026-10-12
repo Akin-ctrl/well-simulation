@@ -285,7 +285,7 @@ def bootstrap_admin(conn: psycopg2.extensions.connection) -> None:
 def provision_twin_reader(
     conn: psycopg2.extensions.connection, database: DatabaseSettings
 ) -> None:
-    """Create a read-only login for the internal twin-core service.
+    """Create a least-privilege login for the internal twin-core service.
 
     Standalone migration runs without twin settings keep working. Compose sets
     both values, so its dependent twin-core always receives a provisioned role.
@@ -336,7 +336,7 @@ def provision_twin_reader(
 
         # PostgreSQL 14 grants CREATE on public and TEMPORARY on the database
         # to PUBLIC by default. Table SELECT grants alone do not make this
-        # account read-only while those broad grants remain in force.
+        # account least-privilege while those broad grants remain in force.
         cursor.execute("REVOKE CREATE ON SCHEMA public FROM PUBLIC")
         cursor.execute(
             sql.SQL("REVOKE TEMPORARY ON DATABASE {} FROM PUBLIC").format(
@@ -345,6 +345,11 @@ def provision_twin_reader(
         )
         cursor.execute(
             sql.SQL("REVOKE ALL ON ALL TABLES IN SCHEMA public FROM {}").format(
+                sql.Identifier(user)
+            )
+        )
+        cursor.execute(
+            sql.SQL("REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM {}").format(
                 sql.Identifier(user)
             )
         )
@@ -362,8 +367,25 @@ def provision_twin_reader(
                 "parameterType, parameterReading TO {}"
             ).format(sql.Identifier(user))
         )
+        cursor.execute(
+            sql.SQL(
+                "GRANT SELECT ON TABLE twin_state_snapshot, "
+                "wellhead_model_parameter TO {}"
+            ).format(sql.Identifier(user))
+        )
+        cursor.execute(
+            sql.SQL(
+                "GRANT INSERT ON TABLE twin_state_snapshot, twin_recovery_event TO {}"
+            ).format(sql.Identifier(user))
+        )
+        cursor.execute(
+            sql.SQL(
+                "GRANT USAGE ON SEQUENCE twin_state_snapshot_snapshot_id_seq, "
+                "twin_recovery_event_event_id_seq TO {}"
+            ).format(sql.Identifier(user))
+        )
     conn.commit()
-    logger.info("Twin-core read-only database role is ready", extra={"role": user})
+    logger.info("Twin-core append-only database role is ready", extra={"role": user})
 
 
 def main() -> int:

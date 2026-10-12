@@ -2,7 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-05-31
-- Implementation: Partial
+- Implementation: Complete for the single-instance synthetic model
 
 ## Context
 
@@ -51,3 +51,11 @@ The service keeps active lifecycle state in memory. No physical process state or
 ## Implementation on 2026-09-29
 
 The process state now advances in memory. A restart deliberately initializes a new synthetic run and reports `cold_start_no_snapshot`. Durable snapshots remain Milestone 7 work.
+
+## Implementation on 2026-10-12
+
+Milestone 7 adds a TimescaleDB snapshot about every 30 model seconds and a
+final copy on clean shutdown. The one-slot writer mailbox keeps database
+latency off the one-second model loop. On startup, twin-core checks the latest
+snapshot for each active well and restores compatible state. A rejected or
+missing snapshot starts that well cold with a recorded reason.

@@ -36,6 +36,43 @@ class TwinMetrics:
             "Fixed-step ticks skipped after the catch-up limit",
             registry=self.registry,
         )
+        self.clock_adjustments = Counter(
+            "well_sim_twin_clock_adjustments_total",
+            "Times tick time was realigned with a wall clock that jumped",
+            ["direction"],
+            registry=self.registry,
+        )
+        self.snapshot_writes = Counter(
+            "well_sim_twin_snapshot_writes_total",
+            "Well state rows saved for recovery",
+            registry=self.registry,
+        )
+        self.snapshot_write_failures = Counter(
+            "well_sim_twin_snapshot_write_failures_total",
+            "Fleet snapshot transactions that failed",
+            registry=self.registry,
+        )
+        self.snapshots_replaced = Counter(
+            "well_sim_twin_snapshots_replaced_total",
+            "Pending fleet snapshots replaced by newer copies",
+            registry=self.registry,
+        )
+        self.last_snapshot_age_seconds = Gauge(
+            "well_sim_twin_last_snapshot_age_seconds",
+            "Wall age of the last saved fleet snapshot",
+            registry=self.registry,
+        )
+        self.recoveries = Counter(
+            "well_sim_twin_recoveries_total",
+            "Recovery and clock events by outcome",
+            ["outcome"],
+            registry=self.registry,
+        )
+        self.recovery_events_dropped = Counter(
+            "well_sim_twin_recovery_events_dropped_total",
+            "Recovery events rejected because the queue was full",
+            registry=self.registry,
+        )
         self.lag_seconds = Gauge(
             "well_sim_twin_simulation_lag_seconds",
             "Scheduler lag before the current tick pass",
