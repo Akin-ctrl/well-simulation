@@ -6,8 +6,8 @@ info:
   description: |
     Health, readiness, metrics, lifecycle state, complete model fleet snapshots,
     source-labelled historian telemetry reads, forecasts, and isolated scenarios
-    are implemented. Process values are synthetic and uncalibrated. Live controls
-    remain planned.
+    are implemented. Controls enter through durable commands and an authenticated
+    wake-up hint. Parameter validation is read-only. Values remain synthetic and uncalibrated.
 servers:
   - url: http://twin-core:8000
     description: Internal Docker Compose service address.
@@ -107,30 +107,6 @@ paths:
                 $ref: "#/components/schemas/WellheadState"
         "404":
           $ref: "#/components/responses/NotFound"
-  /wellheads/{wellheadId}/controls:
-    post:
-      tags: [Controls]
-      summary: Planned endpoint for applying bounded live control inputs.
-      operationId: applyWellheadControls
-      parameters:
-        - $ref: "#/components/parameters/WellheadId"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/ControlInput"
-      responses:
-        "202":
-          description: Control input accepted for the next model tick.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ControlAccepted"
-        "400":
-          $ref: "#/components/responses/ValidationError"
-        "404":
-          $ref: "#/components/responses/NotFound"
   /wellheads/{wellheadId}/forecast:
     post:
       tags: [Forecasts]
@@ -187,7 +163,135 @@ paths:
           $ref: "#/components/responses/NotFound"
         "503":
           $ref: "#/components/responses/HistorianUnavailable"
+  /wellheads/{wellheadId}/controls:
+    get:
+      tags:
+      - Controls
+      summary: Read installed model setpoints.
+      operationId: getInstalledControls
+      security:
+      - serviceToken: []
+      responses:
+        '200':
+          description: Read result or notification acceptance; a hint never applies
+            controls.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RunningControls'
+        '400':
+          description: Invalid request.
+        '403':
+          description: Missing or incorrect service token.
+        '404':
+          description: Unknown well.
+        '503':
+          description: Model, database, or inbox unavailable.
+      parameters:
+      - $ref: '#/components/parameters/WellheadId'
+  /control-commands/{id}/notify:
+    post:
+      tags:
+      - Controls
+      summary: Wake polling for a durable command UUID.
+      operationId: notifyCommandInbox
+      security:
+      - serviceToken: []
+      responses:
+        '202':
+          description: Read result or notification acceptance; a hint never applies
+            controls.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationAccepted'
+        '400':
+          description: Invalid request.
+        '403':
+          description: Missing or incorrect service token.
+        '404':
+          description: Unknown well.
+        '503':
+          description: Model, database, or inbox unavailable.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmptyHint'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+  /parameter-changes/validate:
+    post:
+      tags:
+      - Controls
+      summary: Validate without publishing or changing running parameters.
+      operationId: validateParameterProposal
+      security:
+      - serviceToken: []
+      responses:
+        '200':
+          description: Read result or notification acceptance; a hint never applies
+            controls.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ParameterValidation'
+        '400':
+          description: Invalid request.
+        '403':
+          description: Missing or incorrect service token.
+        '404':
+          description: Unknown well.
+        '503':
+          description: Model, database, or inbox unavailable.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ParameterValidationRequest'
+  /fleet/refresh:
+    post:
+      tags:
+      - Controls
+      summary: Request a fleet refresh on the scheduler thread.
+      operationId: requestFleetRefresh
+      security:
+      - serviceToken: []
+      responses:
+        '202':
+          description: Read result or notification acceptance; a hint never applies
+            controls.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationAccepted'
+        '400':
+          description: Invalid request.
+        '403':
+          description: Missing or incorrect service token.
+        '404':
+          description: Unknown well.
+        '503':
+          description: Model, database, or inbox unavailable.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmptyHint'
 components:
+  securitySchemes:
+    serviceToken:
+      type: apiKey
+      in: header
+      name: X-Twin-Internal-Token
   parameters:
     WellheadId:
       name: wellheadId
@@ -222,6 +326,121 @@ components:
           schema:
             $ref: "#/components/schemas/ErrorResponse"
   schemas:
+    RunningControls:
+      type: object
+      required:
+      - wellheadId
+      - revision
+      - modelVersion
+      - parameterFingerprint
+      - status
+      - lastTickAt
+      - controls
+      properties:
+        wellheadId:
+          type: integer
+          minimum: 1
+          maximum: 2147483647
+        revision:
+          type: integer
+          minimum: 0
+          maximum: 2147483646
+        modelVersion:
+          type: string
+        parameterFingerprint:
+          type: string
+          minLength: 64
+          maxLength: 64
+        status:
+          type: string
+        lastTickAt:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        controls:
+          type: object
+          required:
+          - chokePositionPercent
+          - masterValveOpen
+          - wingValveOpen
+          - pumpOn
+          - emergencyShutdown
+          - swabValveOpen
+          properties:
+            chokePositionPercent:
+              type: number
+              minimum: 0
+              maximum: 100
+            masterValveOpen:
+              type: boolean
+            wingValveOpen:
+              type: boolean
+            pumpOn:
+              type: boolean
+            emergencyShutdown:
+              type: boolean
+            swabValveOpen:
+              type: boolean
+          additionalProperties: false
+      additionalProperties: false
+    ParameterValidationRequest:
+      type: object
+      required:
+      - wellheadId
+      - modelVersion
+      - parameterKey
+      - value
+      - unit
+      properties:
+        wellheadId:
+          type: integer
+          minimum: 1
+          maximum: 2147483647
+        modelVersion:
+          type: string
+          pattern: ^\d+\.\d+\.\d+$
+        parameterKey:
+          type: string
+          minLength: 1
+          maxLength: 100
+        value:
+          type:
+          - number
+          - 'null'
+        unit:
+          type:
+          - string
+          - 'null'
+          minLength: 1
+          maxLength: 40
+      additionalProperties: false
+    ParameterValidation:
+      type: object
+      required:
+      - modelVersion
+      - runningParameterFingerprint
+      - proposedParameterFingerprint
+      - restartRequired
+      properties:
+        modelVersion:
+          type: string
+        runningParameterFingerprint:
+          type: [string, "null"]
+        proposedParameterFingerprint:
+          type: string
+        restartRequired:
+          const: true
+    EmptyHint:
+      type: object
+      additionalProperties: false
+    NotificationAccepted:
+      type: object
+      required:
+      - status
+      properties:
+        status:
+          const: notification_accepted
     HealthResponse:
       type: object
       required: [status, service, timestamp]
@@ -548,33 +767,6 @@ components:
             - type: string
               enum: [synthetic_random_simulator, synthetic_reduced_order_model]
             - type: "null"
-    ControlInput:
-      type: object
-      additionalProperties: false
-      properties:
-        chokePositionPercent:
-          type: number
-          minimum: 0
-          maximum: 100
-        valveState:
-          type: string
-          enum: [open, closed]
-        pumpState:
-          type: string
-          enum: [on, off]
-        reason:
-          type: string
-          maxLength: 240
-    ControlAccepted:
-      type: object
-      required: [accepted, effectiveFromTick]
-      properties:
-        accepted:
-          type: boolean
-          const: true
-        effectiveFromTick:
-          type: string
-          format: date-time
     ForecastRequest:
       type: object
       additionalProperties: false

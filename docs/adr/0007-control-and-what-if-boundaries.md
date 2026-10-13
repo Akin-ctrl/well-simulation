@@ -2,7 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-05-31
-- Implementation: Not started
+- Implementation: API boundaries implemented; dashboard controls remain deferred
 
 ## Context
 
@@ -41,3 +41,17 @@ Production-grade digital twin software should make mutation boundaries obvious. 
 - Scenario runs should have isolated inputs and outputs.
 - Dashboard UI must visually distinguish live state from scenario results.
 
+
+## Implementation on 2026-10-13
+
+Milestone 8 runs scenarios against private copies of current model state.
+They cannot mutate the running model. Live control remains proposed in
+[ADR 0038](0038-live-control-command-lifecycle.md).
+
+## Implementation on 2026-10-13: Live synthetic controls
+
+Milestone 8B adds a separate draft and activation API. Twin-core applies a
+confirmed command at a model tick and restores its durable controls after a
+restart. An integration test runs a scenario after a live change and confirms
+that the active controls and revision remain unchanged. Dashboard controls
+remain outside this milestone.

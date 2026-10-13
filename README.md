@@ -13,7 +13,9 @@ TimescaleDB with the model tick time and source label.
 
 Industrial digital twin systems need more than dashboards. They need a reliable telemetry pipeline, asset metadata, historical storage, alarm logic, operational interfaces, and a process model that can explain and predict behavior.
 
-This repository currently implements the telemetry and monitoring foundation. The documentation in `docs/` records the decisions required to evolve it into a production-grade lightweight digital twin.
+This repository implements monitoring, a synthetic process model, restart recovery,
+and saved forecasts and scenarios. The documentation in `docs/` records the
+implemented decisions and the work still needed for a field-calibrated twin.
 
 ## Current Capabilities
 
@@ -29,6 +31,10 @@ This repository currently implements the telemetry and monitoring foundation. Th
   and the new twin-core service boundary.
 - A twin-core service with one-second process steps, deterministic per-well
   variation, bounded model state, and source-labelled historian reads.
+- Durable model snapshots, parameter overrides, and recorded restart recovery.
+- Authenticated APIs for saved forecasts and isolated what-if scenarios.
+- Draft, activate, cancel, and status APIs for live synthetic controls, with
+  durable revisions and a separate administrator parameter publication path.
 - Docker-based local orchestration.
 
 ## Current Dashboard Scope
@@ -57,25 +63,36 @@ The target system is a lightweight wellhead digital twin with:
 ## What happens next
 
 An audit of this project found problems in the pipeline, the schema, access
-control, and the documentation. Repair phases 0 to 8 are complete. Phase 9
-reconciles the remaining documentation and checks startup from a clean copy.
+control, and the documentation. Repair phases 0 to 9 are complete as of
+2026-10-13. Phase 9 reconciled the documentation and verified a fresh installation.
 The local `docs/roadmap.md` records feature work, and the local
 `docs/remediation-roadmap.md` records the repair. Both are ignored by Git.
 The committed design documents and ADRs record the implemented decisions.
 
-The model now feeds the Modbus gateway and historian. Durable twin state
-snapshots, forecasts, and what-if APIs follow in later milestones.
+Milestones 4 through 8 are implemented: the model feeds Modbus and the historian,
+recovers saved state, and runs forecasts and private scenarios. The
+[8B design](docs/design/twin-core-milestone-8b.md) covers the implemented live
+synthetic control lifecycle and its verification.
+Dashboard forecast and scenario features belong to the deferred Milestone 9.
+The published [ADR index](docs/adr/README.md) records decision status; local
+roadmaps are working notes, not dependencies for understanding the project.
 
 ## Quick Start
 
 ```bash
-cp .env.example .env      # then set POSTGRES_PASSWORD, TWIN_DB_PASSWORD, and JWT_SECRET
+cp .env.example .env
+# Set POSTGRES_PASSWORD, TWIN_DB_PASSWORD, API_DB_PASSWORD, JWT_SECRET,
+# and TWIN_INTERNAL_TOKEN to separate random values before starting.
 docker compose up --build
 ```
 
 The `migrator` service applies the ordered SQL migrations in `data/sql/migrations`
 before the API or the telemetry services start. Schema changes do **not** require
 recreating the volume.
+
+For an existing `.env`, add `API_DB_USER=well_api` and a separate URL-safe
+`API_DB_PASSWORD` before upgrading. The migrator creates this restricted
+application account. The API no longer uses the database administrator login.
 
 The dashboard is served at <http://localhost:8090>. Sign in with the demo
 account:
@@ -84,7 +101,8 @@ account:
 | --- | --- | --- |
 | `demo@example.com` | `USER` | `demo-operator-2026` |
 
-This account can view the dashboard. What-if scenarios are planned, not built.
+This account can view the dashboard and run what-if scenarios through the API.
+The dashboard has no scenario form yet.
 The password is in the repository on purpose. It only gives read access to
 made-up telemetry on a local stack.
 
@@ -117,9 +135,12 @@ users.
 | Manage users | no | no | yes |
 | Edit alarm rules and asset metadata | no | no | yes |
 
-Only dashboard access and administrator user creation are implemented in this
-table. `OPERATIONS` guards nothing yet. Scenarios, alarm acknowledgement, the
-control API, and metadata editing are not built.
+Dashboard access, forecasts, scenarios, and administrator user creation are
+implemented. OPERATIONS users can issue live synthetic controls through the
+draft and activation API. ADMIN users can publish model parameter overrides
+that require a twin-core restart. Alarm acknowledgement and other metadata
+editing remain planned. Logout revokes all existing sessions and prevents
+commands queued by those sessions from applying.
 
 ## Documentation
 
@@ -132,6 +153,8 @@ control API, and metadata editing are not built.
 - `docs/design/twin-core-milestone-5.md`: the process model equations and limits
 - `docs/design/twin-core-milestone-6.md`: the model-to-Modbus data path
 - `docs/design/twin-core-milestone-7.md`: twin persistence design and verification
+- `docs/design/twin-core-milestone-8.md`: forecasts, scenarios, and saved results
+- `docs/design/twin-core-milestone-8b.md`: live control lifecycle and operating steps
 - `docs/design/reference-well-physics.md`: the phase and diagnostic equations
 - `docs/roadmap.md`: the local feature plan (ignored by Git)
 - `docs/remediation-roadmap.md`: the local repair record (ignored by Git)
@@ -156,18 +179,36 @@ set them:
 
 Raw readings are kept for 7 days and alarm events for 90.
 
+## Screenshots
+
+Captured on 2026-10-13 from the running local stack after continuous telemetry
+collection. The current synthetic operating point has no active alarms.
+
+- [Fleet overview](docs/screenshots/overview.png)
+- [Analytics with continuous trends](docs/screenshots/analytics.png)
+- [Wellhead detail](docs/screenshots/wellhead-detail.png)
+- [Alarm Center](docs/screenshots/alarm-center.png)
+
 ## Where this project actually stands
 
-The services run against the existing database volume. A separate clean-start
-check also passed with a newly created volume: the migrator exited successfully,
-all services became healthy, and the API and twin-core reported ready. Each
-image was built separately after a combined Docker Buildx run stopped the
-daemon. The Compose health check requires TCP database readiness, which avoids
-the startup race found in an earlier clean-start check.
+On 2026-10-13, a clean export of commit `e3d44c7` passed
+`docker compose up -d --build` with a fresh volume. All six images built,
+the migrator exited with code 0, and all six long-running services became
+healthy. The API and twin-core returned ready, with all 12 model wells running.
+The verification used separate container names, loopback ports, network, and
+volume to preserve the existing stack. The test export contained committed
+application files; only those isolation settings and generated test secrets
+differed.
+
+The same isolated stack then passed an upgrade to the working Milestone 8B code.
+A live synthetic command flowed through the model, Modbus, and historian;
+restart preserved its controls. Parameter publication adopted a new parameter
+set after restart. The four existing dashboard pages passed browser checks.
+See the [8B verification record](docs/design/twin-core-milestone-8b.md#verification-on-2026-10-13).
 The API contract is written down under `docs/openapi`.
 
 It is not production ready. The twin-core model uses synthetic, uncalibrated
-parameters and has no durable snapshots or live device control. The API, gateway,
+parameters and has no field calibration or physical device control. The API, gateway,
 ingestion, and twin-core services expose metrics, but no metrics collection stack
 is deployed.
 Several accepted ADRs are still unimplemented. The

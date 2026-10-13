@@ -32,10 +32,10 @@ Hono API
 PostgreSQL/TimescaleDB historian
 ```
 
-Telemetry still originates from the Python simulator and Modbus ingestion
-services under `../data`. The new `twin-core` service lives at
-`../twin_core`. It is separate from this monorepo and does not yet feed the
-Modbus gateway or the public API.
+The Python model in `../twin_core` calculates all 18 seeded signals. The gateway
+and ingestion services under `../data` carry them through Modbus to the
+historian. The public API also requests forecasts and scenarios from twin-core
+over authenticated internal HTTP, then reads saved runs from PostgreSQL.
 
 ## API Contracts
 
@@ -43,7 +43,7 @@ Committed API contracts live in `../docs/openapi`:
 
 - `../docs/openapi/public-api.yaml` documents the dashboard-facing API implemented by `apps/api`.
 - `../docs/openapi/twin-core-internal-api.yaml` documents the implemented
-  read-only twin-core endpoints and labels future operations as planned.
+  twin-core reads, forecasts, and scenarios, and labels future operations as planned.
 
 These contracts are intentionally lightweight. They are designed to support portfolio review, implementation planning, and future CI validation without pretending that the project already has a complete industrial control API.
 
@@ -72,7 +72,7 @@ Targeted checks used during this standards pass:
 ./node_modules/.bin/tsc -p apps/api/tsconfig.json --noEmit
 ./node_modules/.bin/tsc -p apps/website/tsconfig.json --noEmit
 cd apps/website && ../../node_modules/.bin/eslint .
-cd packages/ui && ../../node_modules/.bin/biome lint . && ../../node_modules/.bin/tsc --noEmit
+cd packages/ui && ../../node_modules/.bin/eslint . && ../../node_modules/.bin/tsc --noEmit
 ```
 
 ## Production-Grade Expectations
@@ -86,11 +86,13 @@ cd packages/ui && ../../node_modules/.bin/biome lint . && ../../node_modules/.bi
 
 ## Known Gaps
 
-- The dashboard shows monitoring data but has no physical model state,
-  forecasts, or what-if scenario forms because those capabilities are not built.
+- The dashboard has no model state, forecast, or what-if forms. The model and
+  analysis APIs are implemented; their dashboard views remain deferred.
 - The API contract is hand-maintained. CI validates its structure and references,
   but it does not compare every response field against running endpoints.
 - Auth has login, logout, current-user, and administrator-only user creation.
-  Existing sessions are not revoked immediately when an administrator changes a role.
-- Twin-core calculates synthetic process state, but its output is not yet the
-  source for Modbus, the historian, or the dashboard.
+  Logout revokes all current sessions. Role and account editing have no public
+  route yet; current JWT role claims can outlive a database role change.
+- Live model commands and parameter proposals are available through the API.
+  The dashboard has no forms for them. Control writes recheck account authority
+  in the database, including when twin-core applies queued work.

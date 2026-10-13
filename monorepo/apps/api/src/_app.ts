@@ -10,6 +10,7 @@ import { originGuard } from './middleware/csrf';
 import { requestId } from './middleware/request-id';
 import { dashboardRouter } from './routers/dashboard';
 import { twinRouter } from './routers/twin';
+import { controlsRouter } from './routers/controls';
 import { errorResponse } from './utils/handler';
 import { httpDuration, httpRequests, registry } from './metrics';
 
@@ -102,6 +103,7 @@ app.onError((err, c) => errorResponse(c, err));
 export const appRouter = app
   .route('/auth', authRouter)
   .route('/dashboard', dashboardRouter)
-  .route('/twin', twinRouter);
+  .route('/twin', twinRouter)
+  .route('/twin', controlsRouter);
 
 export type AppType = typeof appRouter;

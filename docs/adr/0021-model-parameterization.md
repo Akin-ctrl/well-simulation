@@ -133,3 +133,21 @@ precedence environment value or model default.
 The existing resolver checks key, unit, source, and numeric range. Changed
 parameters on a running well require a restart. SQL examples and the limits of
 hand-entered actor names are in [the data guide](../../data/README.md).
+
+## Amendment 2026-10-13: Authenticated parameter publication replaces manual SQL
+
+Milestone 8B completes the write path deferred above. ADMIN reads the latest
+override IDs through the API, creates an immutable proposal, then explicitly
+publishes it. Twin-core validates the complete proposed parameter set with the
+existing resolver. The API checks the current account and expected override ID,
+then commits the new override, proposal result, and audit event together.
+
+The published row records the authenticated user ID and source authenticated_api.
+Older manual records retain their original attribution. A NULL value still
+removes an override. Publication reports that a restart is required and never
+silently changes a running parameter set. The data guide now documents this API
+workflow. Do not reintroduce manual SQL as the normal editing path.
+
+This adds proposal and audit records but keeps Python as the single authority
+for parameter units, limits, and relationships. See
+[ADR 0038](0038-live-control-command-lifecycle.md).

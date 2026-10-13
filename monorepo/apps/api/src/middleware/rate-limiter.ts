@@ -60,6 +60,32 @@ export function resetRateLimits(): void {
   buckets.clear();
 }
 
+/** One authenticated user receives ten command writes per minute across tabs. */
+export function controlWriteLimit(userId: number): MiddlewareHandler {
+  return async (c, next) => {
+    const key = `control-user:${userId}`;
+    const now = Date.now();
+    let bucket = buckets.get(key);
+    if (!bucket || now >= bucket.resetAt) {
+      bucket = { count: 0, resetAt: now + WINDOW_MS };
+      buckets.set(key, bucket);
+    }
+    bucket.count += 1;
+    if (bucket.count > 10) {
+      c.header('Retry-After', String(Math.ceil((bucket.resetAt - now) / 1000)));
+      return c.json(
+        {
+          error: 'Too many command requests',
+          msg: 'Too many command requests',
+          status: 429,
+        },
+        429
+      );
+    }
+    return next();
+  };
+}
+
 /**
  * Hosts permitted to speak for their clients via `x-forwarded-for`.
  *

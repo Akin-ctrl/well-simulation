@@ -40,10 +40,11 @@ The full mapping and failure rules are in the [Milestone 6 design](../docs/desig
 The services do not hardcode which wellheads or parameters exist. Each queries
 the database on startup and configures itself from what it finds.
 
-Each also re-reads that metadata every telemetry interval, so adding a wellhead,
-moving a Modbus address, or changing an alarm threshold takes effect within a
-few seconds without a restart. ADR 0035 records why a timer was chosen over a
-notification or a reload endpoint.
+The gateway and ingestion re-read mappings every telemetry interval (five
+seconds by default). Twin-core refreshes its active fleet and parameter
+overrides every 30 seconds. Alarm evaluation reads current rules in the
+database. ADR 0035 records why timed refresh was chosen over a notification
+or a reload endpoint.
 
 When a register mapping moves, the gateway clears its whole register image. A
 value left at an address nothing maps any more would be a stale reading on a
@@ -103,39 +104,21 @@ ORDER BY timestamp_utc DESC LIMIT 10;
 ## Changing one model parameter
 
 The model defaults and valid units are in
-`twin_core/model_defaults.json`. An administrator can add one override row,
-for example a synthetic downstream pressure of 260 psi for well 1:
+`twin_core/model_defaults.json`. An ADMIN can now create a parameter proposal through
+POST /api/twin/parameter-changes and explicitly publish it. The API validates
+the proposed value and unit through twin-core and records the authenticated
+actor. Publication inserts an append-only wellhead_model_parameter row and
+its audit event in one transaction. See the
+[8B operating steps](../docs/design/twin-core-milestone-8b.md#operating-the-api).
 
-```sql
-INSERT INTO wellhead_model_parameter
-    (wellhead_id, model_version, parameter_key, value, unit, source,
-     changed_by, reason, valid_from)
-VALUES
-    (1, '0.3.0', 'downstream_pressure', 260, 'psi', 'manual',
-     'operator-name', 'Synthetic reference-well tuning', clock_timestamp());
-```
+A published parameter does not change a running model during a tick. Fleet
+refresh marks a changed model restart_required. Restart twin-core after
+reviewing the publication. To remove an override, publish null for both value
+and unit. The lower-precedence environment or default value then applies.
 
-The name and reason are entered by hand, so this is a record of the change,
-not proof of who made it. Twin-core reads the newest effective row for each
-well and key on its fleet refresh. A valid change on a running well reports
-`restart_required`; restart twin-core after reviewing it. An invalid value
-marks that well unavailable. To remove the per-well override, add a
-new row with `value` and `unit` both NULL and a later `valid_from`:
-
-```sql
-INSERT INTO wellhead_model_parameter
-    (wellhead_id, model_version, parameter_key, value, unit, source,
-     changed_by, reason, valid_from)
-VALUES
-    (1, '0.3.0', 'downstream_pressure', NULL, NULL, 'manual',
-     'operator-name', 'Return to model default', clock_timestamp());
-```
-
-Old rows remain as the change history. Keep `model_version` equal to the
-currently running model version. This SQL write needs an administrator role;
-the twin service role can only read overrides. Removing an override returns
-the key to its lower-precedence value: a global environment override if one
-exists, otherwise the model default (including stable per-well variation).
+Manual SQL remains possible for the database administrator, but bypasses the
+application's verified identity and review steps. Normal operation uses the
+proposal API. Historical manual records keep their original actor text.
 
 ## What the numbers are
 

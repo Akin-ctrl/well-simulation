@@ -188,3 +188,18 @@ call is refused before any audit row is written. The reason given above for
 keeping `/auth/logout` on the strict budget no longer applies, but the budget
 stays as it is. Ten logouts a minute is far above real use, and the limit is a
 second line of defence if revocation ever regresses.
+
+## Amendment 2026-10-13: Control and parameter writes require atomic audit
+
+A live control or parameter publication must not succeed without its actor
+record. Milestone 8B therefore inserts audit rows in the same transaction as
+accepted draft, activation, cancellation, and publication changes. A failed
+audit insert rolls back the operation. The existing best-effort helper remains
+appropriate for authentication events, where an audit outage must not silently
+change the login result.
+
+Twin-core records application, rejection, and expiry in control_command_event
+in the same transaction as the command result. The command retains its human
+activation identity. This costs a database dependency for new control changes,
+but allows every accepted change to be traced after a restart. See
+[ADR 0038](0038-live-control-command-lifecycle.md).

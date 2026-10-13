@@ -2,7 +2,7 @@
 
 - Status: Accepted, amended
 - Date: 2026-05-31
-- Implementation: Partial
+- Implementation: Implemented
 
 ## Context
 
@@ -106,3 +106,11 @@ machine that slept.
 - A wall clock that is wrong and then corrected forward shows up as a gap even
   though the model did run. That is the honest reading of what the wall clock
   says, and it is visible in the metric and the log.
+
+## Implementation on 2026-10-13
+
+The synthetic process model now supplies all 18 seeded Modbus signals.
+Milestone 7 stores snapshots and recovery events. Milestone 8 uses the same
+one-second step for saved forecasts and isolated scenarios. Model response,
+recovery, and projection tests cover these paths. Field calibration remains
+outside the implemented synthetic reference-well scope.

@@ -2,7 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-05-31
-- Implementation: Partial
+- Implementation: Implemented
 
 ## Context
 
@@ -66,3 +66,11 @@ The first version should model:
 ## Implementation on 2026-09-29
 
 The reduced-order deterministic model now runs in twin-core. Existing Modbus telemetry is still random until Milestone 6 connects the sources.
+
+## Implementation on 2026-10-13
+
+The synthetic process model now supplies all 18 seeded Modbus signals.
+Milestone 7 stores snapshots and recovery events. Milestone 8 uses the same
+one-second step for saved forecasts and isolated scenarios. Model response,
+recovery, and projection tests cover these paths. Field calibration remains
+outside the implemented synthetic reference-well scope.

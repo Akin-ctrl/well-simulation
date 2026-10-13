@@ -2,7 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-05-31
-- Implementation: Partial
+- Implementation: Implemented
 
 ## Context
 
@@ -54,3 +54,18 @@ The Modbus gateway now reads a complete, read-only model fleet snapshot over
 internal HTTP. It converts the supported model fields into Modbus registers;
 ingestion still polls Modbus and writes source-labelled readings to TimescaleDB.
 Durable model state snapshots, commands, forecasts, and scenarios remain planned.
+
+## Implementation on 2026-10-13
+
+Milestones 7 and 8 now persist model snapshots and complete forecast and scenario
+runs. Internal HTTP accepts bounded analysis requests using a service token;
+the public API checks the human session. Live commands remain proposed in
+[ADR 0038](0038-live-control-command-lifecycle.md).
+
+## Implementation on 2026-10-13: Command delivery
+
+Milestone 8B uses authenticated internal HTTP for command wake-up hints and
+parameter validation. A command UUID identifies a committed database record;
+the hint does not carry controls or human authority. The inbox also polls the
+durable queue, so a missed hint does not lose an accepted command. Database
+transactions own activation, application, and their matching audit or event rows.

@@ -12,7 +12,12 @@ from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
 import pytest
-from twin_core.config import NoDatabaseOverrides, ServiceSettings, load_defaults
+from twin_core.config import (
+    NoDatabaseOverrides,
+    ParameterOverride,
+    ServiceSettings,
+    load_defaults,
+)
 from twin_core.database import (
     DatabaseUnavailableError,
     HistorianReader,
@@ -244,6 +249,72 @@ def test_projection_route_authenticates_and_saves_forecast(
     assert runtime.state(1) == before
 
 
+def test_parameter_validation_has_no_write_effect(
+    projection_server: ProjectionServer,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    server, store, runtime = projection_server
+    monkeypatch.setattr(store, "load_overrides", lambda _ids, _version: {})
+    before = runtime.state(1)
+    body: dict[str, object] = {
+        "wellheadId": 1,
+        "modelVersion": runtime.defaults.version,
+        "parameterKey": "downstream_pressure",
+        "value": 260,
+        "unit": "psi",
+    }
+    assert _post(server, "/parameter-changes/validate", body, token=None)[0] == 403
+    status, result = _post(server, "/parameter-changes/validate", body)
+    assert status == 200 and result["restartRequired"] is True
+    assert (
+        result["runningParameterFingerprint"] != result["proposedParameterFingerprint"]
+    )
+    assert runtime.state(1) == before and not store.saved
+    assert (
+        _post(server, "/parameter-changes/validate", {**body, "unit": "bar"})[0] == 400
+    )
+    assert _post(server, "/parameter-changes/validate", {**body, "value": -1})[0] == 400
+
+
+def test_control_hints_reject_payloads_and_require_service_auth(
+    projection_server: ProjectionServer,
+) -> None:
+    server, _store, runtime = projection_server
+    path = "/control-commands/11111111-1111-1111-1111-111111111111/notify"
+    before = runtime.state(1)
+    assert _post(server, path, {}, token=None)[0] == 403
+    assert _post(server, path, {"pumpOn": False})[0] == 400
+    assert _post(server, path, {})[0] == 503  # No inbox in this fixture.
+    assert _post(server, "/fleet/refresh", {})[0] == 202
+    assert runtime.state(1) == before
+
+
+def test_parameter_validation_can_repair_an_invalid_cold_configuration(
+    projection_server: ProjectionServer,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    server, store, runtime = projection_server
+    invalid = {1: {"downstream_pressure": ParameterOverride(-1, "psi", "test")}}
+    monkeypatch.setattr(store, "load_overrides", lambda _ids, _version: invalid)
+    monkeypatch.setattr(runtime.registry, "parameters_for", lambda _well: None)
+    before = runtime.state(1)
+    status, result = _post(
+        server,
+        "/parameter-changes/validate",
+        {
+            "wellheadId": 1,
+            "modelVersion": runtime.defaults.version,
+            "parameterKey": "downstream_pressure",
+            "value": None,
+            "unit": None,
+        },
+    )
+    assert status == 200 and result["restartRequired"] is True
+    assert result["runningParameterFingerprint"] is None
+    assert isinstance(result["proposedParameterFingerprint"], str)
+    assert runtime.state(1) == before and not store.saved
+
+
 def test_scenario_route_rejects_outcomes_and_saves_baseline(
     projection_server: ProjectionServer,
 ) -> None:
@@ -273,6 +344,32 @@ def test_scenario_route_rejects_outcomes_and_saves_baseline(
     last = points[-1]
     assert last["values"]["flow_rate"] == 0.0
     assert last["baselineValues"]["flow_rate"] > 0.0
+
+
+def test_scenario_route_rejects_invalid_control_schedule_before_running(
+    projection_server: ProjectionServer,
+) -> None:
+    """Malformed control schedules are client errors, not model outages."""
+    server, store, _runtime = projection_server
+    base = {
+        "wellheadId": 1,
+        "name": "Change pump",
+        "horizonSeconds": 300,
+        "stepSeconds": 60,
+    }
+    controls = [
+        {"offsetMinutes": 0, "input": {"pumpOn": False}},
+        {"offsetMinutes": 0, "input": {"pumpOn": True}},
+    ]
+    for invalid in (
+        controls,
+        [{"offsetMinutes": 5, "input": {"pumpOn": False}}],
+        [{"offsetMinutes": 0, "input": {"pumpOn": None}}],
+    ):
+        status, body = _post(server, "/scenarios", {**base, "controls": invalid})
+        assert status == 400
+        assert body["error"] == "invalid_projection_request"
+    assert not store.saved
 
 
 def test_projection_failure_returns_503_without_partial_fake_save(

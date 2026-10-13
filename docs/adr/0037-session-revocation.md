@@ -2,6 +2,8 @@
 
 **Status**: Accepted
 
+**Implementation**: Implemented. Logout increments the session version; authenticated requests check it.
+
 **Date**: 2026-10-03
 
 **Decision**: Each user has a session version number. Every session token carries the number it was issued with, and the API refuses a token whose number no longer matches the user's. Logout adds one to the number, so every token issued until then stops working on every device, including a copied cookie. The check costs one primary-key read of the `users` table per authenticated request.

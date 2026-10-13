@@ -27,28 +27,28 @@ previously written down.
 | --- | --- | --- |
 | [0001](0001-project-positioning.md) | Position The Project As A Wellhead Monitoring Simulation Before Digital Twin | Implemented |
 | [0002](0002-lightweight-digital-twin-architecture.md) | Use A Layered Lightweight Digital Twin Architecture | Partial |
-| [0003](0003-stateful-process-model.md) | Make A Stateful Process Model The Twin Core | Partial |
+| [0003](0003-stateful-process-model.md) | Make A Stateful Process Model The Twin Core | Implemented |
 | [0004](0004-industrial-interface.md) | Keep Modbus TCP As The Industrial Edge Interface | Implemented |
 | [0005](0005-data-historian.md) | Use PostgreSQL And TimescaleDB As The Historian | Implemented |
 | [0006](0006-schema-management.md) | Use SQL Migrations As The Canonical Schema Source | Implemented |
-| [0007](0007-control-and-what-if-boundaries.md) | Separate Live Control From What-If Simulation | Not started |
+| [0007](0007-control-and-what-if-boundaries.md) | Separate Live Control From What-If Simulation | API implemented; UI deferred |
 | [0008](0008-production-deployment-baseline.md) | Use A Containerized Service Baseline | Implemented |
-| [0009](0009-model-fidelity.md) | Start With A Lightweight Deterministic Model | Partial |
+| [0009](0009-model-fidelity.md) | Start With A Lightweight Deterministic Model | Implemented |
 | [0010](0010-model-runtime.md) | Run The Twin Core As A Separate Python Service | Implemented |
-| [0011](0011-twin-core-communication.md) | Use Internal HTTP Plus Durable Database Persistence | Partial |
+| [0011](0011-twin-core-communication.md) | Use Internal HTTP Plus Durable Database Persistence | Implemented |
 | [0012](0012-state-storage.md) | Keep Active Twin State In Memory With Durable Snapshots | Implemented |
 | [0013](0013-prediction-strategy.md) | Start With On-Demand Forecasts And Evolve To Hybrid Forecasting | On-demand implemented |
 | [0014](0014-scenario-execution.md) | Run What-If Scenarios Against Isolated Cloned State | Implemented |
-| [0015](0015-control-and-safety.md) | Restrict Live Control To Actuator-Like Variables | Not started |
+| [0015](0015-control-and-safety.md) | Restrict Live Control To Actuator-Like Variables | Implemented |
 | [0016](0016-api-contract.md) | Use REST APIs Documented With OpenAPI | Implemented |
 | [0017](0017-observability-baseline.md) | Use Structured Logs, Health Checks, And Metrics As The Observability Baseline | Implemented |
 | [0018](0018-deployment-target.md) | Use Docker Compose As The First Production-Grade Deployment Target | Implemented |
 | [0019](0019-model-equations.md) | Use A Reduced-Order Mechanistic Wellhead Model | Implemented |
-| [0020](0020-model-tick-semantics.md) | Use Fixed Timestep Model Updates | Partial |
+| [0020](0020-model-tick-semantics.md) | Use Fixed Timestep Model Updates | Implemented |
 | [0021](0021-model-parameterization.md) | Use Version-Controlled Defaults With Database Overrides | Implemented |
 | [0022](0022-recovery-semantics.md) | Restore From Snapshots And Mark Recovery Gaps | Implemented |
 | [0023](0023-default-parameter-set.md) | Use Documented Synthetic Engineering Defaults | Implemented |
-| [0024](0024-twin-persistence-schema.md) | Use Relational Twin Metadata With Time-Series Run Outputs | Partial |
+| [0024](0024-twin-persistence-schema.md) | Use Relational Twin Metadata With Time-Series Run Outputs | Implemented |
 | [0025](0025-forecast-horizon-confidence.md) | Use Short Operational Forecasts With Heuristic Confidence | Implemented |
 | [0026](0026-retention-and-compression.md) | Use Tiered Retention And TimescaleDB Compression | Implemented |
 | [0027](0027-historical-branching.md) | Stage Historical Scenario Branching From Model Snapshots | Not started |
@@ -62,8 +62,12 @@ previously written down.
 | [0035](0035-metadata-reload.md) | How Metadata Changes Reach A Running Service | Implemented |
 | [0036](0036-model-telemetry-through-modbus.md) | Send Model Telemetry Through The Existing Modbus Path | Implemented |
 | [0037](0037-session-revocation.md) | Logout Ends Every Session Of The User, On The Server | Implemented |
+| [0038](0038-live-control-command-lifecycle.md) | Apply Live Model Controls Through Durable, Reviewed Commands | Implemented |
 
-Of 37 decisions: 21 implemented, 9 not started, 7 partial.
+Of 38 decisions: 32 implemented, 5 partial, and 1 not started.
+The partial group includes ADR 0007: the API separation is complete, while
+its dashboard presentation is deferred.
 
 The twin-core process model now feeds the Modbus gateway and historian.
-Durable model state snapshots are implemented. Forecasts and scenarios remain planned.
+Durable model state, forecasts, isolated scenarios, live synthetic controls,
+and authenticated parameter publication are implemented.

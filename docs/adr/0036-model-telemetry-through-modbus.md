@@ -2,11 +2,13 @@
 
 **Status**: Accepted, amended
 
+**Implementation**: Implemented, including all 18 model signals and model version metadata.
+
 **Date**: 2026-09-30
 
 **Decision**: The gateway reads one complete synthetic model fleet snapshot from twin-core and maps only values the model calculates into Modbus holding registers. Ingestion keeps polling Modbus and stores complete batches with their model tick time and source label. This preserves the industrial read path without presenting unsupported or stale values as fresh measurements.
 
-Roadmap: [Milestone 6](../roadmap.md#milestone-6-integrate-modbus-with-twin-core)
+Design: [Milestone 6](../design/twin-core-milestone-6.md)
 
 ---
 

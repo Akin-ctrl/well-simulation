@@ -122,6 +122,32 @@ class TwinMetrics:
             "One when service reads and the tick loop are ready",
             registry=self.registry,
         )
+        self.control_outcomes = Counter(
+            "well_sim_twin_control_outcomes_total",
+            "Command results and reconciliation",
+            ["outcome"],
+            registry=self.registry,
+        )
+        self.control_queue_depth = Gauge(
+            "well_sim_twin_control_queue_depth",
+            "Durable queued commands",
+            registry=self.registry,
+        )
+        self.control_backlog = Gauge(
+            "well_sim_twin_control_backlog",
+            "Queued commands beyond the current scan bound",
+            registry=self.registry,
+        )
+        self.control_inbox_ready = Gauge(
+            "well_sim_twin_control_inbox_ready",
+            "One when the inbox scan succeeds",
+            registry=self.registry,
+        )
+        self.control_apply_duration = Histogram(
+            "well_sim_twin_control_apply_seconds",
+            "Database and memory control application time",
+            registry=self.registry,
+        )
 
     def render(self) -> bytes:
         """Return the Prometheus text format."""

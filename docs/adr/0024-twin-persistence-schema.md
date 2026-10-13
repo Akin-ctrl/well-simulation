@@ -2,7 +2,7 @@
 
 - Status: Accepted, amended
 - Date: 2026-05-31
-- Implementation: Milestones 7 and 8 tables complete; control table remains planned
+- Implementation: Milestones 7, 8, and 8B tables implemented
 
 ## Context
 
@@ -246,3 +246,12 @@ the time column. Full model values remain in JSONB; tubing pressure, flow rate,
 wellhead temperature, water cut, alarm risk, and sample time are separate
 queryable columns. Scenario points also hold unchanged baseline values. The
 `control_command` table still belongs to the live control milestone.
+
+## Implementation on 2026-10-13: Live controls and parameter publication
+
+Migration 0012 creates control_command, wellhead_control_state,
+control_command_event, and model_parameter_change. The Drizzle schema mirrors
+all four. Immutable proposals, lifecycle checks, unique pending commands, and
+separate service grants protect the write path. Parameter publication appends
+to the existing wellhead_model_parameter history. See
+[ADR 0038](0038-live-control-command-lifecycle.md) for the implemented lifecycle.

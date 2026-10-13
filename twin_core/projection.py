@@ -254,7 +254,7 @@ def _sharp_change(initial: ControlInputs, steps: tuple[ScheduledControl, ...]) -
     return False
 
 
-def _validate_projection_request(
+def validate_projection_request(
     kind: Literal["forecast", "scenario"],
     name: str | None,
     controls: tuple[ScheduledControl, ...],
@@ -326,7 +326,7 @@ def project(
     controls: tuple[ScheduledControl, ...] = (),
 ) -> ProjectionResult:
     """Integrate the existing one-second model on private immutable copies."""
-    _validate_projection_request(kind, name, controls, horizon_seconds, step_seconds)
+    validate_projection_request(kind, name, controls, horizon_seconds, step_seconds)
 
     current = base.state
     baseline = base.state

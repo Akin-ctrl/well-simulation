@@ -6,8 +6,10 @@ This directory contains committed API specifications for the wellhead monitoring
 
 - `public-api.yaml`: dashboard-facing TypeScript/Hono API implemented by `monorepo/apps/api`.
 - `twin-core-internal-api.yaml`: implemented internal reads and operational
-  endpoints for the Python twin-core service. Control, forecast, and scenario
-  operations remain planned.
+  endpoints, forecasts, scenarios, installed controls, command wake-up hints,
+  and parameter validation for the Python twin-core service. Live targets are
+  stored through the public command lifecycle; internal HTTP never applies
+  a control payload directly.
 
 ## Rules
 
@@ -26,4 +28,5 @@ npx --yes pnpm@10.11.1 validate:openapi
 
 This checks that each committed spec parses, declares OpenAPI 3.x metadata, has paths, uses unique operation IDs, declares success responses, and resolves internal `$ref` values.
 
-The next production-readiness step is to run this in CI and optionally add a stricter OpenAPI linter.
+CI runs this structural check. Endpoint tests verify behavior separately; the
+structural check alone cannot prove a running response matches every schema.

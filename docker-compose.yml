@@ -58,6 +58,8 @@ services:
       POSTGRES_PORT: "5432"
       TWIN_DB_USER: ${TWIN_DB_USER}
       TWIN_DB_PASSWORD: ${TWIN_DB_PASSWORD}
+      API_DB_USER: ${API_DB_USER:?Set API_DB_USER to a separate application login}
+      API_DB_PASSWORD: ${API_DB_PASSWORD:?Set API_DB_PASSWORD}
     networks:
       - wellnet
 
@@ -155,7 +157,7 @@ services:
         condition: service_completed_successfully
     environment:
       NODE_ENV: production
-      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      DATABASE_URL: postgres://${API_DB_USER}:${API_DB_PASSWORD}@db:5432/${POSTGRES_DB}
       TWIN_CORE_URL: http://twin-core:8000
       TWIN_INTERNAL_TOKEN: ${TWIN_INTERNAL_TOKEN}
       JWT_SECRET: ${JWT_SECRET}

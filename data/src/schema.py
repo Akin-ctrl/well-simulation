@@ -282,23 +282,13 @@ def bootstrap_admin(conn: psycopg2.extensions.connection) -> None:
     )
 
 
-def provision_twin_reader(
-    conn: psycopg2.extensions.connection, database: DatabaseSettings
+def _provision_service_login(
+    conn: psycopg2.extensions.connection,
+    database: DatabaseSettings,
+    user: str,
+    password: str,
 ) -> None:
-    """Create a least-privilege login for the internal twin-core service.
-
-    Standalone migration runs without twin settings keep working. Compose sets
-    both values, so its dependent twin-core always receives a provisioned role.
-    """
-    user = os.getenv("TWIN_DB_USER", "")
-    password = os.getenv("TWIN_DB_PASSWORD", "")
-    if not user and not password:
-        return
-    if not user or not password:
-        raise ValueError("TWIN_DB_USER and TWIN_DB_PASSWORD must be set together")
-    if user == database.user:
-        raise ValueError("Twin reader must use a separate database role")
-
+    """Reset a separate service login to explicit grants, rejecting powerful roles."""
     with conn.cursor() as cursor:
         cursor.execute(
             """
@@ -322,13 +312,13 @@ def provision_twin_reader(
                 existing
             )
             if not can_login or any((superuser, create_db, create_role, replication)):
-                raise ValueError("Twin database role has unexpected privileges")
+                raise ValueError("Service database role has unexpected privileges")
             cursor.execute(
                 "SELECT 1 FROM pg_auth_members WHERE member = %s LIMIT 1",
                 (role_id,),
             )
             if cursor.fetchone() is not None:
-                raise ValueError("Twin database role must not inherit another role")
+                raise ValueError("Service database role must not inherit another role")
             cursor.execute(
                 sql.SQL("ALTER ROLE {} PASSWORD %s").format(sql.Identifier(user)),
                 (password,),
@@ -361,6 +351,27 @@ def provision_twin_reader(
         cursor.execute(
             sql.SQL("GRANT USAGE ON SCHEMA public TO {}").format(sql.Identifier(user))
         )
+
+
+def provision_twin_reader(
+    conn: psycopg2.extensions.connection, database: DatabaseSettings
+) -> None:
+    """Create a least-privilege login for the internal twin-core service.
+
+    Standalone migration runs without twin settings keep working. Compose sets
+    both values, so its dependent twin-core always receives a provisioned role.
+    """
+    user = os.getenv("TWIN_DB_USER", "")
+    password = os.getenv("TWIN_DB_PASSWORD", "")
+    if not user and not password:
+        return
+    if not user or not password:
+        raise ValueError("TWIN_DB_USER and TWIN_DB_PASSWORD must be set together")
+    if user == database.user:
+        raise ValueError("Twin reader must use a separate database role")
+
+    _provision_service_login(conn, database, user, password)
+    with conn.cursor() as cursor:
         cursor.execute(
             sql.SQL(
                 "GRANT SELECT ON TABLE wellhead, deviceParameterMapping, "
@@ -385,8 +396,107 @@ def provision_twin_reader(
                 "twin_recovery_event_event_id_seq TO {}"
             ).format(sql.Identifier(user))
         )
+        cursor.execute(
+            sql.SQL(
+                "GRANT SELECT ON TABLE control_command, wellhead_control_state TO {}"
+            ).format(sql.Identifier(user))
+        )
+        cursor.execute(
+            sql.SQL(
+                "GRANT UPDATE (status, result_at, result_revision, result_reason) "
+                "ON control_command TO {}"
+            ).format(sql.Identifier(user))
+        )
+        cursor.execute(
+            sql.SQL("GRANT INSERT, UPDATE ON wellhead_control_state TO {}").format(
+                sql.Identifier(user)
+            )
+        )
+        cursor.execute(
+            sql.SQL("GRANT INSERT ON control_command_event TO {}").format(
+                sql.Identifier(user)
+            )
+        )
+        cursor.execute(
+            sql.SQL(
+                "GRANT USAGE ON SEQUENCE control_command_event_event_id_seq TO {}"
+            ).format(sql.Identifier(user))
+        )
+        cursor.execute(
+            sql.SQL(
+                "GRANT EXECUTE ON FUNCTION control_actor_authority(INT) TO {}"
+            ).format(sql.Identifier(user))
+        )
     conn.commit()
-    logger.info("Twin-core append-only database role is ready", extra={"role": user})
+    logger.info("Twin-core database role is ready", extra={"role": user})
+
+
+def provision_api_role(
+    conn: psycopg2.extensions.connection, database: DatabaseSettings
+) -> None:
+    """Grant API writes without schema or active-control ownership."""
+    user = os.getenv("API_DB_USER", "")
+    password = os.getenv("API_DB_PASSWORD", "")
+    if not user and not password:
+        return
+    if not user or not password:
+        raise ValueError("API_DB_USER and API_DB_PASSWORD must be set together")
+    if user in (database.user, os.getenv("TWIN_DB_USER", "")):
+        raise ValueError("API must use a separate database role")
+    _provision_service_login(conn, database, user, password)
+    with conn.cursor() as cursor:
+        cursor.execute(
+            sql.SQL(
+                "GRANT SELECT ON users, wellhead, field, location, device, "
+                "parameterType, deviceParameterMapping, parameterReading, alarmRule, "
+                "alarmEvent, v_wellhead_parameter_readings, v_active_alarms, "
+                "mv_2min_pressure_trends, mv_2min_temp_flow_trends, "
+                "mv_2min_water_cut_gor_trends, mv_5min_alarm_counts, "
+                "prediction_run, prediction_point, scenario_run, scenario_point, "
+                "control_command, control_command_event, wellhead_control_state, "
+                "model_parameter_change, wellhead_model_parameter TO {}"
+            ).format(sql.Identifier(user))
+        )
+        cursor.execute(
+            sql.SQL(
+                "GRANT INSERT ON users, auditEvent, control_command, "
+                "control_command_event, model_parameter_change, "
+                "wellhead_model_parameter TO {}"
+            ).format(sql.Identifier(user))
+        )
+        cursor.execute(
+            sql.SQL("GRANT UPDATE (session_version, updated_at) ON users TO {}").format(
+                sql.Identifier(user)
+            )
+        )
+        cursor.execute(
+            sql.SQL(
+                "GRANT UPDATE (status, expires_at, queued_at, "
+                "activated_by, activated_role, "
+                "activated_session_version, result_at, result_reason) "
+                "ON control_command TO {}"
+            ).format(sql.Identifier(user))
+        )
+        cursor.execute(
+            sql.SQL(
+                "GRANT UPDATE (status, result_at, published_override_id) "
+                "ON model_parameter_change TO {}"
+            ).format(sql.Identifier(user))
+        )
+        cursor.execute(
+            sql.SQL(
+                "GRANT USAGE ON SEQUENCE users_id_seq, auditevent_audit_event_id_seq, "
+                "control_command_event_event_id_seq, "
+                "wellhead_model_parameter_parameter_override_id_seq TO {}"
+            ).format(sql.Identifier(user))
+        )
+        cursor.execute(
+            sql.SQL("GRANT EXECUTE ON FUNCTION lock_control_state(INT) TO {}").format(
+                sql.Identifier(user)
+            )
+        )
+    conn.commit()
+    logger.info("API database role is ready", extra={"role": user})
 
 
 def main() -> int:
@@ -421,8 +531,9 @@ def main() -> int:
 
     try:
         provision_twin_reader(conn, settings)
+        provision_api_role(conn, settings)
     except (psycopg2.Error, ValueError):
-        logger.error("Twin-core database role could not be provisioned")
+        logger.error("Service database roles could not be provisioned")
         conn.rollback()
         return 1
     finally:

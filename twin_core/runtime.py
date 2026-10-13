@@ -7,18 +7,25 @@ import threading
 import time
 import uuid
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
 from typing import Literal
 
-from twin_core.config import ModelDefaults, ServiceSettings
+from twin_core.config import (
+    ModelDefaults,
+    ParameterOverride,
+    ServiceSettings,
+    resolve_parameters,
+)
+from twin_core.control_store import ControlStore
+from twin_core.controls import ControlInbox
 from twin_core.database import (
     DatabaseUnavailableError,
     HistorianReader,
     TelemetrySnapshot,
 )
 from twin_core.metrics import TwinMetrics
-from twin_core.model import MODEL_STEP_SECONDS
+from twin_core.model import MODEL_STEP_SECONDS, ModelParameters, ProcessState
 from twin_core.persistence import (
     SNAPSHOT_INTERVAL_SECONDS,
     PersistenceWriter,
@@ -128,6 +135,7 @@ class TwinRuntime:
         wall: Callable[[], datetime] = _utc_now,
         persistence: TwinPersistence | None = None,
         writer: PersistenceWriter | None = None,
+        control_store: ControlStore | None = None,
     ) -> None:
         """Keep transport, state, data access, and metrics separate.
 
@@ -143,6 +151,15 @@ class TwinRuntime:
         self.metrics = metrics
         self.persistence = persistence
         self.writer = writer
+        self.control_store = control_store
+        self.control_inbox = (
+            ControlInbox(control_store, registry, metrics, self._controls_reconciled)
+            if control_store is not None
+            else None
+        )
+        if control_store is not None:
+            registry.require_durable_controls()
+        self._refresh_requested = threading.Event()
         self._recovered_wells: set[int] = set()
         self._last_snapshot_submission_at: datetime | None = None
         self._stop = threading.Event()
@@ -200,15 +217,9 @@ class TwinRuntime:
             if saved.simulated_at != snapshot.simulated_at:
                 reason = "timestamp"
                 raise ValueError("Snapshot times differ")
-            controls = saved_controls(saved)
             gap = (now - snapshot.simulated_at).total_seconds()
-            recovered = restore_state(
-                saved,
-                parameters,
-                controls,
-                gap,
-                now,
-                self.settings.max_catchup_steps,
+            recovered, controls_changed = self._recover_process(
+                wellhead_id, saved, parameters, gap, now
             )
         except (ValueError, ArithmeticError, TypeError):
             self._event(
@@ -226,7 +237,11 @@ class TwinRuntime:
                 extra={"wellhead_id": wellhead_id, "check": reason},
             )
             return
-        skipped = max(0, int(gap)) if gap > self.settings.max_catchup_steps else 0
+        skipped = (
+            max(0, int(gap))
+            if controls_changed or gap > self.settings.max_catchup_steps
+            else 0
+        )
         self.registry.restore(
             wellhead_id,
             recovered,
@@ -249,10 +264,149 @@ class TwinRuntime:
             )
         )
 
+    def _recover_process(
+        self,
+        wellhead_id: int,
+        saved: ProcessState,
+        parameters: ModelParameters,
+        gap: float,
+        now: datetime,
+    ) -> tuple[ProcessState, bool]:
+        """Avoid inventing recovery steps with controls older than the active row."""
+        controls = saved_controls(saved)
+        # Validate saved bounds before using them to seed a missing active row.
+        restore_state(saved, parameters, controls, 0, saved.simulated_at)
+        context = self.registry.control_context(wellhead_id)
+        if self.control_store is not None and context is not None:
+            active = self.control_store.restore(replace(context, controls=controls))
+            if active.controls != controls:
+                return replace(saved, simulated_at=max(now, saved.simulated_at)), True
+        return restore_state(
+            saved, parameters, controls, gap, now, self.settings.max_catchup_steps
+        ), False
+
+    def _controls_reconciled(self, wellhead_id: int) -> None:
+        """Record that the active row replaced an older or uncertain memory value."""
+        self._event(
+            RecoveryEvent(
+                self._wall(),
+                wellhead_id,
+                "active_controls_restored",
+                self.defaults.version,
+            )
+        )
+
+    def control_payload(self, wellhead_id: int) -> dict[str, object] | None:
+        """Expose installed setpoints separately from the previous process step."""
+        context = self.registry.control_context(wellhead_id)
+        state = self.registry.get(wellhead_id)
+        if context is None or state is None:
+            return None
+        control = context.controls
+        return {
+            "wellheadId": wellhead_id,
+            "revision": context.revision,
+            "modelVersion": context.model_version,
+            "parameterFingerprint": context.parameter_fingerprint,
+            "status": context.status,
+            "lastTickAt": state.last_tick_at.isoformat()
+            if state.last_tick_at
+            else None,
+            "controls": {
+                "chokePositionPercent": control.choke_position_percent,
+                "masterValveOpen": control.master_valve_open,
+                "wingValveOpen": control.wing_valve_open,
+                "swabValveOpen": control.swab_valve_open,
+                "pumpOn": control.pump_on,
+                "emergencyShutdown": control.emergency_shutdown,
+            },
+        }
+
+    def request_fleet_refresh(self) -> None:
+        """Request refresh on the scheduler thread without mutating it from HTTP."""
+        self._refresh_requested.set()
+
+    def validate_parameter(self, body: dict[str, object]) -> dict[str, object]:
+        """Validate a proposed override against the same resolver used at startup."""
+        if set(body) != {"wellheadId", "modelVersion", "parameterKey", "value", "unit"}:
+            raise ValueError("Unknown or missing parameter fields")
+        well = body["wellheadId"]
+        key = body["parameterKey"]
+        if (
+            type(well) is not int
+            or not isinstance(key, str)
+            or key not in self.defaults.parameters
+        ):
+            raise ValueError("Invalid well or parameter")
+        parameters = self.registry.parameters_for(well)
+        if self.registry.get(well) is None or self.persistence is None:
+            raise ProjectionUnavailableError("Model parameter context unavailable")
+        if body["modelVersion"] != self.defaults.version:
+            raise ValueError("Model version differs")
+        overrides = dict(
+            self.persistence.load_overrides([well], self.defaults.version).get(well, {})
+        )
+        value, unit = body["value"], body["unit"]
+        if value is None:
+            if unit is not None:
+                raise ValueError("Removing an override requires a null unit")
+            overrides.pop(key, None)
+        else:
+            spec = self.defaults.parameters[key]
+            if unit != spec.unit:
+                raise ValueError("Parameter unit differs")
+            overrides[key] = ParameterOverride(
+                spec.validate(value), spec.unit, "authenticated_api"
+            )
+        proposed = ModelParameters.from_values(
+            resolve_parameters(
+                self.defaults, self.settings.environment_overrides, overrides, well
+            )
+        )
+        return {
+            "modelVersion": self.defaults.version,
+            "runningParameterFingerprint": parameter_fingerprint(parameters)
+            if parameters
+            else None,
+            "proposedParameterFingerprint": parameter_fingerprint(proposed),
+            "restartRequired": True,
+        }
+
     def _set_fleet_ok(self, value: bool) -> None:
         """Update database readiness without exposing mutable state."""
         with self._lock:
             self._fleet_ok = value
+
+    def _initialize_well(
+        self, wellhead_id: int, snapshot: StoredSnapshot | None, now: datetime
+    ) -> None:
+        """Initialize process recovery and durable controls before releasing ticks."""
+        state = self.registry.get(wellhead_id)
+        if state is None or state.status not in (
+            "initializing",
+            "recovering",
+        ):
+            return
+        if state.status == "initializing":
+            self._restore_one(wellhead_id, snapshot, now)
+        if self.control_store is not None:
+            context = self.registry.control_context(wellhead_id)
+            if context is None:
+                return
+            active = self.control_store.restore(context)
+            if self.registry.install_controls(wellhead_id, active):
+                self._controls_reconciled(wellhead_id)
+        self._recovered_wells.add(wellhead_id)
+
+    def _expire_before_recovery(self) -> None:
+        """Drain expired queue pages before releasing newly recovered wells."""
+        if self.control_store is None:
+            return
+        while not self._stop.is_set():
+            expired = self.control_store.expire_queued()
+            self.metrics.control_outcomes.labels(outcome="expired").inc(expired)
+            if expired < 100:
+                return
 
     def refresh_fleet(self) -> bool:
         """Reload active wellheads and reject bad model configuration."""
@@ -266,6 +420,8 @@ class TwinRuntime:
                 for wellhead_id in ids
                 if wellhead_id not in self._recovered_wells
             ]
+            if new_ids:
+                self._expire_before_recovery()
             snapshots = (
                 self.persistence.load_snapshots(new_ids)
                 if self.persistence is not None
@@ -275,11 +431,7 @@ class TwinRuntime:
             if self.persistence is not None:
                 now = self._wall()
                 for wellhead_id in new_ids:
-                    state = self.registry.get(wellhead_id)
-                    if state is None or state.status != "initializing":
-                        continue
-                    self._restore_one(wellhead_id, snapshots.get(wellhead_id), now)
-                    self._recovered_wells.add(wellhead_id)
+                    self._initialize_well(wellhead_id, snapshots.get(wellhead_id), now)
         except DatabaseUnavailableError:
             logger.error("Active wellhead refresh failed")
             self.metrics.database_errors.labels(operation="fleet_refresh").inc()
@@ -528,7 +680,8 @@ class TwinRuntime:
     def cycle(self) -> float:
         """Run one scheduler pass. Returns the seconds to wait before the next."""
         now = self._monotonic()
-        if now >= self._next_refresh:
+        if now >= self._next_refresh or self._refresh_requested.is_set():
+            self._refresh_requested.clear()
             success = self.refresh_fleet()
             interval = (
                 self.settings.fleet_refresh_seconds if success else RETRY_FLEET_SECONDS
@@ -566,7 +719,12 @@ class TwinRuntime:
                     # this time, so it waits rather than stepping backwards.
                     holding = True
                     continue
-                advanced, failed = self.registry.tick(at)
+                before_step = (
+                    self.control_inbox.apply_one
+                    if self.control_inbox is not None and index == batch.steps - 1
+                    else None
+                )
+                advanced, failed = self.registry.tick(at, before_step)
                 self.metrics.ticks.inc()
                 self.metrics.model_steps.inc(advanced)
                 self.metrics.model_step_errors.inc(failed)

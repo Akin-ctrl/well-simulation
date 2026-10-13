@@ -15,7 +15,7 @@ This checklist defines what "production-grade" should mean for this repository.
 - Services use health checks instead of fixed startup sleeps.
 - Services retry transient database and Modbus failures with backoff.
 - Docker Compose uses correct internal ports and paths.
-- The API, dashboard, database, simulator, gateway, and ingestion services run together.
+- The API, dashboard, database, twin-core, gateway, and ingestion services run together.
 - Ingestion handles malformed Modbus reads without stopping the pipeline.
 
 ## Security
@@ -36,21 +36,22 @@ changing how the environment is populated and nothing else.
 What holds today:
 
 - `.env` is git-ignored. `.env.example` carries placeholders only.
-- Every service reads its secrets through one function: `required_env` in
-  `data/src/telemetry_common.py`, and `apps/api/src/config.ts` for the API.
+- Services validate required credentials in `data/src/telemetry_common.py`,
+  `twin_core/config.py`, and `monorepo/apps/api/src/config.ts`.
 - `JWT_SECRET` is validated at boot and the service refuses to start without a
   usable one. A misconfigured deployment fails immediately rather than serving
   500s.
-- No secret is written to a log. The API redacts bound query parameters before
-  logging a database error, because Drizzle includes them in the message.
+- Routine logs exclude credentials. The API redacts bound query parameters
+  before logging database errors. The bootstrap administrator password is
+  deliberately logged once by the migrator, as described below.
 
-What a real deployment changes, and only this:
+How a secret store can supply the existing settings:
 
 - Compose reads `.env`. A different orchestrator injects the same variable
   names from its own secret store: Kubernetes Secrets, AWS Secrets Manager, or
   Vault with an agent that populates the environment.
-- The names are already the interface. `POSTGRES_PASSWORD` and `JWT_SECRET` do
-  not care where their value came from.
+- The variable names remain the interface. Rotation, service permissions, and
+  deployment security still need their own implementation and verification.
 
 What is still missing:
 

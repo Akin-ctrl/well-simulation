@@ -29,7 +29,10 @@ explains the original process equations, units, and limits. The
 additional phase and diagnostic equations. The
 [Milestone 6 design](../design/twin-core-milestone-6.md) describes the Modbus
 mapping and freshness rules. The [Milestone 7 design](../design/twin-core-milestone-7.md)
-describes snapshots, parameter overrides, and restart recovery.
+describes snapshots, parameter overrides, and restart recovery. The
+[Milestone 8 design](../design/twin-core-milestone-8.md) describes saved forecasts
+and isolated scenarios. The [8B design](../design/twin-core-milestone-8b.md)
+describes live synthetic controls and parameter publication.
 
 ## Current Dashboard Layer
 
@@ -74,7 +77,12 @@ Asset metadata
   control command. See [Milestone 8](../design/twin-core-milestone-8.md).
 - **Dashboard**: shows live state, historical trends, and alarms. Forecast and
   scenario views belong to Milestone 9.
-- **Live control API**: planned for Milestone 8B.
+- **Live control API**: saves an operator draft and explicit activation. Twin-core
+  checks current authority and applies the durable targets before a model tick.
+  Active control rows take precedence over older snapshots during recovery.
+- **Parameter publication API**: validates administrator proposals through the
+  Python resolver and writes an attributed override. A restart loads it into
+  the running model.
 
 ## Digital Twin Evolution Path
 

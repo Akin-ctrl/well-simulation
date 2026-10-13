@@ -5,9 +5,9 @@ info:
   summary: Dashboard-facing API for the wellhead monitoring simulation.
   description: |
     This contract documents the public API exposed by the TypeScript/Hono service.
-    It covers the currently implemented dashboard/auth surface and keeps the
-    digital-twin evolution honest: twin-core endpoints belong in the internal
-    contract until they are implemented.
+    It covers monitoring, authentication, saved projections, synthetic control
+    commands, and parameter proposals. Controls require current OPERATIONS
+    authority; parameter publication requires ADMIN. No route controls field hardware.
 servers:
   - url: /api
     description: Dashboard reverse-proxy path.
@@ -350,6 +350,435 @@ paths:
         "404": {$ref: "#/components/responses/NotFound"}
         "410": {$ref: "#/components/responses/Gone"}
         "401": {$ref: "#/components/responses/Unauthorized"}
+  /twin/wellheads/{wellheadId}/controls:
+    get:
+      tags:
+      - Twin
+      summary: Read durable and running synthetic controls.
+      operationId: getLiveControlState
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: Durable status. A queued command is not yet applied.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ControlStateResponse'
+        '400':
+          description: Invalid JSON, target, or confirmation.
+        '401':
+          description: Missing or revoked session.
+        '403':
+          description: Current account lacks authority.
+        '404':
+          description: Unknown command or well.
+        '409':
+          description: Stale revision, conflicting proposal, or idempotency-key reuse.
+        '429':
+          description: More than ten writes per authenticated user per minute.
+        '503':
+          description: Dependency unavailable or commit outcome unknown. Read status
+            or retry the same proposal; do not assume a write failed.
+      parameters:
+      - name: wellheadId
+        in: path
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 2147483647
+  /twin/control-commands:
+    post:
+      tags:
+      - Twin
+      summary: Create an immutable OPERATIONS control draft.
+      operationId: draftControlCommand
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          description: Durable status. A queued command is not yet applied.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ControlCommandResponse'
+        '400':
+          description: Invalid JSON, target, or confirmation.
+        '401':
+          description: Missing or revoked session.
+        '403':
+          description: Current account lacks authority.
+        '404':
+          description: Unknown command or well.
+        '409':
+          description: Stale revision, conflicting proposal, or idempotency-key reuse.
+        '429':
+          description: More than ten writes per authenticated user per minute.
+        '503':
+          description: Dependency unavailable or commit outcome unknown. Read status
+            or retry the same proposal; do not assume a write failed.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ControlDraftRequest'
+      parameters:
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          format: uuid
+  /twin/control-commands/{id}/activate:
+    post:
+      tags:
+      - Twin
+      summary: Explicitly activate the creator's command.
+      operationId: activateControlCommand
+      security:
+      - cookieAuth: []
+      responses:
+        '202':
+          description: Durable status. A queued command is not yet applied.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ControlCommandResponse'
+        '400':
+          description: Invalid JSON, target, or confirmation.
+        '401':
+          description: Missing or revoked session.
+        '403':
+          description: Current account lacks authority.
+        '404':
+          description: Unknown command or well.
+        '409':
+          description: Stale revision, conflicting proposal, or idempotency-key reuse.
+        '429':
+          description: More than ten writes per authenticated user per minute.
+        '503':
+          description: Dependency unavailable or commit outcome unknown. Read status
+            or retry the same proposal; do not assume a write failed.
+        '200':
+          description: Repeated activation returns an existing terminal result without
+            requeuing.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ControlCommandResponse'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ControlActivateRequest'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+  /twin/control-commands/{id}/cancel:
+    post:
+      tags:
+      - Twin
+      summary: Cancel the creator's draft or queued command.
+      operationId: cancelControlCommand
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: Durable status. A queued command is not yet applied.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ControlCommandResponse'
+        '400':
+          description: Invalid JSON, target, or confirmation.
+        '401':
+          description: Missing or revoked session.
+        '403':
+          description: Current account lacks authority.
+        '404':
+          description: Unknown command or well.
+        '409':
+          description: Stale revision, conflicting proposal, or idempotency-key reuse.
+        '429':
+          description: More than ten writes per authenticated user per minute.
+        '503':
+          description: Dependency unavailable or commit outcome unknown. Read status
+            or retry the same proposal; do not assume a write failed.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExplicitConfirmation'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+  /twin/control-commands/{id}:
+    get:
+      tags:
+      - Twin
+      summary: Read command status and lifecycle events.
+      operationId: getControlCommand
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: Durable status. A queued command is not yet applied.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ControlCommandResponse'
+        '400':
+          description: Invalid JSON, target, or confirmation.
+        '401':
+          description: Missing or revoked session.
+        '403':
+          description: Current account lacks authority.
+        '404':
+          description: Unknown command or well.
+        '409':
+          description: Stale revision, conflicting proposal, or idempotency-key reuse.
+        '429':
+          description: More than ten writes per authenticated user per minute.
+        '503':
+          description: Dependency unavailable or commit outcome unknown. Read status
+            or retry the same proposal; do not assume a write failed.
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+  /twin/parameter-changes:
+    post:
+      tags:
+      - Twin
+      summary: Create an ADMIN parameter proposal.
+      operationId: draftParameterChange
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          description: Durable status. A queued command is not yet applied.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ParameterChangeResponse'
+        '400':
+          description: Invalid JSON, target, or confirmation.
+        '401':
+          description: Missing or revoked session.
+        '403':
+          description: Current account lacks authority.
+        '404':
+          description: Unknown command or well.
+        '409':
+          description: Stale revision, conflicting proposal, or idempotency-key reuse.
+        '429':
+          description: More than ten writes per authenticated user per minute.
+        '503':
+          description: Dependency unavailable or commit outcome unknown. Read status
+            or retry the same proposal; do not assume a write failed.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ParameterDraftRequest'
+      parameters:
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          format: uuid
+  /twin/parameter-changes/{id}/publish:
+    post:
+      tags:
+      - Twin
+      summary: Publish an attributed override requiring restart.
+      operationId: publishParameterChange
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: Durable status. A queued command is not yet applied.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ParameterChangeResponse'
+        '400':
+          description: Invalid JSON, target, or confirmation.
+        '401':
+          description: Missing or revoked session.
+        '403':
+          description: Current account lacks authority.
+        '404':
+          description: Unknown command or well.
+        '409':
+          description: Stale revision, conflicting proposal, or idempotency-key reuse.
+        '429':
+          description: More than ten writes per authenticated user per minute.
+        '503':
+          description: Dependency unavailable or commit outcome unknown. Read status
+            or retry the same proposal; do not assume a write failed.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExplicitConfirmation'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+  /twin/parameter-changes/{id}/cancel:
+    post:
+      tags:
+      - Twin
+      summary: Cancel the creator's parameter proposal.
+      operationId: cancelParameterChange
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: Durable status. A queued command is not yet applied.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ParameterChangeResponse'
+        '400':
+          description: Invalid JSON, target, or confirmation.
+        '401':
+          description: Missing or revoked session.
+        '403':
+          description: Current account lacks authority.
+        '404':
+          description: Unknown command or well.
+        '409':
+          description: Stale revision, conflicting proposal, or idempotency-key reuse.
+        '429':
+          description: More than ten writes per authenticated user per minute.
+        '503':
+          description: Dependency unavailable or commit outcome unknown. Read status
+            or retry the same proposal; do not assume a write failed.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExplicitConfirmation'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+  /twin/parameter-changes/{id}:
+    get:
+      tags:
+      - Twin
+      summary: Read the proposal and the currently running parameter identity.
+      operationId: getParameterChange
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: Durable status. A queued command is not yet applied.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ParameterChangeResponse'
+        '400':
+          description: Invalid JSON, target, or confirmation.
+        '401':
+          description: Missing or revoked session.
+        '403':
+          description: Current account lacks authority.
+        '404':
+          description: Unknown command or well.
+        '409':
+          description: Stale revision, conflicting proposal, or idempotency-key reuse.
+        '429':
+          description: More than ten writes per authenticated user per minute.
+        '503':
+          description: Dependency unavailable or commit outcome unknown. Read status
+            or retry the same proposal; do not assume a write failed.
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+  /twin/wellheads/{wellheadId}/parameters:
+    get:
+      tags: [Twin]
+      summary: Read current override revision IDs and running model identity.
+      operationId: getModelParameterStatus
+      security: [{cookieAuth: []}]
+      parameters:
+        - name: wellheadId
+          in: path
+          required: true
+          schema: {type: integer, minimum: 1}
+      responses:
+        '200':
+          description: ADMIN read with latestOverrides, modelVersion, status, and running controls (or null if unavailable).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, msg, status]
+                properties:
+                  msg: {type: string}
+                  status: {const: 200}
+                  data:
+                    type: object
+                    required: [wellheadId, modelVersion, status, latestOverrides, running]
+                    properties:
+                      wellheadId: {type: integer}
+                      modelVersion: {type: string}
+                      status: {type: string}
+                      running:
+                        anyOf:
+                          - {$ref: '#/components/schemas/RunningControls'}
+                          - {type: 'null'}
+                      latestOverrides:
+                        type: array
+                        items:
+                          type: object
+                          required: [parameterOverrideId, wellheadId, modelVersion, parameterKey, value, unit, source, changedBy, reason, validFrom]
+                          properties:
+                            parameterOverrideId: {type: integer}
+                            wellheadId: {type: integer}
+                            modelVersion: {type: string}
+                            parameterKey: {type: string}
+                            value: {type: [number, 'null']}
+                            unit: {type: [string, 'null']}
+                            source: {type: string}
+                            changedBy: {type: string}
+                            reason: {type: string}
+                            validFrom: {type: string, format: date-time}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '503': {description: Model identity or database unavailable.}
 components:
   securitySchemes:
     cookieAuth:
@@ -397,6 +826,520 @@ components:
           schema:
             $ref: "#/components/schemas/ErrorResponse"
   schemas:
+    LiveControlTargets:
+      type: object
+      required: []
+      properties:
+        chokePositionPercent:
+          type: number
+          minimum: 0
+          maximum: 100
+        masterValveOpen:
+          type: boolean
+        wingValveOpen:
+          type: boolean
+        pumpOn:
+          type: boolean
+        emergencyShutdown:
+          type: boolean
+      additionalProperties: false
+      minProperties: 1
+      description: Absolute targets. Missing fields keep their value; null is invalid.
+        Shutdown and reset each require a command containing only emergencyShutdown. While
+        shutdown is active, other changes are refused.
+    RunningControls:
+      type: object
+      required:
+      - wellheadId
+      - revision
+      - modelVersion
+      - parameterFingerprint
+      - status
+      - lastTickAt
+      - controls
+      properties:
+        wellheadId:
+          type: integer
+          minimum: 1
+          maximum: 2147483647
+        revision:
+          type: integer
+          minimum: 0
+          maximum: 2147483646
+        modelVersion:
+          type: string
+        parameterFingerprint:
+          type: string
+          minLength: 64
+          maxLength: 64
+        status:
+          type: string
+        lastTickAt:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        controls:
+          type: object
+          required:
+          - chokePositionPercent
+          - masterValveOpen
+          - wingValveOpen
+          - pumpOn
+          - emergencyShutdown
+          - swabValveOpen
+          properties:
+            chokePositionPercent:
+              type: number
+              minimum: 0
+              maximum: 100
+            masterValveOpen:
+              type: boolean
+            wingValveOpen:
+              type: boolean
+            pumpOn:
+              type: boolean
+            emergencyShutdown:
+              type: boolean
+            swabValveOpen:
+              type: boolean
+          additionalProperties: false
+      additionalProperties: false
+    ControlDraftRequest:
+      type: object
+      required:
+      - wellheadId
+      - expectedRevision
+      - reason
+      - targets
+      properties:
+        wellheadId:
+          type: integer
+          minimum: 1
+          maximum: 2147483647
+        expectedRevision:
+          type: integer
+          minimum: 0
+          maximum: 2147483646
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 500
+        targets:
+          $ref: '#/components/schemas/LiveControlTargets'
+      additionalProperties: false
+    ControlActivateRequest:
+      type: object
+      required:
+      - confirm
+      - expectedRevision
+      properties:
+        confirm:
+          const: true
+        expectedRevision:
+          type: integer
+          minimum: 0
+          maximum: 2147483646
+      additionalProperties: false
+    ExplicitConfirmation:
+      type: object
+      required:
+      - confirm
+      properties:
+        confirm:
+          const: true
+      additionalProperties: false
+    ControlCommand:
+      type: object
+      required:
+      - commandId
+      - wellheadId
+      - createdBy
+      - idempotencyKey
+      - reason
+      - expectedRevision
+      - modelVersion
+      - parameterFingerprint
+      - chokePositionPercent
+      - masterValveOpen
+      - wingValveOpen
+      - pumpOn
+      - emergencyShutdown
+      - status
+      - createdAt
+      - expiresAt
+      - queuedAt
+      - activatedBy
+      - activatedRole
+      - activatedSessionVersion
+      - resultAt
+      - resultRevision
+      - resultReason
+      - requestId
+      properties:
+        commandId:
+          type: string
+          format: uuid
+        wellheadId:
+          type: integer
+          minimum: 1
+          maximum: 2147483647
+        createdBy:
+          type: integer
+          minimum: 1
+          maximum: 2147483647
+        idempotencyKey:
+          type: string
+          format: uuid
+        reason:
+          type: string
+          maxLength: 500
+        expectedRevision:
+          type: integer
+          minimum: 0
+          maximum: 2147483646
+        modelVersion:
+          type: string
+        parameterFingerprint:
+          type: string
+        chokePositionPercent:
+          type:
+          - number
+          - 'null'
+          minimum: 0
+          maximum: 100
+        masterValveOpen:
+          type:
+          - boolean
+          - 'null'
+        wingValveOpen:
+          type:
+          - boolean
+          - 'null'
+        pumpOn:
+          type:
+          - boolean
+          - 'null'
+        emergencyShutdown:
+          type:
+          - boolean
+          - 'null'
+        status:
+          type: string
+          enum:
+          - draft
+          - queued
+          - applied
+          - rejected
+          - expired
+          - cancelled
+        createdAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+        queuedAt:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        activatedBy:
+          type:
+          - integer
+          - 'null'
+        activatedRole:
+          type:
+          - string
+          - 'null'
+        activatedSessionVersion:
+          type:
+          - integer
+          - 'null'
+        resultAt:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        resultRevision:
+          type:
+          - integer
+          - 'null'
+        resultReason:
+          type:
+          - string
+          - 'null'
+        requestId:
+          type:
+          - string
+          - 'null'
+        events:
+          type: array
+          items:
+            type: object
+            required:
+            - eventId
+            - commandId
+            - eventType
+            - occurredAt
+            - actorUserId
+            - reasonCode
+            - requestId
+            properties:
+              eventId:
+                type: integer
+                minimum: 1
+                maximum: 2147483647
+              commandId:
+                type: string
+                format: uuid
+              eventType:
+                type: string
+              occurredAt:
+                type: string
+                format: date-time
+              actorUserId:
+                type:
+                - integer
+                - 'null'
+              reasonCode:
+                type: string
+              requestId:
+                type:
+                - string
+                - 'null'
+        notificationPending:
+          type: boolean
+    ParameterDraftRequest:
+      type: object
+      required:
+      - wellheadId
+      - modelVersion
+      - parameterKey
+      - value
+      - unit
+      - expectedOverrideId
+      - reason
+      properties:
+        wellheadId:
+          type: integer
+          minimum: 1
+          maximum: 2147483647
+        modelVersion:
+          type: string
+          pattern: ^\d+\.\d+\.\d+$
+        parameterKey:
+          type: string
+          minLength: 1
+          maxLength: 100
+        value:
+          type:
+          - number
+          - 'null'
+        unit:
+          type:
+          - string
+          - 'null'
+          minLength: 1
+          maxLength: 40
+        expectedOverrideId:
+          type:
+          - integer
+          - 'null'
+          minimum: 1
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 500
+      additionalProperties: false
+      description: Null value and unit together remove an override. Ranges and units are
+        validated by twin-core.
+    ParameterChange:
+      type: object
+      required:
+      - changeId
+      - wellheadId
+      - createdBy
+      - idempotencyKey
+      - modelVersion
+      - parameterKey
+      - value
+      - unit
+      - reason
+      - expectedOverrideId
+      - status
+      - createdAt
+      - expiresAt
+      - resultAt
+      - publishedOverrideId
+      properties:
+        changeId:
+          type: string
+          format: uuid
+        wellheadId:
+          type: integer
+          minimum: 1
+          maximum: 2147483647
+        createdBy:
+          type: integer
+          minimum: 1
+          maximum: 2147483647
+        idempotencyKey:
+          type: string
+          format: uuid
+        modelVersion:
+          type: string
+        parameterKey:
+          type: string
+        value:
+          type:
+          - number
+          - 'null'
+        unit:
+          type:
+          - string
+          - 'null'
+        reason:
+          type: string
+        expectedOverrideId:
+          type:
+          - integer
+          - 'null'
+        status:
+          type: string
+          enum:
+          - draft
+          - published
+          - cancelled
+          - expired
+        createdAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+        resultAt:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        publishedOverrideId:
+          type:
+          - integer
+          - 'null'
+        restartRequired:
+          type: boolean
+        notificationPending:
+          type: boolean
+        running:
+          anyOf:
+          - $ref: '#/components/schemas/RunningControls'
+          - type: 'null'
+    ControlState:
+      type: object
+      required:
+      - active
+      - running
+      - pendingCommandId
+      properties:
+        active:
+          anyOf:
+          - type: object
+            required:
+            - wellheadId
+            - revision
+            - modelVersion
+            - parameterFingerprint
+            - chokePositionPercent
+            - masterValveOpen
+            - wingValveOpen
+            - pumpOn
+            - emergencyShutdown
+            - swabValveOpen
+            - appliedCommandId
+            - appliedAt
+            properties:
+              wellheadId:
+                type: integer
+                minimum: 1
+                maximum: 2147483647
+              revision:
+                type: integer
+                minimum: 0
+                maximum: 2147483646
+              modelVersion:
+                type: string
+              parameterFingerprint:
+                type: string
+              chokePositionPercent:
+                type: number
+                minimum: 0
+                maximum: 100
+              masterValveOpen:
+                type: boolean
+              wingValveOpen:
+                type: boolean
+              pumpOn:
+                type: boolean
+              emergencyShutdown:
+                type: boolean
+              swabValveOpen:
+                type: boolean
+              appliedCommandId:
+                type:
+                - string
+                - 'null'
+                format: uuid
+              appliedAt:
+                type: string
+                format: date-time
+          - type: 'null'
+        running:
+          $ref: '#/components/schemas/RunningControls'
+        pendingCommandId:
+          type:
+          - string
+          - 'null'
+          format: uuid
+    ControlCommandResponse:
+      type: object
+      required:
+      - data
+      - msg
+      - status
+      properties:
+        data:
+          $ref: '#/components/schemas/ControlCommand'
+        msg:
+          type: string
+        status:
+          type: integer
+    ParameterChangeResponse:
+      type: object
+      required:
+      - data
+      - msg
+      - status
+      properties:
+        data:
+          $ref: '#/components/schemas/ParameterChange'
+        msg:
+          type: string
+        status:
+          type: integer
+    ControlStateResponse:
+      type: object
+      required:
+      - data
+      - msg
+      - status
+      properties:
+        data:
+          $ref: '#/components/schemas/ControlState'
+        msg:
+          type: string
+        status:
+          type: integer
     ForecastRequest:
       type: object
       additionalProperties: false

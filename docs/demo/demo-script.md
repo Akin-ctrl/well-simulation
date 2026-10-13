@@ -45,30 +45,36 @@ Show that the project is an industrial wellhead monitoring simulation evolving i
 6. Explain what is simulated:
 
    ```text
-   Readings are random values based on configured ranges. Pressure does not
-   cause flow to change. The two-minute and five-minute chart buckets and
-   alarm thresholds are chosen for a short demo, not a real plant.
+   All 18 signals come from a synthetic process model. Pressure, flow, and
+   temperature respond together; diagnostic equations estimate gas, sand,
+   corrosion, annulus pressure, and vibration. No field data calibrated these
+   equations. Two-minute and five-minute chart buckets and alarm thresholds
+   are chosen for a short demo.
    ```
 
-7. Explain the target what-if scenario:
+7. Use the authenticated API to run a private what-if scenario:
 
    ```text
-   Close choke on WH-001 from 80% to 50%.
+   POST /api/twin/scenarios
+   Choose an active well, a 300-second horizon, and a control schedule that
+   closes its choke to 50 percent at minute zero. Use the request shape in
+   docs/openapi/public-api.yaml. The response includes the saved run ID and
+   baseline values for comparison. The dashboard has no scenario form yet.
    ```
 
-8. Expected future behavior:
+8. Inspect the scenario response:
 
-   - flow rate decreases
-   - tubing pressure rises
-   - forecast confidence may decrease if operating state becomes unstable
-   - alarms may trigger if thresholds are crossed
+   - Compare flow and pressure with the baseline, which holds current controls.
+   - Read the heuristic confidence score and its reasons. It is not a measured probability.
+   - Inspect projected threshold crossings. These do not create live alarms.
+   - Confirm the running well's controls are unchanged by the scenario.
 
 9. Inspect the data layer:
 
    - raw readings in TimescaleDB
    - alarm events
-   - future model state snapshots
-   - future forecast/scenario outputs
+   - model state snapshots and restart recovery events
+   - saved forecast and scenario runs and their points
 
 10. Inspect architecture decisions:
 
@@ -79,5 +85,7 @@ Show that the project is an industrial wellhead monitoring simulation evolving i
 ## Current Status
 
 The overview, analytics, per-wellhead detail pages, Alarm Center, live telemetry,
-and active alarm data are implemented. Stateful twin behavior, predictions, and
-what-if scenarios are still target capabilities, not current features.
+and active alarm data are implemented. The backend also implements stateful
+synthetic wells, snapshots, saved forecasts, and isolated scenarios. Live
+synthetic controls use the Milestone 8B draft and activation API. Forecast and scenario
+dashboard features remain deferred.

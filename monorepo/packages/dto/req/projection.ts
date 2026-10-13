@@ -13,7 +13,7 @@ export const forecastRequestSchema = z
     message: 'horizonSeconds must be divisible by stepSeconds',
   });
 
-const controlChangeSchema = z
+export const controlChangeSchema = z
   .object({
     chokePositionPercent: z.number().finite().min(0).max(100).optional(),
     masterValveOpen: z.boolean().optional(),

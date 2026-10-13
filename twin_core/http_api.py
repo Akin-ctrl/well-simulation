@@ -20,6 +20,7 @@ from twin_core.projection import (
     AlarmRuleConfigurationError,
     ControlChange,
     ScheduledControl,
+    validate_projection_request,
     validate_window,
 )
 from twin_core.runtime import (
@@ -29,8 +30,13 @@ from twin_core.runtime import (
     TwinRuntime,
 )
 
-WELLHEAD_PATH = re.compile(r"/wellheads/([1-9][0-9]{0,9})/(state|latest-telemetry)")
+WELLHEAD_PATH = re.compile(
+    r"/wellheads/([1-9][0-9]{0,9})/(state|latest-telemetry|controls)"
+)
 FORECAST_PATH = re.compile(r"/wellheads/([1-9][0-9]{0,9})/forecast")
+COMMAND_NOTIFY_PATH = re.compile(
+    r"/control-commands/[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}/notify"
+)
 MAX_REQUEST_BYTES = 4096
 DEFAULT_HORIZON_SECONDS = 1800
 DEFAULT_STEP_SECONDS = 60
@@ -205,6 +211,15 @@ class TwinRequestHandler(BaseHTTPRequestHandler):
             self._json(200, state.to_payload())
             return
 
+        if view == "controls":
+            if not self._authorized():
+                return
+            controls = self.runtime.control_payload(wellhead_id)
+            self._json(
+                200 if controls else 503, controls or {"error": "controls_unavailable"}
+            )
+            return
+
         try:
             snapshot = self.runtime.latest_telemetry(wellhead_id)
         except DatabaseUnavailableError:
@@ -224,8 +239,18 @@ class TwinRequestHandler(BaseHTTPRequestHandler):
             self._json(200, snapshot)
 
     def do_POST(self) -> None:
-        """Run a bounded private projection, never a live control command."""
+        """Run analysis or accept authenticated validation and queue hints."""
         parsed = urlsplit(self.path)
+        if (
+            not parsed.query
+            and not parsed.fragment
+            and (
+                COMMAND_NOTIFY_PATH.fullmatch(parsed.path) is not None
+                or parsed.path in ("/fleet/refresh", "/parameter-changes/validate")
+            )
+        ):
+            self._control_post(parsed.path)
+            return
         match = FORECAST_PATH.fullmatch(parsed.path)
         if (
             (match is None and parsed.path != "/scenarios")
@@ -234,16 +259,20 @@ class TwinRequestHandler(BaseHTTPRequestHandler):
         ):
             self._json(405, {"error": "method_not_allowed"}, allow="GET")
             return
-        expected = self.runtime.settings.internal_token
-        received = self.headers.get("X-Twin-Internal-Token", "")
-        if not expected or not secrets.compare_digest(received, expected):
-            self._json(403, {"error": "forbidden"})
+        if not self._authorized():
             return
         try:
             actor = int(self.headers.get("X-Twin-Actor-Id", ""))
             if not 1 <= actor <= 2_147_483_647:
                 raise ValueError("Invalid actor")
             request = _projection_input(parsed.path, self._request_object())
+            validate_projection_request(
+                request.kind,
+                request.name,
+                request.controls,
+                request.horizon_seconds,
+                request.step_seconds,
+            )
         except (ValueError, UnicodeDecodeError):
             self._json(400, {"error": "invalid_projection_request"})
             return
@@ -251,6 +280,41 @@ class TwinRequestHandler(BaseHTTPRequestHandler):
             self._json(404, {"error": "wellhead_not_found"})
             return
         self._run_projection(request, actor)
+
+    def _authorized(self) -> bool:
+        """Check the server-to-server secret without accepting a human token."""
+        expected = self.runtime.settings.internal_token
+        received = self.headers.get("X-Twin-Internal-Token", "")
+        if not expected or not secrets.compare_digest(received, expected):
+            self._json(403, {"error": "forbidden"})
+            return False
+        return True
+
+    def _control_post(self, path: str) -> None:
+        """Validate proposed parameters or wake workers; never apply an HTTP body."""
+        if not self._authorized():
+            return
+        try:
+            body = self._request_object()
+            if path == "/parameter-changes/validate":
+                self._json(200, self.runtime.validate_parameter(body))
+                return
+            if body:
+                raise ValueError("Hints must have an empty body")
+        except (ValueError, UnicodeDecodeError):
+            self._json(400, {"error": "invalid_control_request"})
+            return
+        except (DatabaseUnavailableError, ProjectionUnavailableError):
+            self._json(503, {"error": "parameter_validation_unavailable"})
+            return
+        if path == "/fleet/refresh":
+            self.runtime.request_fleet_refresh()
+        elif self.runtime.control_inbox is not None:
+            self.runtime.control_inbox.notify()
+        else:
+            self._json(503, {"error": "control_inbox_unavailable"})
+            return
+        self._json(202, {"status": "notification_accepted"})
 
     def _run_projection(self, request: ProjectionInput, actor: int) -> None:
         """Map service and data failures to stable, safe HTTP responses."""
