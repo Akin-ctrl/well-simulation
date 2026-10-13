@@ -2,7 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-05-31
-- Implementation: Not started
+- Implementation: Implemented for current-state scenarios
 
 ## Context
 
@@ -43,4 +43,12 @@ This creates a safe and production-grade boundary between experiments and the li
 - Scenario execution must never mutate active state.
 - Scenario metadata, inputs, and result points should be persisted.
 - The UI must distinguish live state, forecasts, and scenario outputs.
+
+## Implementation on 2026-10-13
+
+Milestone 8 copies the current state, controls, and parameters under one registry
+lock. It applies the requested controls only to a private model run. An unchanged
+private baseline runs beside it, and both sets of points are saved in one
+transaction. The live registry never receives the scenario controls. Starting
+from a historical snapshot remains deferred under ADR 0027.
 

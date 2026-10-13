@@ -5,6 +5,14 @@ import { ApiError } from '@well-simulation/dto/error';
 import { removeUndefined } from '@well-simulation/utils/misc';
 import { SERVER_BASE_URL } from '@well-simulation/utils/configs';
 
+/**
+ * The typed client for the dashboard API.
+ *
+ * Wraps Hono's RPC client so every call goes through one place that unwraps the
+ * response envelope and turns a failure into an ApiError carrying the status.
+ * Routes depend on that status: the dashboard layout signs a user out on a 401
+ * and shows an error on anything else.
+ */
 const client = hc<AppType>(SERVER_BASE_URL, {
   fetch: (input: RequestInfo | URL, init?: RequestInit) => {
     return fetch(input, { ...init, credentials: 'include' });
@@ -73,15 +81,6 @@ async function fetchFn<T>(
       throw new ApiError(
         jsonParseError,
         'Malformed JSON response from API',
-        /**
-         * The typed client for the dashboard API.
-         *
-         * Wraps Hono's RPC client so every call goes through one place that unwraps the
-         * response envelope and turns a failure into an ApiError carrying the status.
-         * Routes depend on that status: the dashboard layout signs a user out on a 401
-         * and shows an error on anything else.
-         */
-
         response.status
       );
     }

@@ -56,9 +56,12 @@ values. After the complete register update it writes the model tick's UTC epoch
 second (1900 and 1901) and the model version (1902 to 1904, major, minor, and
 patch) in one write. Ingestion reads all five before and after a poll. A
 missing, unchanged, too-old, or changed-mid-poll heartbeat or version prevents
-an insert. `timestamp_utc` is the model tick, while `inserted_at` is the
-database arrival time. Both are UTC. `model_version` records which model
-calculated the reading.
+an insert. When an update lands mid-poll, ingestion polls the new tick at once
+instead of waiting a whole interval. The complete read must finish before
+half the polling interval has elapsed, even if its start and end status match.
+A late batch is discarded and the next scheduled poll proceeds normally.
+`timestamp_utc` is the model tick, while `inserted_at` is the database arrival
+time. Both are UTC. `model_version` records which model calculated the reading.
 
 ## Alarms
 

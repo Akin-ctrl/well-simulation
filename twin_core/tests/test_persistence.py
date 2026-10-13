@@ -405,6 +405,66 @@ def test_writer_replaces_pending_snapshot_without_waiting() -> None:
     assert second not in database.written
 
 
+def test_shutdown_saves_final_snapshot_while_background_write_is_blocked(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A planned stop must not queue its final state behind a slow write."""
+
+    class BlockedDatabase(TwinPersistence):
+        def __init__(self) -> None:
+            self.started = threading.Event()
+            self.release = threading.Event()
+            self.written: list[SnapshotCopy] = []
+
+        def write_snapshots(self, copy: SnapshotCopy) -> int:
+            if copy == first:
+                self.started.set()
+                assert self.release.wait(timeout=2)
+            self.written.append(copy)
+            return 0
+
+        def write_event(self, _event: RecoveryEvent) -> None:
+            return
+
+    monkeypatch.setattr("twin_core.persistence.SHUTDOWN_WAIT_SECONDS", 0.05)
+    first = cast(SnapshotCopy, (("first", "a"),))
+    final = cast(SnapshotCopy, (("final", "b"),))
+    database = BlockedDatabase()
+    writer = PersistenceWriter(database, TwinMetrics())
+    writer.start()
+    writer.submit_snapshot(first)
+    assert database.started.wait(timeout=1)
+    try:
+        assert writer.stop(final)
+        assert final in database.written
+        assert first not in database.written
+    finally:
+        database.release.set()
+        writer._thread.join(timeout=2)
+    assert not writer._thread.is_alive()
+
+
+def test_shutdown_reports_failed_final_snapshot() -> None:
+    """A database outage must make final persistence fail visibly."""
+
+    class UnavailableDatabase(TwinPersistence):
+        def __init__(self) -> None:
+            pass
+
+        def write_snapshots(self, _copy: SnapshotCopy) -> int:
+            raise DatabaseUnavailableError("offline")
+
+        def write_event(self, _event: RecoveryEvent) -> None:
+            return
+
+    metrics = TwinMetrics()
+    writer = PersistenceWriter(UnavailableDatabase(), metrics)
+    writer.start()
+
+    assert not writer.stop(cast(SnapshotCopy, (("final", "b"),)))
+    assert metrics.snapshot_write_failures._value.get() == 1
+
+
 def test_writer_counts_event_overflow_and_write_failure() -> None:
     class FailedDatabase(TwinPersistence):
         def __init__(self) -> None:

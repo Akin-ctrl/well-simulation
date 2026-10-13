@@ -6,9 +6,10 @@ import {
   RadioTowerIcon,
 } from 'lucide-react';
 import { Link, useLoaderData } from 'react-router';
-import type {
-  DashboardOverviewResponse,
-  LatestReading,
+import {
+  booleanStateLabel,
+  type DashboardOverviewResponse,
+  type LatestReading,
 } from '@well-simulation/dto/res/dashboard';
 import { client, fetchFn } from '../utils/api';
 import { routes } from '../config/routes';
@@ -253,7 +254,11 @@ function Overview() {
                         </div>
                         <div className='text-right'>
                           <p className='text-sm font-semibold'>
-                            {formatNumber(reading.rawValue)} {reading.canonicalUnit}
+                            {booleanStateLabel(
+                              reading.parameterCode,
+                              reading.rawValue
+                            ) ??
+                              `${formatNumber(reading.rawValue)} ${reading.canonicalUnit ?? ''}`}
                           </p>
                           <p className='text-xs capitalize text-fgColor-muted'>
                             <span

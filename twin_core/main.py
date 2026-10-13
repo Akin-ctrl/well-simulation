@@ -69,12 +69,12 @@ def main() -> int:
     try:
         runtime.run()
     finally:
-        writer.stop(registry.persistence_copy())
+        final_snapshot_saved = writer.stop(registry.persistence_copy())
         server.shutdown()
         server.server_close()
         http_thread.join(timeout=5)
         logger.info("Twin-core service stopped")
-    return 0
+    return 0 if final_snapshot_saved else 1
 
 
 if __name__ == "__main__":

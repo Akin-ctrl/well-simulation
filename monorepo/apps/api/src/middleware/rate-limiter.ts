@@ -21,8 +21,21 @@ type Bucket = { count: number; resetAt: number };
 
 const WINDOW_MS = 60_000;
 const DEFAULT_LIMIT = 100;
-/** Credential endpoints get a tighter budget than dashboard reads. */
+const PROJECTION_LIMIT = 10;
+/**
+ * Routes that check a password or write an audit row get a tighter budget.
+ *
+ * Login and register are where a password can be guessed. Logout revokes all
+ * of the user's existing tokens (ADR 0037) and writes an audit row. This
+ * budget also limits how fast those audit rows can be written (ADR 0034).
+ *
+ * `/auth/me` is not listed. It was previously caught by an `/auth/` prefix
+ * match, so the dashboard's session check spent the same budget as login
+ * attempts and one open tab could lock its user out. It checks no password and
+ * writes nothing.
+ */
 const AUTH_LIMIT = 10;
+const CREDENTIAL_PATHS = new Set(['/auth/login', '/auth/register', '/auth/logout']);
 const SWEEP_INTERVAL_MS = 60_000;
 
 const buckets = new Map<string, Bucket>();
@@ -106,8 +119,18 @@ export function customRateLimit(props?: {
 
   return async (c, next) => {
     const pathname = new URL(c.req.url).pathname;
-    const effectiveLimit = pathname.startsWith('/auth/') ? AUTH_LIMIT : limit;
-    const key = `${clientKey(c)}:${pathname.startsWith('/auth/') ? 'auth' : 'api'}`;
+    const isCredential = CREDENTIAL_PATHS.has(pathname);
+    const isProjection =
+      c.req.method === 'POST' &&
+      (pathname === '/twin/scenarios' ||
+        /^\/twin\/wellheads\/[1-9][0-9]*\/forecast$/.test(pathname));
+    const effectiveLimit = isCredential
+      ? AUTH_LIMIT
+      : isProjection
+        ? PROJECTION_LIMIT
+        : limit;
+    const category = isCredential ? 'auth' : isProjection ? 'projection' : 'api';
+    const key = `${clientKey(c)}:${category}`;
     const now = Date.now();
 
     let bucket = buckets.get(key);

@@ -46,9 +46,10 @@ Ingestion rejects a failed or mixed-time Modbus poll before inserting a batch.
 The API can still show partial or stale latest views during source failure,
 metadata changes, or while older readings expire.
 
-## Target Lightweight Digital Twin
+## Lightweight Digital Twin
 
-The target architecture adds a twin core between asset metadata and telemetry output:
+The running architecture puts twin-core between asset metadata and telemetry
+output. It also serves bounded forecasts and isolated scenarios on request:
 
 ```text
 Asset metadata
@@ -56,20 +57,24 @@ Asset metadata
   -> Stateful wellhead process model
   -> Simulated telemetry
   -> Historian
-  -> Prediction and what-if services
-  -> Operational dashboard and API
+  -> Twin-core forecast and scenario runner
+  -> Authenticated API
+  -> Operational dashboard
 ```
 
-## Target Runtime Components
+## Runtime Components
 
 - **Twin core**: maintains current process state for each wellhead.
 - **Process model**: updates pressure, flow, temperature, valve state, pump state, and degradation over time.
 - **Telemetry adapter**: converts supported model fields into Modbus-readable register values.
 - **Historian**: stores source-labelled readings, alarm events, model state
-  snapshots, and recovery events. Predictions remain planned.
-- **Control API**: accepts bounded operational inputs.
-- **Scenario API**: runs what-if simulations without mutating live state.
-- **Dashboard**: shows live state, historical trends, alarms, predictions, and scenario outputs.
+  snapshots, recovery events, and saved forecast and scenario runs.
+- **Forecast and scenario API**: copies current model state, advances the same
+  one-second model privately, and saves complete runs. It never applies a live
+  control command. See [Milestone 8](../design/twin-core-milestone-8.md).
+- **Dashboard**: shows live state, historical trends, and alarms. Forecast and
+  scenario views belong to Milestone 9.
+- **Live control API**: planned for Milestone 8B.
 
 ## Digital Twin Evolution Path
 

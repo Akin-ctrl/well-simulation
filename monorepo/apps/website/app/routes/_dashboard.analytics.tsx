@@ -1,53 +1,18 @@
-import {
-  Cell,
-  Line,
-  LineChart,
-  Pie,
-  PieChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from 'recharts';
+import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts';
 import { useLoaderData } from 'react-router';
 import type {
   AlarmCount,
   DashboardAnalyticsResponse,
-  TrendPoint,
 } from '@well-simulation/dto/res/dashboard';
 import { Title } from '../domains/dashboard/components/misc';
+import { TrendChart } from '../domains/dashboard/components/trend-chart';
 import { client, fetchFn } from '../utils/api';
 import { REFRESH_INTERVALS, useAutoRefresh } from '../hooks/use-auto-refresh';
-
-type MultiMetricPoint = {
-  date: string;
-  [metricCode: string]: string | number;
-};
 
 type AlarmSegment = {
   color: string;
   name: string;
   amount: number;
-};
-
-const METRIC_LABELS: Record<string, string> = {
-  tubing_pressure: 'Tubing Pressure',
-  casing_pressure: 'Casing Pressure',
-  annulus_pressure: 'Annulus Pressure',
-  wellhead_temperature: 'Temperature',
-  flow_rate: 'Flow Rate',
-  water_cut: 'Water Cut',
-  gas_oil_ratio: 'Gas/Oil Ratio',
-};
-
-const METRIC_COLORS: Record<string, string> = {
-  tubing_pressure: '#553AFE',
-  casing_pressure: '#01C0F6',
-  annulus_pressure: '#10B981',
-  wellhead_temperature: '#F97316',
-  flow_rate: '#553AFE',
-  water_cut: '#01C0F6',
-  gas_oil_ratio: '#10B981',
 };
 
 const SEVERITY_COLORS: Record<string, string> = {
@@ -65,18 +30,6 @@ export async function clientLoader() {
   return response.data;
 }
 
-function formatDate(value: string | Date | null | undefined) {
-  if (!value) {
-    return 'n/a';
-  }
-
-  return new Intl.DateTimeFormat('en', {
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-  }).format(new Date(value));
-}
-
 function formatNumber(value: number | null | undefined) {
   if (value === null || value === undefined) {
     return '—';
@@ -85,24 +38,6 @@ function formatNumber(value: number | null | undefined) {
   return new Intl.NumberFormat('en', {
     maximumFractionDigits: 1,
   }).format(value);
-}
-
-function multiSeries(points: TrendPoint[], metricCodes: string[]): MultiMetricPoint[] {
-  const buckets = new Map<string, MultiMetricPoint>();
-
-  for (const point of [...points].reverse()) {
-    const metricCode = point.parameterCode;
-    if (!metricCode || !metricCodes.includes(metricCode)) {
-      continue;
-    }
-
-    const date = formatDate(point.bucketTime);
-    const bucket = buckets.get(date) ?? { date };
-    bucket[metricCode] = point.avgValue ?? 0;
-    buckets.set(date, bucket);
-  }
-
-  return [...buckets.values()];
 }
 
 function alarmSegments(counts: AlarmCount[]): AlarmSegment[] {
@@ -132,73 +67,9 @@ function totalAlarms(segments: AlarmSegment[]) {
   return segments.reduce((total, segment) => total + segment.amount, 0);
 }
 
-function EmptyChart({ message }: { message: string }) {
-  return (
-    <div className='flex h-64 items-center justify-center text-sm text-fgColor-muted'>
-      {message}
-    </div>
-  );
-}
-
-function MultiMetricChart({
-  data,
-  metricCodes,
-}: {
-  data: MultiMetricPoint[];
-  metricCodes: string[];
-}) {
-  if (!data.length) {
-    return <EmptyChart message='No aggregate metric data available yet.' />;
-  }
-
-  return (
-    <ResponsiveContainer width='100%' height={260}>
-      <LineChart data={data}>
-        <XAxis dataKey='date' stroke='#636c76' tickLine={false} axisLine={false} />
-        <YAxis
-          stroke='#636c76'
-          axisLine={false}
-          tickLine={false}
-          tickFormatter={(value: number) => formatNumber(value)}
-        />
-        <Tooltip
-          formatter={(value: number, name: string) => [
-            formatNumber(value),
-            METRIC_LABELS[name] ?? name,
-          ]}
-        />
-        {metricCodes.map((metricCode) => (
-          <Line
-            key={metricCode}
-            type='monotone'
-            dataKey={metricCode}
-            stroke={METRIC_COLORS[metricCode] ?? '#553AFE'}
-            strokeWidth={2}
-            dot={false}
-            connectNulls
-          />
-        ))}
-      </LineChart>
-    </ResponsiveContainer>
-  );
-}
-
 function Analytics() {
   const data = useLoaderData() as DashboardAnalyticsResponse;
   useAutoRefresh(REFRESH_INTERVALS.analytics);
-  const pressureData = multiSeries(data.pressureTrend, [
-    'tubing_pressure',
-    'casing_pressure',
-    'annulus_pressure',
-  ]);
-  const temperatureFlowData = multiSeries(data.temperatureFlowTrend, [
-    'wellhead_temperature',
-    'flow_rate',
-  ]);
-  const waterCutGorData = multiSeries(data.waterCutGorTrend, [
-    'water_cut',
-    'gas_oil_ratio',
-  ]);
   const alarmData = alarmSegments(data.alarmCounts);
   const alarmTotal = totalAlarms(alarmData);
 
@@ -219,9 +90,10 @@ function Analytics() {
               Tubing, casing, and annulus pressure averages across wells.
             </p>
           </div>
-          <MultiMetricChart
-            data={pressureData}
+          <TrendChart
+            points={data.pressureTrend}
             metricCodes={['tubing_pressure', 'casing_pressure', 'annulus_pressure']}
+            emptyMessage='No aggregate metric data available yet.'
           />
         </div>
 
@@ -229,12 +101,13 @@ function Analytics() {
           <div className='mb-4'>
             <h2 className='font-semibold'>Temperature / Flow</h2>
             <p className='text-sm text-fgColor-muted'>
-              Two-minute averages; values use their native units.
+              Two-minute averages across wells. Each unit has its own axis.
             </p>
           </div>
-          <MultiMetricChart
-            data={temperatureFlowData}
+          <TrendChart
+            points={data.temperatureFlowTrend}
             metricCodes={['wellhead_temperature', 'flow_rate']}
+            emptyMessage='No aggregate metric data available yet.'
           />
         </div>
 
@@ -242,7 +115,7 @@ function Analytics() {
           <div className='mb-4'>
             <h2 className='font-semibold'>Alarm Severity</h2>
             <p className='text-sm text-fgColor-muted'>
-              Five-minute alarm counts by severity.
+              Alarms triggered in the last 24 hours, by severity.
             </p>
           </div>
           <div className='relative h-56'>
@@ -284,12 +157,13 @@ function Analytics() {
           <div className='mb-4'>
             <h2 className='font-semibold'>Water Cut / Gas-Oil Ratio</h2>
             <p className='text-sm text-fgColor-muted'>
-              Two-minute averages; values use their native units.
+              Two-minute averages across wells. Each unit has its own axis.
             </p>
           </div>
-          <MultiMetricChart
-            data={waterCutGorData}
+          <TrendChart
+            points={data.waterCutGorTrend}
             metricCodes={['water_cut', 'gas_oil_ratio']}
+            emptyMessage='No aggregate metric data available yet.'
           />
         </div>
       </div>

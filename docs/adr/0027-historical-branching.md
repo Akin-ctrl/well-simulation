@@ -1,6 +1,6 @@
 # ADR 0027: Stage Historical Scenario Branching From Model Snapshots
 
-- Status: Accepted
+- Status: Accepted, amended
 - Date: 2026-05-31
 - Implementation: Not started
 
@@ -57,4 +57,12 @@ The UI and API must clearly show whether a scenario starts from current state or
 - Snapshot cadence and retention affect future branching quality.
 - Historical records must never be mutated by scenario execution.
 - Incident-review workflows can be added after current-state scenarios are stable.
+
+## Amendment on 2026-10-12
+
+The planned `model_state_snapshot` table was built in Milestone 7 as
+`twin_state_snapshot`. Version 2 historical branching should read that table.
+It must not create a second snapshot table for the same model state. Version 1
+still starts from current live state, and historical branching remains future
+work.
 

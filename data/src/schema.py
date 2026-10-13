@@ -364,7 +364,7 @@ def provision_twin_reader(
         cursor.execute(
             sql.SQL(
                 "GRANT SELECT ON TABLE wellhead, deviceParameterMapping, "
-                "parameterType, parameterReading TO {}"
+                "parameterType, parameterReading, alarmRule TO {}"
             ).format(sql.Identifier(user))
         )
         cursor.execute(
@@ -375,7 +375,8 @@ def provision_twin_reader(
         )
         cursor.execute(
             sql.SQL(
-                "GRANT INSERT ON TABLE twin_state_snapshot, twin_recovery_event TO {}"
+                "GRANT INSERT ON TABLE twin_state_snapshot, twin_recovery_event, "
+                "prediction_run, prediction_point, scenario_run, scenario_point TO {}"
             ).format(sql.Identifier(user))
         )
         cursor.execute(

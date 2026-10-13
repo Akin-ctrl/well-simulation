@@ -5,9 +5,11 @@ from __future__ import annotations
 import logging
 import threading
 import time
+import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from typing import Literal
 
 from twin_core.config import ModelDefaults, ServiceSettings
 from twin_core.database import (
@@ -24,6 +26,11 @@ from twin_core.persistence import (
     StoredSnapshot,
     TwinPersistence,
 )
+from twin_core.projection import (
+    ProjectionResult,
+    ScheduledControl,
+    project,
+)
 from twin_core.recovery import (
     decode_process,
     parameter_fingerprint,
@@ -38,6 +45,7 @@ TICK_INTERVAL_SECONDS = MODEL_STEP_SECONDS
 MAX_READY_TICK_AGE_SECONDS = 3.0
 RETRY_FLEET_SECONDS = 5.0
 MAX_CONCURRENT_TELEMETRY_READS = 8
+MAX_CONCURRENT_PROJECTIONS = 2
 # Disagreement between tick time and the wall clock that counts as a jump
 # rather than ordinary jitter.
 CLOCK_DRIFT_TOLERANCE_SECONDS = 2.0
@@ -97,6 +105,14 @@ class ReadCapacityError(RuntimeError):
     """The bounded telemetry read pool has no free slot."""
 
 
+class ProjectionUnavailableError(RuntimeError):
+    """A current, running model or persistence boundary is unavailable."""
+
+
+class ProjectionBusyError(RuntimeError):
+    """Both bounded projection slots are in use."""
+
+
 class TwinRuntime:
     """Own the operational lifecycle of the reduced-order twin core."""
 
@@ -131,6 +147,7 @@ class TwinRuntime:
         self._last_snapshot_submission_at: datetime | None = None
         self._stop = threading.Event()
         self._read_slots = threading.BoundedSemaphore(MAX_CONCURRENT_TELEMETRY_READS)
+        self._projection_slots = threading.BoundedSemaphore(MAX_CONCURRENT_PROJECTIONS)
         self._lock = threading.Lock()
         self._fleet_ok = False
         self._last_tick_monotonic: float | None = None
@@ -286,6 +303,65 @@ class TwinRuntime:
     def state(self, wellhead_id: int) -> WellheadState | None:
         """Read current lifecycle state for one active wellhead."""
         return self.registry.get(wellhead_id)
+
+    def create_projection(
+        self,
+        kind: Literal["forecast", "scenario"],
+        wellhead_id: int,
+        requested_by: int,
+        horizon_seconds: int,
+        step_seconds: int,
+        *,
+        name: str | None = None,
+        controls: tuple[ScheduledControl, ...] = (),
+    ) -> ProjectionResult:
+        """Run one bounded private model copy and persist it atomically."""
+        if self.persistence is None:
+            raise ProjectionUnavailableError("Projection persistence is unavailable")
+        if not self._projection_slots.acquire(blocking=False):
+            self.metrics.projection_runs.labels(kind=kind, outcome="busy").inc()
+            raise ProjectionBusyError("Projection capacity is full")
+        started = self._monotonic()
+        try:
+            base = self.registry.projection_base(wellhead_id)
+            now = self._wall()
+            with self._lock:
+                holding = self._holding
+            if (
+                base is None
+                or holding
+                or abs((now - base.state.simulated_at).total_seconds())
+                > MAX_READY_TICK_AGE_SECONDS
+            ):
+                raise ProjectionUnavailableError("Running model state is not current")
+            rules = self.persistence.load_alarm_rules()
+            result = project(
+                kind,
+                str(uuid.uuid4()),
+                base,
+                now,
+                horizon_seconds,
+                step_seconds,
+                rules,
+                name=name,
+                controls=controls,
+            )
+            self.persistence.write_projection(result, requested_by)
+            self.metrics.projection_runs.labels(kind=kind, outcome="complete").inc()
+            return result
+        except (
+            DatabaseUnavailableError,
+            ProjectionUnavailableError,
+            ValueError,
+            ArithmeticError,
+        ):
+            self.metrics.projection_runs.labels(kind=kind, outcome="failed").inc()
+            raise
+        finally:
+            self.metrics.projection_duration.labels(kind=kind).observe(
+                max(0.0, self._monotonic() - started)
+            )
+            self._projection_slots.release()
 
     def model_snapshot(self) -> dict[str, object] | None:
         """Return a complete running fleet from one registry read."""

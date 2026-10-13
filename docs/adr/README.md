@@ -37,8 +37,8 @@ previously written down.
 | [0010](0010-model-runtime.md) | Run The Twin Core As A Separate Python Service | Implemented |
 | [0011](0011-twin-core-communication.md) | Use Internal HTTP Plus Durable Database Persistence | Partial |
 | [0012](0012-state-storage.md) | Keep Active Twin State In Memory With Durable Snapshots | Implemented |
-| [0013](0013-prediction-strategy.md) | Start With On-Demand Forecasts And Evolve To Hybrid Forecasting | Not started |
-| [0014](0014-scenario-execution.md) | Run What-If Scenarios Against Isolated Cloned State | Not started |
+| [0013](0013-prediction-strategy.md) | Start With On-Demand Forecasts And Evolve To Hybrid Forecasting | On-demand implemented |
+| [0014](0014-scenario-execution.md) | Run What-If Scenarios Against Isolated Cloned State | Implemented |
 | [0015](0015-control-and-safety.md) | Restrict Live Control To Actuator-Like Variables | Not started |
 | [0016](0016-api-contract.md) | Use REST APIs Documented With OpenAPI | Implemented |
 | [0017](0017-observability-baseline.md) | Use Structured Logs, Health Checks, And Metrics As The Observability Baseline | Implemented |
@@ -49,7 +49,7 @@ previously written down.
 | [0022](0022-recovery-semantics.md) | Restore From Snapshots And Mark Recovery Gaps | Implemented |
 | [0023](0023-default-parameter-set.md) | Use Documented Synthetic Engineering Defaults | Implemented |
 | [0024](0024-twin-persistence-schema.md) | Use Relational Twin Metadata With Time-Series Run Outputs | Partial |
-| [0025](0025-forecast-horizon-confidence.md) | Use Short Operational Forecasts With Heuristic Confidence | Not started |
+| [0025](0025-forecast-horizon-confidence.md) | Use Short Operational Forecasts With Heuristic Confidence | Implemented |
 | [0026](0026-retention-and-compression.md) | Use Tiered Retention And TimescaleDB Compression | Implemented |
 | [0027](0027-historical-branching.md) | Stage Historical Scenario Branching From Model Snapshots | Not started |
 | [0028](0028-api-specification-workflow.md) | Use Per-Service OpenAPI Specs Committed To Documentation | Implemented |
@@ -61,8 +61,9 @@ previously written down.
 | [0034](0034-audit-trail-scope.md) | Record An Audit Trail For Actors, Not For Auditors | Implemented |
 | [0035](0035-metadata-reload.md) | How Metadata Changes Reach A Running Service | Implemented |
 | [0036](0036-model-telemetry-through-modbus.md) | Send Model Telemetry Through The Existing Modbus Path | Implemented |
+| [0037](0037-session-revocation.md) | Logout Ends Every Session Of The User, On The Server | Implemented |
 
-Of 36 decisions: 20 implemented, 9 not started, 7 partial.
+Of 37 decisions: 21 implemented, 9 not started, 7 partial.
 
 The twin-core process model now feeds the Modbus gateway and historian.
 Durable model state snapshots are implemented. Forecasts and scenarios remain planned.

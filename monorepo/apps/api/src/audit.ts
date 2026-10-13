@@ -19,7 +19,9 @@ export type AuditAction =
   | 'user.create'
   | 'user.disable'
   | 'user.role_change'
-  | 'config.change';
+  | 'config.change'
+  | 'twin.forecast'
+  | 'twin.scenario';
 
 export type AuditOutcome = 'success' | 'failure';
 

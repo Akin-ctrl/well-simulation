@@ -2,7 +2,13 @@
 
 from __future__ import annotations
 
-from prometheus_client import CollectorRegistry, Counter, Gauge, generate_latest
+from prometheus_client import (
+    CollectorRegistry,
+    Counter,
+    Gauge,
+    Histogram,
+    generate_latest,
+)
 
 
 class TwinMetrics:
@@ -97,6 +103,18 @@ class TwinMetrics:
         self.rejected_reads = Counter(
             "well_sim_twin_rejected_reads_total",
             "Telemetry reads rejected because all database read slots were busy",
+            registry=self.registry,
+        )
+        self.projection_runs = Counter(
+            "well_sim_twin_projection_runs_total",
+            "Requested forecasts and scenarios by outcome",
+            ["kind", "outcome"],
+            registry=self.registry,
+        )
+        self.projection_duration = Histogram(
+            "well_sim_twin_projection_duration_seconds",
+            "Time spent computing and saving a forecast or scenario",
+            ["kind"],
             registry=self.registry,
         )
         self.ready = Gauge(

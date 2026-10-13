@@ -5,14 +5,15 @@ import {
   MapPinIcon,
   RadioTowerIcon,
 } from 'lucide-react';
-import { Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { Link, useLoaderData } from 'react-router';
-import type {
-  LatestReading,
-  TrendPoint,
-  WellheadDetailResponse,
+import {
+  booleanStateLabel,
+  type LatestReading,
+  type TrendPoint,
+  type WellheadDetailResponse,
 } from '@well-simulation/dto/res/dashboard';
 import { Title } from '../domains/dashboard/components/misc';
+import { TrendChart } from '../domains/dashboard/components/trend-chart';
 import { routes } from '../config/routes';
 import { client, fetchFn } from '../utils/api';
 import { REFRESH_INTERVALS, useAutoRefresh } from '../hooks/use-auto-refresh';
@@ -21,31 +22,6 @@ type LoaderArgs = {
   params: {
     wellheadId?: string;
   };
-};
-
-type MultiMetricPoint = {
-  date: string;
-  [metricCode: string]: string | number;
-};
-
-const METRIC_LABELS: Record<string, string> = {
-  tubing_pressure: 'Tubing Pressure',
-  casing_pressure: 'Casing Pressure',
-  annulus_pressure: 'Annulus Pressure',
-  wellhead_temperature: 'Temperature',
-  flow_rate: 'Flow Rate',
-  water_cut: 'Water Cut',
-  gas_oil_ratio: 'Gas/Oil Ratio',
-};
-
-const METRIC_COLORS: Record<string, string> = {
-  tubing_pressure: '#553AFE',
-  casing_pressure: '#01C0F6',
-  annulus_pressure: '#10B981',
-  wellhead_temperature: '#F97316',
-  flow_rate: '#553AFE',
-  water_cut: '#01C0F6',
-  gas_oil_ratio: '#10B981',
 };
 
 export async function clientLoader({ params }: LoaderArgs) {
@@ -120,33 +96,15 @@ function severityClass(severity: string | null | undefined) {
   return 'text-fgColor-muted';
 }
 
-function multiSeries(points: TrendPoint[], metricCodes: string[]): MultiMetricPoint[] {
-  const buckets = new Map<string, MultiMetricPoint>();
-
-  for (const point of [...points].reverse()) {
-    const metricCode = point.parameterCode;
-    if (!metricCode || !metricCodes.includes(metricCode)) {
-      continue;
-    }
-
-    const date = formatDate(point.bucketTime);
-    const bucket = buckets.get(date) ?? { date };
-    bucket[metricCode] = point.avgValue ?? 0;
-    buckets.set(date, bucket);
-  }
-
-  return [...buckets.values()];
-}
-
 function TrendPanel({
   title,
   description,
-  data,
+  points,
   metricCodes,
 }: {
   title: string;
   description: string;
-  data: MultiMetricPoint[];
+  points: TrendPoint[];
   metricCodes: string[];
 }) {
   return (
@@ -156,40 +114,11 @@ function TrendPanel({
         <p className='text-sm text-fgColor-muted'>{description}</p>
       </div>
 
-      {data.length ? (
-        <ResponsiveContainer width='100%' height={260}>
-          <LineChart data={data}>
-            <XAxis dataKey='date' stroke='#636c76' tickLine={false} axisLine={false} />
-            <YAxis
-              stroke='#636c76'
-              axisLine={false}
-              tickLine={false}
-              tickFormatter={(value: number) => formatNumber(value)}
-            />
-            <Tooltip
-              formatter={(value: number, name: string) => [
-                formatNumber(value),
-                METRIC_LABELS[name] ?? name,
-              ]}
-            />
-            {metricCodes.map((metricCode) => (
-              <Line
-                key={metricCode}
-                type='monotone'
-                dataKey={metricCode}
-                stroke={METRIC_COLORS[metricCode] ?? '#553AFE'}
-                strokeWidth={2}
-                dot={false}
-                connectNulls
-              />
-            ))}
-          </LineChart>
-        </ResponsiveContainer>
-      ) : (
-        <div className='flex h-64 items-center justify-center text-sm text-fgColor-muted'>
-          No trend data available for this well yet.
-        </div>
-      )}
+      <TrendChart
+        points={points}
+        metricCodes={metricCodes}
+        emptyMessage='No trend data available for this well yet.'
+      />
     </section>
   );
 }
@@ -197,20 +126,6 @@ function TrendPanel({
 export default function WellheadDetail() {
   const data = useLoaderData() as WellheadDetailResponse;
   useAutoRefresh(REFRESH_INTERVALS.wellhead);
-  const pressureData = multiSeries(data.pressureTrend, [
-    'tubing_pressure',
-    'casing_pressure',
-    'annulus_pressure',
-  ]);
-  const productionData = multiSeries(data.temperatureFlowTrend, [
-    'wellhead_temperature',
-    'flow_rate',
-  ]);
-  const compositionData = multiSeries(data.waterCutGorTrend, [
-    'water_cut',
-    'gas_oil_ratio',
-  ]);
-
   return (
     <div className='space-y-5'>
       <div className='flex items-center justify-between gap-4'>
@@ -277,6 +192,13 @@ export default function WellheadDetail() {
           <div className='grid gap-3 md:grid-cols-2 xl:grid-cols-3'>
             {data.latestReadings.map((reading) => {
               const status = readingStatus(reading);
+              // On/off signals get a word, and no range or status badge: their
+              // stored range is 0 to 1, so the badge would call a tripped
+              // shutdown "normal".
+              const stateLabel = booleanStateLabel(
+                reading.parameterCode,
+                reading.rawValue
+              );
               return (
                 <div
                   key={reading.parameterCode ?? reading.parameterTypeId}
@@ -287,17 +209,22 @@ export default function WellheadDetail() {
                       <p className='text-sm font-medium'>
                         {reading.parameterDisplayName ?? reading.parameterCode}
                       </p>
-                      <p className='text-xs text-fgColor-muted'>
-                        Normal: {formatNumber(reading.normalMin)}–
-                        {formatNumber(reading.normalMax)} {reading.canonicalUnit}
-                      </p>
+                      {!stateLabel && (
+                        <p className='text-xs text-fgColor-muted'>
+                          Normal: {formatNumber(reading.normalMin)}–
+                          {formatNumber(reading.normalMax)} {reading.canonicalUnit}
+                        </p>
+                      )}
                     </div>
-                    <p className={`text-xs capitalize ${statusClass(status)}`}>
-                      {status}
-                    </p>
+                    {!stateLabel && (
+                      <p className={`text-xs capitalize ${statusClass(status)}`}>
+                        {status}
+                      </p>
+                    )}
                   </div>
                   <p className='mt-3 text-lg font-semibold'>
-                    {formatNumber(reading.rawValue)} {reading.canonicalUnit}
+                    {stateLabel ??
+                      `${formatNumber(reading.rawValue)} ${reading.canonicalUnit ?? ''}`}
                   </p>
                 </div>
               );
@@ -351,19 +278,19 @@ export default function WellheadDetail() {
         <TrendPanel
           title='Pressure Trends'
           description='Two-minute tubing, casing, and annulus pressure aggregates for this well.'
-          data={pressureData}
+          points={data.pressureTrend}
           metricCodes={['tubing_pressure', 'casing_pressure', 'annulus_pressure']}
         />
         <TrendPanel
           title='Temperature / Flow'
-          description='Two-minute temperature and production flow aggregates for this well.'
-          data={productionData}
+          description='Two-minute temperature and production flow aggregates for this well. Each unit has its own axis.'
+          points={data.temperatureFlowTrend}
           metricCodes={['wellhead_temperature', 'flow_rate']}
         />
         <TrendPanel
           title='Water Cut / Gas-Oil Ratio'
-          description='Two-minute fluid composition indicators for this well.'
-          data={compositionData}
+          description='Two-minute fluid composition indicators for this well. Each unit has its own axis.'
+          points={data.waterCutGorTrend}
           metricCodes={['water_cut', 'gas_oil_ratio']}
         />
       </div>

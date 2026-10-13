@@ -13,9 +13,16 @@ from urllib.request import Request, urlopen
 
 import pytest
 from twin_core.config import NoDatabaseOverrides, ServiceSettings, load_defaults
-from twin_core.database import HistorianReader, TelemetrySnapshot, make_snapshot
+from twin_core.database import (
+    DatabaseUnavailableError,
+    HistorianReader,
+    TelemetrySnapshot,
+    make_snapshot,
+)
 from twin_core.http_api import create_server
 from twin_core.metrics import TwinMetrics
+from twin_core.persistence import TwinPersistence
+from twin_core.projection import AlarmRule, ProjectionResult
 from twin_core.runtime import TwinRuntime
 from twin_core.state import ModelRegistry
 
@@ -136,3 +143,144 @@ def test_model_snapshot_rejects_unready_fleet(server: ThreadingHTTPServer) -> No
     status, body = _get(server, "/model-snapshot")
     assert status == 503
     assert body["error"] == "model_not_ready"
+
+
+class RecordingProjectionStore(TwinPersistence):
+    """Keep transport tests independent of PostgreSQL, including failures."""
+
+    def __init__(self) -> None:
+        """Record committed run requests without a database connection."""
+        self.saved: list[tuple[ProjectionResult, int]] = []
+        self.fail = False
+
+    def load_alarm_rules(self) -> tuple[AlarmRule, ...]:
+        return (AlarmRule(1, "flow_rate", "WARNING", ">", 0.0),)
+
+    def write_projection(self, result: ProjectionResult, requested_by: int) -> None:
+        if self.fail:
+            raise DatabaseUnavailableError("offline")
+        self.saved.append((result, requested_by))
+
+
+ProjectionServer = tuple[ThreadingHTTPServer, RecordingProjectionStore, TwinRuntime]
+
+
+@pytest.fixture
+def projection_server() -> Generator[ProjectionServer]:
+    """Serve authenticated run requests against the real model and a fake sink."""
+    settings = ServiceSettings(
+        bind_host="127.0.0.1",
+        port=0,
+        max_catchup_steps=5,
+        fleet_refresh_seconds=30,
+        telemetry_freshness_seconds=15,
+        database_host="unused",
+        database_port=5432,
+        database_name="unused",
+        database_user="unused",
+        database_password=os.getenv("TEST_DB_PASSWORD", "unused"),
+        environment_overrides={},
+        internal_token="a" * 32,
+    )
+    defaults = load_defaults()
+    registry = ModelRegistry(defaults, {}, NoDatabaseOverrides())
+    store = RecordingProjectionStore()
+    runtime = TwinRuntime(
+        settings, defaults, registry, FakeHistorian(), TwinMetrics(), persistence=store
+    )
+    # Startup recovery is not under test here. Populate one current running well.
+    registry.replace_wellheads([1])
+    assert registry.tick(datetime.now(timezone.utc)) == (1, 0)
+    http_server = create_server("127.0.0.1", 0, runtime)
+    thread = threading.Thread(target=http_server.serve_forever, daemon=True)
+    thread.start()
+    yield http_server, store, runtime
+    http_server.shutdown()
+    http_server.server_close()
+    thread.join(timeout=5)
+
+
+def _post(
+    server: ThreadingHTTPServer,
+    path: str,
+    body: dict[str, object],
+    *,
+    token: str | None = "a" * 32,
+) -> tuple[int, dict[str, object]]:
+    headers = {"Content-Type": "application/json", "X-Twin-Actor-Id": "42"}
+    if token is not None:
+        headers["X-Twin-Internal-Token"] = token
+    request = Request(
+        f"http://127.0.0.1:{server.server_port}{path}",
+        data=json.dumps(body).encode("utf-8"),
+        headers=headers,
+        method="POST",
+    )
+    try:
+        with urlopen(request, timeout=3) as response:  # noqa: S310
+            return response.status, json.load(response)
+    except HTTPError as error:
+        return error.code, json.load(error)
+
+
+def test_projection_route_authenticates_and_saves_forecast(
+    projection_server: ProjectionServer,
+) -> None:
+    server, store, runtime = projection_server
+    before = runtime.state(1)
+    assert _post(server, "/wellheads/1/forecast", {}, token=None)[0] == 403
+    assert not store.saved
+
+    status, body = _post(
+        server, "/wellheads/1/forecast", {"horizonSeconds": 300, "stepSeconds": 60}
+    )
+
+    assert status == 201
+    assert body["kind"] == "forecast"
+    assert isinstance(body["points"], list)
+    assert len(body["points"]) == 5
+    assert body["fieldCalibrated"] is False
+    assert store.saved[0][1] == 42
+    assert runtime.state(1) == before
+
+
+def test_scenario_route_rejects_outcomes_and_saves_baseline(
+    projection_server: ProjectionServer,
+) -> None:
+    server, store, _runtime = projection_server
+    body: dict[str, object] = {
+        "wellheadId": 1,
+        "name": "Close choke",
+        "horizonSeconds": 300,
+        "stepSeconds": 60,
+        "controls": [{"offsetMinutes": 0, "input": {"chokePositionPercent": 0}}],
+    }
+    assert (
+        _post(
+            server,
+            "/scenarios",
+            {**body, "controls": [{"offsetMinutes": 0, "input": {"flowRateBpd": 0}}]},
+        )[0]
+        == 400
+    )
+
+    status, response = _post(server, "/scenarios", body)
+    assert status == 201
+    assert response["kind"] == "scenario"
+    assert len(store.saved) == 1
+    points = response["points"]
+    assert isinstance(points, list)
+    last = points[-1]
+    assert last["values"]["flow_rate"] == 0.0
+    assert last["baselineValues"]["flow_rate"] > 0.0
+
+
+def test_projection_failure_returns_503_without_partial_fake_save(
+    projection_server: ProjectionServer,
+) -> None:
+    server, store, _runtime = projection_server
+    store.fail = True
+    status, body = _post(server, "/wellheads/1/forecast", {"horizonSeconds": 300})
+    assert status == 503
+    assert body["error"] == "projection_dependency_unavailable"
+    assert not store.saved

@@ -1,5 +1,5 @@
 import { Hono, type Context } from 'hono';
-import { db } from '@well-simulation/db/query';
+import { db, eq, sql } from '@well-simulation/db/query';
 import { users } from '@well-simulation/db/schemas/user';
 import { zValidator } from '@hono/zod-validator';
 import { loginSchema, registerSchema } from '@well-simulation/dto/req/auth';
@@ -20,9 +20,14 @@ const BCRYPT_ROUNDS = 11;
 type UserRecord = typeof users.$inferSelect;
 
 function publicUser(user: UserRecord) {
-  // Destructured purely to drop the hash from the response. The underscore
-  // marks it as deliberately unused; removing it would leak the password hash.
-  const { encryptedPassword: _encryptedPassword, ...safeUser } = user;
+  // Destructured purely to drop fields from the response. The underscores mark
+  // them as deliberately unused; removing them would leak the password hash and
+  // the internal session counter.
+  const {
+    encryptedPassword: _encryptedPassword,
+    sessionVersion: _sessionVersion,
+    ...safeUser
+  } = user;
   return safeUser;
 }
 
@@ -33,6 +38,8 @@ async function issueSession(c: Context, user: UserRecord) {
       sub: String(user.id),
       email: user.email,
       role: user.role ?? DEFAULT_ROLE,
+      // Checked on every request against users.session_version (ADR 0037).
+      sv: user.sessionVersion,
       exp: expiresAtSeconds,
     },
     config.jwtSecret,
@@ -170,6 +177,14 @@ export const authRouter = new Hono()
       // Read the session before the cookie is cleared, so the event carries an
       // actor rather than being anonymous.
       const userId = sessionUserId(c);
+
+      // Clearing the cookie only affects this browser. Moving the version on
+      // makes every token issued so far fail the check in authMiddleware, so a
+      // copied cookie stops working too (ADR 0037).
+      await db
+        .update(users)
+        .set({ sessionVersion: sql`${users.sessionVersion} + 1` })
+        .where(eq(users.id, userId));
 
       deleteCookie(c, AUTH_COOKIE_NAME, { path: '/' });
 

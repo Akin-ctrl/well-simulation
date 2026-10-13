@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import logging
+import math
 import threading
 from collections import deque
 from collections.abc import Mapping, Sequence
 from contextlib import closing
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
+from typing import Literal, cast
 
 import psycopg2
 import psycopg2.extensions
@@ -17,6 +19,12 @@ from psycopg2.extras import Json, execute_batch
 from twin_core.config import ParameterOverride, ServiceSettings
 from twin_core.database import DatabaseUnavailableError
 from twin_core.metrics import TwinMetrics
+from twin_core.projection import (
+    MODEL_SIGNALS,
+    AlarmRule,
+    AlarmRuleConfigurationError,
+    ProjectionResult,
+)
 from twin_core.state import WellheadState
 
 logger = logging.getLogger(__name__)
@@ -133,6 +141,151 @@ class TwinPersistence:
                     ParameterOverride(float(value), str(unit), str(source))
                 )
         return overrides
+
+    def load_alarm_rules(self) -> tuple[AlarmRule, ...]:
+        """Read active thresholds once for one whole projection run."""
+        try:
+            with closing(self._connect(read_only=True)) as conn, conn.cursor() as cur:
+                cur.execute(
+                    "SELECT ar.alarm_rule_id, pt.code, ar.severity_level, "
+                    "ar.operator, ar.threshold_value FROM alarmRule ar "
+                    "JOIN parameterType pt ON "
+                    "pt.parameter_type_id = ar.parameter_type_id "
+                    "WHERE ar.active = TRUE ORDER BY ar.alarm_rule_id"
+                )
+                rows = cur.fetchall()
+        except psycopg2.Error as exc:
+            raise DatabaseUnavailableError("Could not load active alarm rules") from exc
+        rules: list[AlarmRule] = []
+        for rule_id, code, severity, operator, threshold in rows:
+            if (
+                code not in MODEL_SIGNALS
+                or severity not in ("WARNING", "CRITICAL")
+                or operator not in (">", ">=", "<", "<=", "==")
+                or not isinstance(threshold, (float, int))
+                or not math.isfinite(threshold)
+            ):
+                raise AlarmRuleConfigurationError(
+                    "Active alarm rule is not projectable"
+                )
+            rules.append(
+                AlarmRule(
+                    int(rule_id),
+                    str(code),
+                    cast("Literal['WARNING', 'CRITICAL']", severity),
+                    cast("Literal['>', '>=', '<', '<=', '==']", operator),
+                    float(threshold),
+                )
+            )
+        return tuple(rules)
+
+    def write_projection(self, result: ProjectionResult, requested_by: int) -> None:
+        """Insert a completed run and every point in one transaction."""
+        base = result.base
+        common = (
+            result.run_id,
+            result.generated_at,
+            base.wellhead_id,
+            requested_by,
+            base.model_version,
+            base.parameter_fingerprint,
+            base.state.simulated_at,
+            result.horizon_seconds,
+            result.step_seconds,
+            Json(base.state.to_payload()),
+            Json(asdict(base.parameters)),
+            Json(asdict(base.controls)),
+        )
+        rules = Json([asdict(rule) for rule in result.alarm_rules])
+        reasons = Json(list(result.confidence_reasons))
+        try:
+            with closing(self._connect(read_only=False)) as conn, conn.cursor() as cur:
+                if result.kind == "forecast":
+                    cur.execute(
+                        "INSERT INTO prediction_run (run_id, created_at, wellhead_id, "
+                        "requested_by_user_id, model_version, parameter_fingerprint, "
+                        "base_simulated_at, horizon_seconds, step_seconds, base_state, "
+                        "parameter_values, control_values, alarm_rules, "
+                        "confidence_score, confidence_reasons) "
+                        "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, "
+                        "%s, %s, %s)",
+                        (*common, rules, result.confidence_score, reasons),
+                    )
+                    execute_batch(
+                        cur,
+                        "INSERT INTO prediction_point "
+                        "(run_id, forecast_at, elapsed_seconds, values_json, "
+                        "tubing_pressure_psi, flow_rate_bpd, "
+                        "wellhead_temperature_f, water_cut_percent, "
+                        "alarm_risk, triggered_rule_ids) "
+                        "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                        [
+                            (
+                                result.run_id,
+                                point.at,
+                                point.elapsed_seconds,
+                                Json(point.values),
+                                point.values["tubing_pressure"],
+                                point.values["flow_rate"],
+                                point.values["wellhead_temperature"],
+                                point.values["water_cut"],
+                                point.alarm_risk,
+                                Json(list(point.triggered_rule_ids)),
+                            )
+                            for point in result.points
+                        ],
+                    )
+                else:
+                    cur.execute(
+                        "INSERT INTO scenario_run (run_id, created_at, wellhead_id, "
+                        "requested_by_user_id, name, model_version, "
+                        "parameter_fingerprint, "
+                        "base_simulated_at, horizon_seconds, step_seconds, base_state, "
+                        "parameter_values, control_values, scheduled_controls, "
+                        "alarm_rules, "
+                        "confidence_score, confidence_reasons) "
+                        "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, "
+                        "%s, %s, %s, %s, %s)",
+                        (
+                            *common[:4],
+                            result.name,
+                            *common[4:],
+                            Json([asdict(step) for step in result.controls]),
+                            rules,
+                            result.confidence_score,
+                            reasons,
+                        ),
+                    )
+                    execute_batch(
+                        cur,
+                        "INSERT INTO scenario_point "
+                        "(run_id, forecast_at, elapsed_seconds, values_json, "
+                        "tubing_pressure_psi, flow_rate_bpd, "
+                        "wellhead_temperature_f, water_cut_percent, "
+                        "baseline_values_json, alarm_risk, baseline_alarm_risk, "
+                        "triggered_rule_ids) "
+                        "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                        [
+                            (
+                                result.run_id,
+                                point.at,
+                                point.elapsed_seconds,
+                                Json(point.values),
+                                point.values["tubing_pressure"],
+                                point.values["flow_rate"],
+                                point.values["wellhead_temperature"],
+                                point.values["water_cut"],
+                                Json(point.baseline_values),
+                                point.alarm_risk,
+                                point.baseline_alarm_risk,
+                                Json(list(point.triggered_rule_ids)),
+                            )
+                            for point in result.points
+                        ],
+                    )
+                conn.commit()
+        except psycopg2.Error as exc:
+            raise DatabaseUnavailableError("Could not save projection run") from exc
 
     def write_snapshots(self, copy: SnapshotCopy) -> int:
         """Insert one fleet state in one transaction, or none on failure."""
@@ -260,17 +413,29 @@ class PersistenceWriter:
             self._events.append(event)
             self._condition.notify()
 
-    def stop(self, final_copy: SnapshotCopy) -> None:
-        """Request a final save and wait at most three seconds for the writer."""
+    def stop(self, final_copy: SnapshotCopy) -> bool:
+        """Save the final state directly, then give queued events time to drain.
+
+        The tick loop has stopped, so this database call cannot delay a model
+        step. It also cannot wait behind an event or an older snapshot in the
+        background writer. False means the final write failed and was counted.
+        """
         with self._condition:
             if self._pending is not None:
                 self._metrics.snapshots_replaced.inc()
-            self._pending = final_copy
+            self._pending = None
             self._stopping = True
             self._condition.notify()
+        saved = self._save_snapshot(final_copy, phase="shutdown")
         self._thread.join(timeout=SHUTDOWN_WAIT_SECONDS)
         if self._thread.is_alive():
-            logger.error("Persistence writer did not finish before shutdown")
+            with self._condition:
+                queued_events = len(self._events)
+            logger.error(
+                "Persistence writer did not finish before shutdown",
+                extra={"queued_events": queued_events},
+            )
+        return saved
 
     def refresh_age(self, now: datetime) -> None:
         """Report elapsed wall time since a fleet snapshot was saved."""
@@ -280,6 +445,27 @@ class PersistenceWriter:
             self._metrics.last_snapshot_age_seconds.set(
                 max(0.0, (now - last).total_seconds())
             )
+
+    def _save_snapshot(self, copy: SnapshotCopy, *, phase: str) -> bool:
+        """Write one immutable copy and record success or failure once."""
+        try:
+            count = self._persistence.write_snapshots(copy)
+        except DatabaseUnavailableError:
+            self._metrics.snapshot_write_failures.inc()
+            logger.error("Twin snapshot write failed", extra={"phase": phase})
+            return False
+        self._metrics.snapshot_writes.inc(count)
+        if count:
+            saved_at = max(
+                state.process.simulated_at
+                for state, _fingerprint in copy
+                if state.status == "running" and state.process is not None
+            )
+            with self._condition:
+                if self._last_saved_at is None or saved_at > self._last_saved_at:
+                    self._last_saved_at = saved_at
+            self.refresh_age(datetime.now(timezone.utc))
+        return True
 
     def _run(self) -> None:
         """Drain events and newest snapshots, keeping failures observable."""
@@ -304,21 +490,7 @@ class PersistenceWriter:
                         extra={"event_type": event.event_type},
                     )
             if copy is not None:
-                try:
-                    count = self._persistence.write_snapshots(copy)
-                    self._metrics.snapshot_writes.inc(count)
-                    if count:
-                        saved_at = max(
-                            state.process.simulated_at
-                            for state, _fingerprint in copy
-                            if state.status == "running" and state.process is not None
-                        )
-                        with self._condition:
-                            self._last_saved_at = saved_at
-                        self.refresh_age(datetime.now(timezone.utc))
-                except DatabaseUnavailableError:
-                    self._metrics.snapshot_write_failures.inc()
-                    logger.error("Twin snapshot write failed")
+                self._save_snapshot(copy, phase="periodic")
             with self._condition:
                 if stopping and not self._events and self._pending is None:
                     return

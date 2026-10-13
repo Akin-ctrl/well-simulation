@@ -15,7 +15,9 @@ import {
   bigserial,
   bigint,
   jsonb,
+  uuid,
 } from 'drizzle-orm/pg-core';
+import { users } from './user';
 
 export const field = pgTable(
   'field',
@@ -167,6 +169,13 @@ export const parameterreading = pgTable(
       withTimezone: true,
       mode: 'string',
     }).defaultNow(),
+    // Migration 0007: which generator produced the reading. The check
+    // constraint on the allowed values lives in the SQL migration.
+    sourceKind: text('source_kind').notNull().default('synthetic_random_simulator'),
+    // Migration 0008: the model version, such as '0.3.0'. NULL means not
+    // recorded. The column's real type is the domain model_version_text, which
+    // checks the format; Drizzle sees it as text.
+    modelVersion: text('model_version'),
   },
   (table) => [
     index('parameterreading_timestamp_utc_idx').using(
@@ -295,6 +304,149 @@ export const wellheadModelParameter = pgTable(
       table.parameterKey,
       table.validFrom.desc()
     ),
+  ]
+);
+
+// Migration 0011 keeps run metadata in ordinary tables and partitions future
+// points by time. The time column is part of each hypertable primary key.
+export const predictionRun = pgTable(
+  'prediction_run',
+  {
+    runId: uuid('run_id').primaryKey().notNull(),
+    createdAt: timestamp('created_at', {
+      withTimezone: true,
+      mode: 'string',
+    }).notNull(),
+    wellheadId: integer('wellhead_id')
+      .notNull()
+      .references(() => wellhead.wellheadId),
+    requestedByUserId: integer('requested_by_user_id')
+      .notNull()
+      .references(() => users.id),
+    modelVersion: text('model_version').notNull(),
+    parameterFingerprint: text('parameter_fingerprint').notNull(),
+    baseSimulatedAt: timestamp('base_simulated_at', {
+      withTimezone: true,
+      mode: 'string',
+    }).notNull(),
+    horizonSeconds: integer('horizon_seconds').notNull(),
+    stepSeconds: integer('step_seconds').notNull(),
+    baseState: jsonb('base_state').$type<Record<string, unknown>>().notNull(),
+    parameterValues: jsonb('parameter_values')
+      .$type<Record<string, number>>()
+      .notNull(),
+    controlValues: jsonb('control_values')
+      .$type<Record<string, number | boolean>>()
+      .notNull(),
+    alarmRules: jsonb('alarm_rules').$type<Record<string, unknown>[]>().notNull(),
+    confidenceScore: doublePrecision('confidence_score').notNull(),
+    confidenceReasons: jsonb('confidence_reasons').$type<string[]>().notNull(),
+  },
+  (table) => [
+    index('ix_prediction_run_well_created').on(
+      table.wellheadId,
+      table.createdAt.desc()
+    ),
+  ]
+);
+
+export const predictionPoint = pgTable(
+  'prediction_point',
+  {
+    runId: uuid('run_id')
+      .notNull()
+      .references(() => predictionRun.runId),
+    forecastAt: timestamp('forecast_at', {
+      withTimezone: true,
+      mode: 'string',
+    }).notNull(),
+    elapsedSeconds: integer('elapsed_seconds').notNull(),
+    values: jsonb('values_json').$type<Record<string, number>>().notNull(),
+    tubingPressurePsi: doublePrecision('tubing_pressure_psi').notNull(),
+    flowRateBpd: doublePrecision('flow_rate_bpd').notNull(),
+    wellheadTemperatureF: doublePrecision('wellhead_temperature_f').notNull(),
+    waterCutPercent: doublePrecision('water_cut_percent').notNull(),
+    alarmRisk: text('alarm_risk').notNull(),
+    triggeredRuleIds: jsonb('triggered_rule_ids').$type<number[]>().notNull(),
+  },
+  (table) => [
+    primaryKey({
+      columns: [table.runId, table.forecastAt],
+      name: 'prediction_point_pkey',
+    }),
+  ]
+);
+
+export const scenarioRun = pgTable(
+  'scenario_run',
+  {
+    runId: uuid('run_id').primaryKey().notNull(),
+    createdAt: timestamp('created_at', {
+      withTimezone: true,
+      mode: 'string',
+    }).notNull(),
+    wellheadId: integer('wellhead_id')
+      .notNull()
+      .references(() => wellhead.wellheadId),
+    requestedByUserId: integer('requested_by_user_id')
+      .notNull()
+      .references(() => users.id),
+    name: varchar('name', { length: 120 }).notNull(),
+    modelVersion: text('model_version').notNull(),
+    parameterFingerprint: text('parameter_fingerprint').notNull(),
+    baseSimulatedAt: timestamp('base_simulated_at', {
+      withTimezone: true,
+      mode: 'string',
+    }).notNull(),
+    horizonSeconds: integer('horizon_seconds').notNull(),
+    stepSeconds: integer('step_seconds').notNull(),
+    baseState: jsonb('base_state').$type<Record<string, unknown>>().notNull(),
+    parameterValues: jsonb('parameter_values')
+      .$type<Record<string, number>>()
+      .notNull(),
+    controlValues: jsonb('control_values')
+      .$type<Record<string, number | boolean>>()
+      .notNull(),
+    scheduledControls: jsonb('scheduled_controls')
+      .$type<Record<string, unknown>[]>()
+      .notNull(),
+    alarmRules: jsonb('alarm_rules').$type<Record<string, unknown>[]>().notNull(),
+    confidenceScore: doublePrecision('confidence_score').notNull(),
+    confidenceReasons: jsonb('confidence_reasons').$type<string[]>().notNull(),
+  },
+  (table) => [
+    index('ix_scenario_run_well_created').on(table.wellheadId, table.createdAt.desc()),
+  ]
+);
+
+export const scenarioPoint = pgTable(
+  'scenario_point',
+  {
+    runId: uuid('run_id')
+      .notNull()
+      .references(() => scenarioRun.runId),
+    forecastAt: timestamp('forecast_at', {
+      withTimezone: true,
+      mode: 'string',
+    }).notNull(),
+    elapsedSeconds: integer('elapsed_seconds').notNull(),
+    values: jsonb('values_json').$type<Record<string, number>>().notNull(),
+    tubingPressurePsi: doublePrecision('tubing_pressure_psi').notNull(),
+    flowRateBpd: doublePrecision('flow_rate_bpd').notNull(),
+    wellheadTemperatureF: doublePrecision('wellhead_temperature_f').notNull(),
+    waterCutPercent: doublePrecision('water_cut_percent').notNull(),
+    baselineValues: jsonb('baseline_values_json')
+      .$type<Record<string, number>>()
+      .notNull(),
+    alarmRisk: text('alarm_risk').notNull(),
+    baselineAlarmRisk: text('baseline_alarm_risk').notNull(),
+    triggeredRuleIds: jsonb('triggered_rule_ids').$type<number[]>().notNull(),
+  },
+  (table) => [
+    primaryKey({
+      columns: [table.runId, table.forecastAt],
+      name: 'scenario_point_pkey',
+    }),
   ]
 );
 

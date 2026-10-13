@@ -12,9 +12,9 @@ import {
  * Capability checks for the model in ADR 0033.
  *
  * The session role is read from the verified JWT rather than the database, so
- * a role change does not take effect until the token is reissued. That is
- * acceptable for expanding access and deliberate for revoking it: session
- * revocation is tracked separately in the remediation roadmap.
+ * a role change does not take effect until the token is reissued. Logout does
+ * end sessions on the server (ADR 0037): authMiddleware refuses any token whose
+ * session version is out of date before a capability is checked.
  */
 
 type SessionClaims = {

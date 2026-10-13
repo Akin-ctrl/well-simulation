@@ -105,6 +105,8 @@ measurement is presented as observed plant data.
 | Any mapped well is missing or degraded | The complete batch is rejected. |
 | A value is malformed or outside its basic physical range | The batch is rejected before any register write. |
 | A register write fails | Heartbeat remains zero; ingestion skips the incomplete image. |
+| A gateway update lands during a poll | Ingestion re-reads the status block and polls the new tick, stopping at half the telemetry interval. Without a consistent read by then, it skips that interval. Retries are counted in `wellhead_poll_retries_total`. |
+| A consistent Modbus read finishes after half the polling interval | Ingestion discards the late batch, reports unready, and tries again on the next scheduled poll. |
 | A Modbus read fails | Ingestion rejects the poll and reconnects; it does not insert a partial batch. |
 | Metadata changes | Both services reload it. The gateway clears its register image before using the new map. |
 | Database is offline | Ingestion retries with bounded backoff and reports unready. No local store-and-forward exists. |

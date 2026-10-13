@@ -2,7 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-05-31
-- Implementation: Not started
+- Implementation: On-demand forecasts implemented; scheduled forecasts remain planned
 
 ## Context
 
@@ -38,4 +38,11 @@ On-demand forecasting is the fastest way to validate model behavior. Scheduled f
 - First API should support request-driven forecasts with horizon and step size.
 - Forecast outputs should be persisted.
 - Later scheduled forecasts should populate dashboard-ready latest predictions.
+
+## Implementation on 2026-10-13
+
+Milestone 8 adds an on-demand forecast route in twin-core and an authenticated
+public API route. A request copies current running state and controls, advances
+the existing one-second model for a bounded horizon, and saves the full run and
+sampled points. There is no background forecast scheduler yet.
 

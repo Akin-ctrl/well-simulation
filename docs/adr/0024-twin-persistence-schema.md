@@ -2,7 +2,7 @@
 
 - Status: Accepted, amended
 - Date: 2026-05-31
-- Implementation: Milestone 7 tables complete; later tables remain planned
+- Implementation: Milestones 7 and 8 tables complete; control table remains planned
 
 ## Context
 
@@ -235,3 +235,14 @@ snapshot stores queryable pressure, flow, temperature, damage, and status
 columns next to the complete JSONB process state. The Drizzle schema mirrors
 these three tables. Forecast, scenario, and control tables remain for their
 own milestones.
+
+## Implementation on 2026-10-13
+
+Migration 0011 creates `prediction_run`, `prediction_point`, `scenario_run`, and
+`scenario_point` with the code that writes them. Runs are ordinary tables with
+actor, model version, parameter fingerprint, base state, inputs, alarm rules,
+and confidence. Points are TimescaleDB hypertables. Their primary key includes
+the time column. Full model values remain in JSONB; tubing pressure, flow rate,
+wellhead temperature, water cut, alarm risk, and sample time are separate
+queryable columns. Scenario points also hold unchanged baseline values. The
+`control_command` table still belongs to the live control milestone.

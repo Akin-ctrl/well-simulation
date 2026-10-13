@@ -5,10 +5,9 @@ info:
   summary: Internal API for the wellhead twin-core service.
   description: |
     Health, readiness, metrics, lifecycle state, complete model fleet snapshots,
-    and source-labelled historian telemetry reads are implemented. Process
-    values are synthetic and uncalibrated.
-    Controls, forecasts, and scenarios below
-    are planned endpoints, not available in the running service.
+    source-labelled historian telemetry reads, forecasts, and isolated scenarios
+    are implemented. Process values are synthetic and uncalibrated. Live controls
+    remain planned.
 servers:
   - url: http://twin-core:8000
     description: Internal Docker Compose service address.
@@ -135,7 +134,8 @@ paths:
   /wellheads/{wellheadId}/forecast:
     post:
       tags: [Forecasts]
-      summary: Planned endpoint for short operational forecasts.
+      summary: Create and persist a bounded forecast from current model state.
+      description: Requires X-Twin-Internal-Token and X-Twin-Actor-Id headers.
       operationId: createWellheadForecast
       parameters:
         - $ref: "#/components/parameters/WellheadId"
@@ -146,8 +146,8 @@ paths:
             schema:
               $ref: "#/components/schemas/ForecastRequest"
       responses:
-        "200":
-          description: Forecast generated from current model state.
+        "201":
+          description: Forecast persisted and returned.
           content:
             application/json:
               schema:
@@ -156,10 +156,15 @@ paths:
           $ref: "#/components/responses/ValidationError"
         "404":
           $ref: "#/components/responses/NotFound"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          $ref: "#/components/responses/HistorianUnavailable"
   /scenarios:
     post:
       tags: [Scenarios]
-      summary: Planned endpoint for isolated what-if scenario execution.
+      summary: Create and persist an isolated what-if scenario.
+      description: Requires X-Twin-Internal-Token and X-Twin-Actor-Id headers.
       operationId: runScenario
       requestBody:
         required: true
@@ -168,14 +173,20 @@ paths:
             schema:
               $ref: "#/components/schemas/ScenarioRequest"
       responses:
-        "200":
-          description: Scenario run completed against cloned model state.
+        "201":
+          description: Scenario and unchanged baseline persisted together.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ScenarioResponse"
         "400":
           $ref: "#/components/responses/ValidationError"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/HistorianUnavailable"
 components:
   parameters:
     WellheadId:
@@ -200,6 +211,12 @@ components:
             $ref: "#/components/schemas/ErrorResponse"
     HistorianUnavailable:
       description: Historian read failed, timed out, or read capacity was full.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Forbidden:
+      description: The internal service token is absent or invalid.
       content:
         application/json:
           schema:
@@ -560,87 +577,164 @@ components:
           format: date-time
     ForecastRequest:
       type: object
-      required: [horizonMinutes]
+      additionalProperties: false
       properties:
-        horizonMinutes:
+        horizonSeconds:
+          type: integer
+          minimum: 300
+          maximum: 7200
+          default: 1800
+        stepSeconds:
           type: integer
           minimum: 5
-          maximum: 240
-        timestepSeconds:
-          type: integer
-          minimum: 1
           maximum: 300
+          default: 60
+      description: Horizon must be divisible by step size.
     ForecastResponse:
-      type: object
-      required: [wellheadId, generatedAt, horizonMinutes, points]
-      properties:
-        wellheadId:
-          type: integer
-        generatedAt:
-          type: string
-          format: date-time
-        horizonMinutes:
-          type: integer
-        points:
-          type: array
-          items:
-            $ref: "#/components/schemas/ForecastPoint"
-    ForecastPoint:
-      type: object
-      required: [timestamp, pressurePsi, temperatureF, flowRateBpd, confidence]
-      properties:
-        timestamp:
-          type: string
-          format: date-time
-        pressurePsi:
-          type: number
-        temperatureF:
-          type: number
-        flowRateBpd:
-          type: number
-        confidence:
-          type: number
-          minimum: 0
-          maximum: 1
+      $ref: "#/components/schemas/ProjectionResponse"
     ScenarioRequest:
       type: object
-      required: [wellheadId, name, horizonMinutes, controls]
+      additionalProperties: false
+      required: [wellheadId, name, horizonSeconds, stepSeconds, controls]
       properties:
         wellheadId:
           type: integer
+          minimum: 1
         name:
           type: string
+          minLength: 1
           maxLength: 120
-        horizonMinutes:
+        horizonSeconds:
+          type: integer
+          minimum: 300
+          maximum: 7200
+        stepSeconds:
           type: integer
           minimum: 5
-          maximum: 240
+          maximum: 300
         controls:
           type: array
+          minItems: 1
+          maxItems: 16
           items:
             $ref: "#/components/schemas/ScenarioControlStep"
+      description: Horizon must divide by step; offsets must increase and stay below horizon.
     ScenarioControlStep:
       type: object
+      additionalProperties: false
       required: [offsetMinutes, input]
       properties:
         offsetMinutes:
           type: integer
           minimum: 0
         input:
-          $ref: "#/components/schemas/ControlInput"
-    ScenarioResponse:
+          $ref: "#/components/schemas/ScenarioControlChange"
+    ScenarioControlChange:
       type: object
-      required: [scenarioId, generatedAt, points]
+      additionalProperties: false
+      minProperties: 1
       properties:
-        scenarioId:
+        chokePositionPercent:
+          type: number
+          minimum: 0
+          maximum: 100
+        masterValveOpen:
+          type: boolean
+        wingValveOpen:
+          type: boolean
+        pumpOn:
+          type: boolean
+        emergencyShutdown:
+          type: boolean
+    ScenarioResponse:
+      $ref: "#/components/schemas/ProjectionResponse"
+    ProjectionResponse:
+      type: object
+      required: [runId, kind, wellheadId, name, source, fieldCalibrated,
+        modelVersion, baseSimulatedAt, generatedAt, horizonSeconds,
+        stepSeconds, confidence, points]
+      properties:
+        runId:
           type: string
+          format: uuid
+        kind:
+          type: string
+          enum: [forecast, scenario]
+        wellheadId:
+          type: integer
+          minimum: 1
+        name:
+          type: [string, "null"]
+        source:
+          type: string
+          const: synthetic_reduced_order_model
+        fieldCalibrated:
+          type: boolean
+          const: false
+        modelVersion:
+          type: string
+        baseSimulatedAt:
+          type: string
+          format: date-time
         generatedAt:
           type: string
           format: date-time
+        horizonSeconds:
+          type: integer
+        stepSeconds:
+          type: integer
+        confidence:
+          type: object
+          required: [method, score, label, reasons]
+          properties:
+            method:
+              type: string
+              const: heuristic_uncalibrated
+            score:
+              type: number
+              minimum: 0
+              maximum: 1
+            label:
+              type: string
+              enum: [moderate, low]
+            reasons:
+              type: array
+              items:
+                type: string
         points:
           type: array
+          minItems: 1
+          maxItems: 1440
           items:
-            $ref: "#/components/schemas/ForecastPoint"
+            $ref: "#/components/schemas/ProjectionPoint"
+    ProjectionPoint:
+      type: object
+      required: [elapsedSeconds, timestamp, values, alarmRisk, triggeredRuleIds]
+      properties:
+        elapsedSeconds:
+          type: integer
+          minimum: 1
+        timestamp:
+          type: string
+          format: date-time
+        values:
+          type: object
+          additionalProperties:
+            type: number
+        alarmRisk:
+          type: string
+          enum: [none, warning, critical, unknown]
+        triggeredRuleIds:
+          type: array
+          items:
+            type: integer
+        baselineValues:
+          type: object
+          additionalProperties:
+            type: number
+        baselineAlarmRisk:
+          type: string
+          enum: [none, warning, critical, unknown]
     ErrorResponse:
       type: object
       required: [error]

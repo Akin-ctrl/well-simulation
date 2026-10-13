@@ -16,6 +16,7 @@ from twin_core.model import (
     initial_state,
     step_model,
 )
+from twin_core.projection import ProjectionBase
 from twin_core.recovery import parameter_fingerprint
 
 logger = logging.getLogger(__name__)
@@ -234,6 +235,31 @@ class ModelRegistry:
         """Return the immutable resolved parameter set for one active well."""
         with self._lock:
             return self._parameters.get(wellhead_id)
+
+    def projection_base(self, wellhead_id: int) -> ProjectionBase | None:
+        """Copy process state, controls, and parameters under the same lock."""
+        with self._lock:
+            state = self._states.get(wellhead_id)
+            parameters = self._parameters.get(wellhead_id)
+            controls = self._controls.get(wellhead_id)
+            if (
+                state is None
+                or state.status != "running"
+                or state.process is None
+                or parameters is None
+                or controls is None
+            ):
+                return None
+            return ProjectionBase(
+                wellhead_id,
+                state.model_version,
+                parameter_fingerprint(parameters),
+                state.process,
+                controls,
+                parameters,
+                state.restored_from,
+                state.last_recovery_event_at,
+            )
 
     def restore(
         self,

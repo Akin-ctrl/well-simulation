@@ -59,3 +59,13 @@ final copy on clean shutdown. The one-slot writer mailbox keeps database
 latency off the one-second model loop. On startup, twin-core checks the latest
 snapshot for each active well and restores compatible state. A rejected or
 missing snapshot starts that well cold with a recorded reason.
+
+## Implementation correction on 2026-10-12
+
+The first shutdown path queued the final copy behind any earlier database
+write and waited only 3 seconds. The final copy could remain unsaved. After the
+model loop stops, twin-core now writes that copy directly through a bounded
+database connection. Periodic writes still use the background writer to keep
+the one-second model loop independent of database latency. A failed final write
+is logged and counted, and the service exits nonzero. Recovery can still use
+the latest successful periodic snapshot.

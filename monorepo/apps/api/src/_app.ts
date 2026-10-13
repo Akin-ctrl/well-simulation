@@ -9,6 +9,7 @@ import { customRateLimit } from './middleware/rate-limiter';
 import { originGuard } from './middleware/csrf';
 import { requestId } from './middleware/request-id';
 import { dashboardRouter } from './routers/dashboard';
+import { twinRouter } from './routers/twin';
 import { errorResponse } from './utils/handler';
 import { httpDuration, httpRequests, registry } from './metrics';
 
@@ -100,6 +101,7 @@ app.onError((err, c) => errorResponse(c, err));
 
 export const appRouter = app
   .route('/auth', authRouter)
-  .route('/dashboard', dashboardRouter);
+  .route('/dashboard', dashboardRouter)
+  .route('/twin', twinRouter);
 
 export type AppType = typeof appRouter;

@@ -3,6 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
   ALARM_SEVERITIES,
   type ActiveAlarmsResponse,
+  type DashboardAnalyticsResponse,
 } from '@well-simulation/dto/res/dashboard';
 
 import { deleteTestUsers, request, signedInAs, withDb } from './helpers/api';
@@ -143,5 +144,63 @@ describe('Alarm Center data', () => {
     // The cut keeps critical alarms: none is dropped while a warning is shown.
     const shownCritical = data.alarms.filter((a) => a.severityLevel === 'CRITICAL');
     expect(shownCritical).toHaveLength(Math.min(data.totals.critical, 50));
+  });
+});
+
+describe('Analytics alarm severity totals', () => {
+  let cookie: string;
+
+  /** Open `count` alarms of one severity, `ageHours` hours ago. */
+  async function openAlarms(severity: string, count: number, ageHours: number) {
+    await withDb((client) =>
+      client.query(
+        `INSERT INTO alarmEvent (alarm_rule_id, parameter_reading_id, timestamp_utc,
+                                 wellhead_id, triggered_at, severity_level, triggered_value)
+         SELECT ar.alarm_rule_id, $1, now(), (SELECT min(wellhead_id) FROM wellHead),
+                now() - make_interval(hours => $2) - make_interval(secs => n),
+                ar.severity_level, ar.threshold_value
+         FROM generate_series(1, $3) AS n,
+              (SELECT * FROM alarmRule WHERE severity_level = $4
+               ORDER BY alarm_rule_id LIMIT 1) AS ar`,
+        [TEST_READING_ID, ageHours, count, severity]
+      )
+    );
+  }
+
+  /** Continuous aggregates update on a schedule; bring this one up to date now. */
+  async function refreshAlarmCounts() {
+    await withDb((client) =>
+      client.query(
+        "CALL refresh_continuous_aggregate('mv_5min_alarm_counts', NULL, NULL)"
+      )
+    );
+  }
+
+  beforeAll(async () => {
+    await deleteTestUsers();
+    await clearTestAlarms();
+    ({ cookie } = await signedInAs('USER'));
+  });
+
+  afterAll(async () => {
+    await clearTestAlarms();
+    await refreshAlarmCounts();
+    await deleteTestUsers();
+  });
+
+  it('counts only the last 24 hours, one total per severity', async () => {
+    await openAlarms('CRITICAL', 3, 0);
+    await openAlarms('WARNING', 2, 0);
+    // Older than the window: must not reach the total.
+    await openAlarms('CRITICAL', 4, 48);
+    await refreshAlarmCounts();
+
+    const response = await request('/dashboard/analytics', { cookie });
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as { data: DashboardAnalyticsResponse };
+    expect(body.data.alarmCounts).toEqual([
+      { severityLevel: 'CRITICAL', alarmsTriggered: 3 },
+      { severityLevel: 'WARNING', alarmsTriggered: 2 },
+    ]);
   });
 });

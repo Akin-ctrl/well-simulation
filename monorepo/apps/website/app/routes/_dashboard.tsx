@@ -1,4 +1,12 @@
-import { redirect, useLoaderData, useNavigation, useOutlet } from 'react-router';
+import {
+  Link,
+  redirect,
+  useLoaderData,
+  useNavigation,
+  useOutlet,
+  useRouteError,
+  type ShouldRevalidateFunctionArgs,
+} from 'react-router';
 import { DesktopNav } from '../domains/dashboard/layouts/sidebar';
 import Header from '../domains/dashboard/layouts/header';
 import { cn } from '@well-simulation/utils/cn';
@@ -31,6 +39,58 @@ export async function clientLoader() {
     }
     throw error;
   }
+}
+
+/**
+ * Skip the session check on the pages' timed refreshes.
+ *
+ * Each page refreshes its data every 10 to 60 seconds, and a refresh reruns
+ * every loader on screen, this one included. That sent `/auth/me` six times a
+ * minute per open tab. The session is still checked on a full page load and
+ * after any form submission, such as logging out. If it expires in between,
+ * the page's own data request fails with 401 and the error page below sends
+ * the user to sign in.
+ */
+export function shouldRevalidate({
+  currentUrl,
+  nextUrl,
+  formMethod,
+  defaultShouldRevalidate,
+}: ShouldRevalidateFunctionArgs) {
+  const isTimedRefresh = !formMethod && currentUrl.href === nextUrl.href;
+  return isTimedRefresh ? false : defaultShouldRevalidate;
+}
+
+/** Say what went wrong instead of showing an empty page. */
+export function ErrorBoundary() {
+  const error = useRouteError();
+  const status = error instanceof ApiError ? error.statusCode : undefined;
+
+  let title = 'Something went wrong loading this page.';
+  let detail = status ? `The server answered with status ${status}.` : undefined;
+  if (status === 401) {
+    title = 'Your session has ended.';
+    detail = 'Sign in again to keep monitoring.';
+  } else if (status === 429) {
+    title = 'Too many requests from this browser.';
+    detail = 'Wait a minute, then reload the page.';
+  }
+
+  return (
+    <div className='flex min-h-dvh flex-col items-center justify-center gap-3 p-8 text-center'>
+      <p className='text-lg font-semibold'>{title}</p>
+      {detail && <p className='text-sm text-fgColor-muted'>{detail}</p>}
+      {status === 401 ? (
+        <Link to={routes.auth.login} className='text-blue-600 hover:underline'>
+          Sign in
+        </Link>
+      ) : (
+        <a href={routes.dashboard.overview} className='text-blue-600 hover:underline'>
+          Reload the dashboard
+        </a>
+      )}
+    </div>
+  );
 }
 
 export default function DashboardLayout() {

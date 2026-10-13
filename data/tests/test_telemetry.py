@@ -8,7 +8,11 @@ from __future__ import annotations
 
 import json
 import logging
+import time
+from collections.abc import Callable
 from datetime import datetime, timezone
+from types import SimpleNamespace
+from typing import ClassVar
 from unittest.mock import Mock
 
 import pytest
@@ -409,3 +413,162 @@ class TestModelVersion:
     def test_rejects_non_text(self) -> None:
         with pytest.raises(ValueError, match="must be text"):
             ModelVersion.parse(3)
+
+
+class TestPollRetry:
+    """A gateway update during a poll is retried, never stored as a mixed batch."""
+
+    MAPPINGS: ClassVar[list[ParameterMapping]] = [
+        mapping(mapping_id=1, parameter_code="tubing_pressure", modbus_register=0),
+        mapping(
+            mapping_id=2,
+            parameter_type_id=2,
+            parameter_code="flow_rate",
+            modbus_register=2,
+        ),
+    ]
+
+    def _publish(
+        self, store: gateway.RegisterStore, offset_s: int, value: float
+    ) -> None:
+        """Publish one tick `offset_s` seconds from now with both values set."""
+        at = datetime.fromtimestamp(
+            int(datetime.now(timezone.utc).timestamp()) + offset_s, timezone.utc
+        )
+        store.apply_batch(
+            [
+                {
+                    "wellhead_id": 1,
+                    "parameters": {"tubing_pressure": value, "flow_rate": value},
+                }
+            ],
+            at,
+            VERSION,
+        )
+
+    def _client(
+        self,
+        store: gateway.RegisterStore,
+        on_value_read: Callable[[], None] | None = None,
+    ) -> Mock:
+        """Build a Modbus client that reads the real register image.
+
+        `on_value_read` runs after each value register is read, which is where
+        a test makes the gateway publish mid-poll.
+        """
+
+        def read(address: int, *, count: int, device_id: int) -> Mock:
+            result = Mock(
+                registers=store.context[device_id].getValues(3, address, count)
+            )
+            result.isError.return_value = False
+            if address != HEARTBEAT_REGISTER and on_value_read is not None:
+                on_value_read()
+            return result
+
+        client = Mock()
+        client.read_holding_registers.side_effect = read
+        return client
+
+    def _start(self, client: Mock) -> ingestion.GatewayStatus:
+        status = ingestion.read_fleet_status(client, self.MAPPINGS)
+        assert status is not None
+        return status
+
+    def test_clean_poll_needs_no_retry(self) -> None:
+        store = gateway.RegisterStore(self.MAPPINGS)
+        self._publish(store, -1, 100.0)
+        client = self._client(store)
+        status = self._start(client)
+
+        result = ingestion.poll_consistent_batch(
+            client, self.MAPPINGS, status, time.monotonic() + 2.5, 5
+        )
+
+        assert result is not None
+        polled, readings = result
+        assert polled == status
+        assert [r.raw_value for r in readings] == [100.0, 100.0]
+
+    def test_clean_poll_finishing_after_deadline_is_discarded(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A coherent but late batch must not consume the next poll interval."""
+        store = gateway.RegisterStore(self.MAPPINGS)
+        self._publish(store, -1, 100.0)
+        elapsed = [100.0]
+        value_reads = [0]
+
+        def slow_read() -> None:
+            value_reads[0] += 1
+            elapsed[0] = 101.0
+
+        client = self._client(store, slow_read)
+        status = self._start(client)
+        monkeypatch.setattr(
+            ingestion, "time", SimpleNamespace(monotonic=lambda: elapsed[0])
+        )
+
+        result = ingestion.poll_consistent_batch(
+            client, self.MAPPINGS, status, deadline=100.5, interval_seconds=5
+        )
+
+        assert value_reads[0] == len(self.MAPPINGS)
+        assert result is None
+
+    def test_update_mid_poll_is_retried_on_the_new_tick(self) -> None:
+        store = gateway.RegisterStore(self.MAPPINGS)
+        self._publish(store, -1, 100.0)
+        published: list[bool] = []
+
+        def publish_once() -> None:
+            if not published:
+                published.append(True)
+                self._publish(store, 0, 200.0)
+
+        client = self._client(store, publish_once)
+        status = self._start(client)
+
+        result = ingestion.poll_consistent_batch(
+            client, self.MAPPINGS, status, time.monotonic() + 2.5, 5
+        )
+
+        assert result is not None
+        polled, readings = result
+        assert polled.heartbeat == status.heartbeat + 1
+        # Every reading comes from the new tick: no mix of 100 and 200.
+        assert [r.raw_value for r in readings] == [200.0, 200.0]
+        assert {r.timestamp_utc for r in readings} == {
+            datetime.fromtimestamp(polled.heartbeat, timezone.utc)
+        }
+
+    def test_gives_up_at_the_deadline_when_every_poll_is_overtaken(self) -> None:
+        store = gateway.RegisterStore(self.MAPPINGS)
+        self._publish(store, -3, 100.0)
+        ticks = iter(range(-2, 60))
+
+        def publish_every_time() -> None:
+            self._publish(store, next(ticks), 300.0)
+
+        client = self._client(store, publish_every_time)
+        status = self._start(client)
+        started = time.monotonic()
+
+        result = ingestion.poll_consistent_batch(
+            client, self.MAPPINGS, status, started + 0.35, 5
+        )
+
+        assert result is None
+        assert time.monotonic() - started < 1.0
+
+    def test_gives_up_when_the_update_never_completes(self) -> None:
+        store = gateway.RegisterStore(self.MAPPINGS)
+        self._publish(store, -1, 100.0)
+        client = self._client(store, store.clear_heartbeat)
+        status = self._start(client)
+
+        result = ingestion.poll_consistent_batch(
+            client, self.MAPPINGS, status, time.monotonic() + 2.5, 5
+        )
+
+        assert result is None

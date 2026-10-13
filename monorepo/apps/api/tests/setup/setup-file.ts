@@ -17,6 +17,9 @@ process.env.DATABASE_URL = databaseUrl(TEST_DATABASE);
 process.env.NODE_ENV = 'test';
 process.env.JWT_SECRET =
   process.env.TEST_JWT_SECRET ?? 'test-secret-of-at-least-thirty-two-characters';
+process.env.TWIN_INTERNAL_TOKEN =
+  process.env.TEST_TWIN_INTERNAL_TOKEN ??
+  'test-twin-token-of-at-least-thirty-two-characters';
 process.env.COOKIE_SECURE = 'false';
 process.env.TRUSTED_PROXY_IPS = '';
 process.env.ALLOWED_ORIGINS = '';

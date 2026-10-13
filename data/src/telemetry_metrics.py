@@ -24,6 +24,11 @@ POLLS_SKIPPED_STALE = Counter(
     "Poll cycles skipped because the gateway heartbeat had not advanced",
 )
 
+POLL_RETRIES = Counter(
+    "wellhead_poll_retries_total",
+    "Polls repeated because a gateway update landed while registers were being read",
+)
+
 MODBUS_READ_ERRORS = Counter(
     "wellhead_modbus_read_errors_total",
     "Modbus register reads that returned an error",

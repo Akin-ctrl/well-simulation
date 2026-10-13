@@ -39,6 +39,7 @@ from telemetry_metrics import (
     METADATA_RELOADS,
     MODBUS_READ_ERRORS,
     POLL_DURATION,
+    POLL_RETRIES,
     POLLS_SKIPPED_STALE,
     READINGS_WRITTEN,
     TELEMETRY_AGE,
@@ -49,6 +50,10 @@ from telemetry_metrics import (
 RECONNECT_DELAY_SECONDS = 5
 MAX_RECONNECT_DELAY_SECONDS = 120
 REGISTERS_PER_VALUE = 2
+# Pause before re-reading the status block after a poll was overtaken. A
+# gateway update takes milliseconds, so this usually skips past the moment
+# when the block reads zero.
+RETRY_WAIT_SECONDS = 0.1
 DEFAULT_SERVICE_PORT = 9101
 
 DATATYPE = ModbusClientMixin.DATATYPE
@@ -265,6 +270,62 @@ def poll_once(
     return readings
 
 
+def poll_consistent_batch(
+    client: ModbusTcpClient,
+    mappings: list[ParameterMapping],
+    status: GatewayStatus,
+    deadline: float,
+    interval_seconds: int,
+) -> tuple[GatewayStatus, list[Reading]] | None:
+    """Poll one tick whose status block is the same before and after the reads.
+
+    A gateway update that lands during a poll changes the status block, and the
+    readings then mix two ticks, so they cannot be stored. The poll used to be
+    dropped and the next try made a whole interval later. When the gateway and
+    ingestion loops ran in step, every poll collided and most batches were lost.
+    Instead, re-read the status block and poll the tick that just landed.
+
+    `deadline` is a time.monotonic() value. Returns None when no consistent poll
+    completes before it, and the caller skips this interval as before.
+    """
+    current = status
+    while True:
+        if time.monotonic() >= deadline:
+            return None
+        source_time = datetime.fromtimestamp(current.heartbeat, timezone.utc)
+        readings = poll_once(client, mappings, source_time, current.model_version)
+        if time.monotonic() >= deadline:
+            return None
+        ending_status = read_fleet_status(client, mappings)
+        if time.monotonic() >= deadline:
+            return None
+        if ending_status == current:
+            return current, readings
+
+        POLL_RETRIES.inc()
+        logger.warning(
+            "Gateway updated during the poll; retrying",
+            extra={"heartbeat": current.heartbeat},
+        )
+        remaining = deadline - time.monotonic()
+        time.sleep(min(RETRY_WAIT_SECONDS, max(0.0, remaining)))
+        if time.monotonic() >= deadline:
+            return None
+        latest = read_fleet_status(client, mappings)
+        if time.monotonic() >= deadline:
+            return None
+        if latest is None or latest.heartbeat <= current.heartbeat:
+            return None
+        if (
+            current_heartbeat(
+                latest.heartbeat, datetime.now(timezone.utc), interval_seconds
+            )
+            is None
+        ):
+            return None
+        current = latest
+
+
 def apply_metadata_reload(
     reloader: MetadataReloader, current: list[ParameterMapping]
 ) -> list[ParameterMapping]:
@@ -352,26 +413,34 @@ def ingest_forever(
             else:
                 if heartbeat is None or status is None:
                     raise ValueError("Missing heartbeat before Modbus poll")
-                source_time = datetime.fromtimestamp(heartbeat, timezone.utc)
+                # Retries stop at half the interval, so the loop keeps its pace.
+                deadline = time.monotonic() + settings.poll_interval_seconds / 2
                 with POLL_DURATION.time():
-                    readings = poll_once(
-                        client, mappings, source_time, status.model_version
+                    result = poll_consistent_batch(
+                        client,
+                        mappings,
+                        status,
+                        deadline,
+                        settings.poll_interval_seconds,
                     )
-                # The version must match too: a twin-core redeploy between the
-                # two reads would otherwise label the batch with the wrong model.
-                ending_status = read_fleet_status(client, mappings)
-                if ending_status != status:
+                # The version is part of the status, so a twin-core redeploy
+                # between the two reads cannot label a batch with the wrong model.
+                if result is None:
                     health.ready = False
                     POLLS_SKIPPED_STALE.inc()
-                    logger.warning("Discarding poll changed during Modbus reads")
-                elif len(readings) != len(mappings):
-                    raise ValueError("Incomplete Modbus model batch")
+                    logger.warning(
+                        "Discarding poll: no consistent read before the deadline"
+                    )
                 else:
+                    # After a retry this is a newer tick than the first read.
+                    polled_status, readings = result
+                    if len(readings) != len(mappings):
+                        raise ValueError("Incomplete Modbus model batch")
                     execute_batch(
                         cursor, INSERT_READING_SQL, [r.as_row() for r in readings]
                     )
                     conn.commit()
-                    last_heartbeat = heartbeat
+                    last_heartbeat = polled_status.heartbeat
                     READINGS_WRITTEN.inc(len(readings))
                     # Only now is the service demonstrably doing its job.
                     health.ready = True

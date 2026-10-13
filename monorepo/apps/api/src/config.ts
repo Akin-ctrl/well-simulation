@@ -26,6 +26,33 @@ function readJwtSecret(): string {
   return secret;
 }
 
+function readTwinInternalToken(): string {
+  const token = required('TWIN_INTERNAL_TOKEN');
+  if (token.length < MIN_SECRET_LENGTH) {
+    throw new Error(
+      `TWIN_INTERNAL_TOKEN must be at least ${MIN_SECRET_LENGTH} characters`
+    );
+  }
+  return token;
+}
+
+function readTwinCoreUrl(): string {
+  const raw = process.env.TWIN_CORE_URL ?? 'http://twin-core:8000';
+  const url = new URL(raw);
+  if (
+    url.protocol !== 'http:' ||
+    !url.hostname ||
+    url.username ||
+    url.password ||
+    url.pathname !== '/' ||
+    url.search ||
+    url.hash
+  ) {
+    throw new Error('TWIN_CORE_URL must be an HTTP service origin');
+  }
+  return url.origin;
+}
+
 /**
  * Whether session cookies carry the `Secure` flag.
  *
@@ -58,6 +85,8 @@ function readAllowedOrigins(): string[] {
 
 export const config = {
   jwtSecret: readJwtSecret(),
+  twinInternalToken: readTwinInternalToken(),
+  twinCoreUrl: readTwinCoreUrl(),
   // Named on both sign and verify, so a token cannot choose its own algorithm.
   jwtAlgorithm: 'HS256',
   cookieSecure: readCookieSecure(),

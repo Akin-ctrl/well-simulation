@@ -1,6 +1,6 @@
 import { Input } from '@well-simulation/ui/input';
 import { Button } from '@well-simulation/ui/button';
-import { Link, redirect, useFetcher } from 'react-router';
+import { redirect, useFetcher } from 'react-router';
 import { routes } from '../config/routes';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -58,11 +58,10 @@ export default function Login() {
           error={form.getFieldState('password').invalid}
         />
 
-        <div className='flex justify-end mt-2'>
-          <Link to={routes.auth.register} className='text-blue-600 text-sm'>
-            Don't have an account?
-          </Link>
-        </div>
+        {/* Sign-up is not open: ADR 0033 lets only an administrator create users. */}
+        <p className='mt-2 text-right text-sm text-fgColor-muted'>
+          Accounts are created by an administrator.
+        </p>
 
         <Button type='submit' disabled={fetcher.state === 'submitting'}>
           Sign In

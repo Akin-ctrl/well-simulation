@@ -1,20 +1,144 @@
-"""Serve the small, read-only internal twin-core HTTP API."""
+"""Serve bounded internal state reads and authenticated model projections."""
 
 from __future__ import annotations
 
 import json
 import re
+import secrets
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from typing import ClassVar
+from typing import ClassVar, Literal
 from urllib.parse import urlsplit
 
 from prometheus_client import CONTENT_TYPE_LATEST
 
 from twin_core.database import DatabaseUnavailableError
-from twin_core.runtime import ReadCapacityError, TwinRuntime
+from twin_core.model import ControlInputs
+from twin_core.projection import (
+    MAX_CONTROL_STEPS,
+    AlarmRuleConfigurationError,
+    ControlChange,
+    ScheduledControl,
+    validate_window,
+)
+from twin_core.runtime import (
+    ProjectionBusyError,
+    ProjectionUnavailableError,
+    ReadCapacityError,
+    TwinRuntime,
+)
 
 WELLHEAD_PATH = re.compile(r"/wellheads/([1-9][0-9]{0,9})/(state|latest-telemetry)")
+FORECAST_PATH = re.compile(r"/wellheads/([1-9][0-9]{0,9})/forecast")
+MAX_REQUEST_BYTES = 4096
+DEFAULT_HORIZON_SECONDS = 1800
+DEFAULT_STEP_SECONDS = 60
+CONTROL_FIELDS = {
+    "chokePositionPercent": "choke_position_percent",
+    "masterValveOpen": "master_valve_open",
+    "wingValveOpen": "wing_valve_open",
+    "pumpOn": "pump_on",
+    "emergencyShutdown": "emergency_shutdown",
+}
+
+
+@dataclass(frozen=True)
+class ProjectionInput:
+    """A validated forecast or scenario request ready for the model runtime."""
+
+    kind: Literal["forecast", "scenario"]
+    wellhead_id: int
+    horizon_seconds: int
+    step_seconds: int
+    name: str | None = None
+    controls: tuple[ScheduledControl, ...] = ()
+
+
+def _object(value: object, name: str) -> dict[str, object]:
+    """Require a JSON object with string keys."""
+    if not isinstance(value, dict) or not all(isinstance(key, str) for key in value):
+        raise ValueError(f"{name} must be an object")
+    return value
+
+
+def _window(body: dict[str, object]) -> tuple[int, int]:
+    """Apply ADR 0025 defaults and the model's bounded request limits."""
+    return validate_window(
+        body.get("horizonSeconds", DEFAULT_HORIZON_SECONDS),
+        body.get("stepSeconds", DEFAULT_STEP_SECONDS),
+    )
+
+
+def _control_change(value: object) -> ControlChange:
+    """Accept only scenario controls, never pressure or flow outcomes."""
+    raw = _object(value, "control change")
+    if not raw or set(raw) - set(CONTROL_FIELDS):
+        raise ValueError("Scenario control fields are missing or unknown")
+    choke = raw.get("chokePositionPercent")
+    if choke is not None and (
+        isinstance(choke, bool) or not isinstance(choke, (int, float))
+    ):
+        raise ValueError("chokePositionPercent must be a number")
+    change = ControlChange(
+        choke_position_percent=float(choke) if choke is not None else None,
+        master_valve_open=_optional_bool(raw, "masterValveOpen"),
+        wing_valve_open=_optional_bool(raw, "wingValveOpen"),
+        pump_on=_optional_bool(raw, "pumpOn"),
+        emergency_shutdown=_optional_bool(raw, "emergencyShutdown"),
+    )
+    change.apply(ControlInputs())
+    return change
+
+
+def _optional_bool(raw: dict[str, object], key: str) -> bool | None:
+    """Keep false distinct from an omitted control field."""
+    value = raw.get(key)
+    if value is not None and type(value) is not bool:
+        raise ValueError(f"{key} must be a boolean")
+    return value
+
+
+def _scenario_steps(value: object) -> tuple[ScheduledControl, ...]:
+    """Read at most sixteen ordered changes at whole-minute offsets."""
+    if not isinstance(value, list) or not 1 <= len(value) <= MAX_CONTROL_STEPS:
+        raise ValueError("controls must contain 1 to 16 steps")
+    steps: list[ScheduledControl] = []
+    for item in value:
+        raw = _object(item, "control step")
+        if set(raw) != {"offsetMinutes", "input"}:
+            raise ValueError("Control step fields must be offsetMinutes and input")
+        offset = raw["offsetMinutes"]
+        if type(offset) is not int:
+            raise ValueError("offsetMinutes must be an integer")
+        steps.append(ScheduledControl(offset * 60, _control_change(raw["input"])))
+    return tuple(steps)
+
+
+def _projection_input(path: str, body: dict[str, object]) -> ProjectionInput:
+    """Validate the route's exact fields, name, controls, and time window."""
+    horizon, step = _window(body)
+    match = FORECAST_PATH.fullmatch(path)
+    if match is not None:
+        if set(body) - {"horizonSeconds", "stepSeconds"}:
+            raise ValueError("Unknown forecast field")
+        return ProjectionInput("forecast", int(match.group(1)), horizon, step)
+    if set(body) != {"wellheadId", "name", "horizonSeconds", "stepSeconds", "controls"}:
+        raise ValueError("Scenario fields are incomplete or unknown")
+    wellhead_id = body["wellheadId"]
+    if type(wellhead_id) is not int or not 1 <= wellhead_id <= 2_147_483_647:
+        raise ValueError("Invalid wellheadId")
+    name = body["name"]
+    if not isinstance(name, str) or not 1 <= len(name.strip()) <= 120:
+        raise ValueError("Scenario name must contain 1 to 120 characters")
+    return ProjectionInput(
+        "scenario",
+        wellhead_id,
+        horizon,
+        step,
+        name.strip(),
+        _scenario_steps(body["controls"]),
+    )
 
 
 class TwinHttpServer(ThreadingHTTPServer):
@@ -25,7 +149,7 @@ class TwinHttpServer(ThreadingHTTPServer):
 
 
 class TwinRequestHandler(BaseHTTPRequestHandler):
-    """Serve health, readiness, metrics, state, and current telemetry."""
+    """Serve state reads and private, bounded forecast or scenario requests."""
 
     runtime: ClassVar[TwinRuntime]
 
@@ -100,8 +224,71 @@ class TwinRequestHandler(BaseHTTPRequestHandler):
             self._json(200, snapshot)
 
     def do_POST(self) -> None:
-        """Reject writes until the controlled command phase is implemented."""
-        self._json(405, {"error": "method_not_allowed"}, allow="GET")
+        """Run a bounded private projection, never a live control command."""
+        parsed = urlsplit(self.path)
+        match = FORECAST_PATH.fullmatch(parsed.path)
+        if (
+            (match is None and parsed.path != "/scenarios")
+            or parsed.query
+            or parsed.fragment
+        ):
+            self._json(405, {"error": "method_not_allowed"}, allow="GET")
+            return
+        expected = self.runtime.settings.internal_token
+        received = self.headers.get("X-Twin-Internal-Token", "")
+        if not expected or not secrets.compare_digest(received, expected):
+            self._json(403, {"error": "forbidden"})
+            return
+        try:
+            actor = int(self.headers.get("X-Twin-Actor-Id", ""))
+            if not 1 <= actor <= 2_147_483_647:
+                raise ValueError("Invalid actor")
+            request = _projection_input(parsed.path, self._request_object())
+        except (ValueError, UnicodeDecodeError):
+            self._json(400, {"error": "invalid_projection_request"})
+            return
+        if self.runtime.state(request.wellhead_id) is None:
+            self._json(404, {"error": "wellhead_not_found"})
+            return
+        self._run_projection(request, actor)
+
+    def _run_projection(self, request: ProjectionInput, actor: int) -> None:
+        """Map service and data failures to stable, safe HTTP responses."""
+        try:
+            result = self.runtime.create_projection(
+                request.kind,
+                request.wellhead_id,
+                actor,
+                request.horizon_seconds,
+                request.step_seconds,
+                name=request.name,
+                controls=request.controls,
+            )
+        except ProjectionBusyError:
+            self._json(503, {"error": "projection_busy"})
+            return
+        except ProjectionUnavailableError:
+            self._json(503, {"error": "model_not_ready"})
+            return
+        except (DatabaseUnavailableError, AlarmRuleConfigurationError):
+            self._json(503, {"error": "projection_dependency_unavailable"})
+            return
+        except (ArithmeticError, ValueError):
+            self._json(503, {"error": "projection_failed"})
+            return
+        self._json(201, result.to_payload())
+
+    def _request_object(self) -> dict[str, object]:
+        """Read one small JSON request with a declared size and media type."""
+        if (
+            self.headers.get("Content-Type", "").split(";", 1)[0].strip()
+            != "application/json"
+        ):
+            raise ValueError("Content-Type must be application/json")
+        length = int(self.headers.get("Content-Length", ""))
+        if not 0 < length <= MAX_REQUEST_BYTES:
+            raise ValueError("Projection request body is too large or empty")
+        return _object(json.loads(self.rfile.read(length).decode("utf-8")), "request")
 
     def do_PUT(self) -> None:
         """Reject writes until the controlled command phase is implemented."""

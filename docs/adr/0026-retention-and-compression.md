@@ -69,3 +69,11 @@ compression after 7 days. `twin_recovery_event` has a 2-year retention policy.
 The prediction, scenario, and control rows in the table above remain plans for
 later milestones.
 
+## Implementation on 2026-10-13
+
+Migration 0011 compresses prediction points after 3 days and retains them for
+30 days. Scenario points are compressed after 7 days and retained for 90 days.
+Run metadata remains in ordinary tables and outlives its points; the API
+returns HTTP 410 when any saved point has expired. The control-command policy
+is still planned for Milestone 8B.
+

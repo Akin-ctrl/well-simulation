@@ -10,6 +10,7 @@ import {
 import {
   ALARM_SEVERITIES,
   type ActiveAlarmTotals,
+  type AlarmCount,
   type ActiveAlarmsResponse,
   type AlarmSeverity,
   type DashboardAnalyticsResponse,
@@ -33,6 +34,8 @@ const ACTIVE_ALARM_LIMIT = 12;
 /** Rows in the Alarm Center list. The totals always cover every alarm. */
 const ALARM_CENTER_LIMIT = 50;
 const ANALYTICS_TREND_LIMIT = 144;
+/** Hours of alarm history the Analytics severity total covers. */
+const ALARM_COUNT_WINDOW_HOURS = 24;
 
 async function countRows(
   table: typeof wellhead | typeof parametertype | typeof vActiveAlarms
@@ -313,12 +316,28 @@ async function waterCutGorTrendForWellhead(wellheadId: number) {
     .limit(ANALYTICS_TREND_LIMIT);
 }
 
-async function alarmCounts() {
+/**
+ * Alarms triggered in the last ALARM_COUNT_WINDOW_HOURS, one total per severity.
+ *
+ * This previously returned the newest 144 rows of the aggregate, where a row is
+ * one bucket for one wellhead, parameter, and severity. The period that covered
+ * changed with the alarm mix, and on a stack that had been stopped it reached
+ * back days, so the Analytics total described no stated time. The window is now
+ * a time bound, and the totals are summed here because the page needs nothing
+ * finer.
+ */
+async function alarmCounts(): Promise<AlarmCount[]> {
   return db
-    .select()
+    .select({
+      severityLevel: mv5minAlarmCounts.severityLevel,
+      alarmsTriggered: sql<number>`coalesce(sum(${mv5minAlarmCounts.alarmsTriggered}), 0)::int`,
+    })
     .from(mv5minAlarmCounts)
-    .orderBy(desc(mv5minAlarmCounts.bucketTime))
-    .limit(ANALYTICS_TREND_LIMIT);
+    .where(
+      sql`${mv5minAlarmCounts.bucketTime} > now() - make_interval(hours => ${ALARM_COUNT_WINDOW_HOURS})`
+    )
+    .groupBy(mv5minAlarmCounts.severityLevel)
+    .orderBy(mv5minAlarmCounts.severityLevel);
 }
 
 export const dashboardRouter = new Hono()

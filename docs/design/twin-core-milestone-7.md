@@ -203,8 +203,11 @@ connection is opened without that setting.
   restore needs, so a replaced copy loses nothing that matters.
 - A failed write is logged and counted, and the next copy is tried 30 seconds
   later. There is no retry loop.
-- On a clean shutdown (SIGTERM), the writer saves one final copy, waiting at
-  most 3 seconds. A planned restart then loses almost nothing.
+- On a clean shutdown (SIGTERM), the model loop stops before taking its final
+  copy. The shutdown path writes that copy directly using a separate bounded
+  database connection, so an older write or queued event cannot delay it.
+  A failed final write is logged and counted, and the process exits nonzero.
+  The background writer then gets up to 3 seconds to finish queued events.
 - Recovery events go through a separate bounded queue of 100, written by the
   same thread. Events are not replaceable, so an overflow is logged at ERROR
   and counted rather than dropped quietly.
@@ -401,3 +404,19 @@ snapshots, future-time hold, and writer replacement. A real host sleep test
 has not run; the earlier injectable-clock test covers the jump logic.
 After a longer local stop, the live service restored all 12 wells, recorded
 about 32 seconds of missing time, and returned to ready.
+
+## Shutdown correction, 2026-10-12
+
+The first implementation queued the final copy on the background writer and
+waited only 3 seconds. A slow earlier write could use that entire window,
+leaving the final copy unsaved. The shutdown path now writes the final copy
+directly after the tick loop stops. It uses the same 3-second connect and
+statement timeouts as a periodic write. The older background writer can finish
+its current work and queued events during the remaining 3-second join.
+Failures of the final write are visible through the snapshot failure metric,
+an error log, and a nonzero exit. The last successful periodic snapshot remains
+available for recovery if the final write fails.
+
+Docker Compose gives twin-core 15 seconds after SIGTERM before forced stop.
+This covers the 3-second connection limit, 3-second statement limit,
+3-second background join, HTTP server close, and scheduling margin.
