@@ -1,23 +1,11 @@
-"""Apply ordered SQL migrations to the historian database.
-
-Replaces mounting the schema into /docker-entrypoint-initdb.d, which Postgres
-runs only on first initialisation of the data volume. Under that arrangement
-every schema change required `docker compose down -v` and destroyed the
-historian, which was documented nowhere.
-
-Applied migrations are recorded in schema_migrations with a checksum, so a
-re-run is a no-op and an edit to an already-applied file is an error rather
-than a silent divergence.
-"""
+"""Install, check, or adopt the canonical historian schema and provision services."""
 
 from __future__ import annotations
 
-import hashlib
+import argparse
 import os
-import re
 import secrets
 import sys
-from dataclasses import dataclass
 from pathlib import Path
 
 import bcrypt
@@ -25,200 +13,28 @@ import psycopg2
 import psycopg2.extensions
 from psycopg2 import sql
 
+from schema_install import (
+    SchemaContract,
+    adopt,
+    apply_seeds,
+    build_reference,
+    check_installed,
+    has_table,
+    install_fresh,
+    installer_lock,
+)
+from schema_sql import SqlFile, discover
 from telemetry_common import DatabaseSettings, configure_logging, connect_db
 
-MIGRATIONS_DIR = Path(__file__).resolve().parent.parent / "sql" / "migrations"
-SEEDS_DIR = Path(__file__).resolve().parent.parent / "sql" / "seeds"
-
-# TimescaleDB refuses to create a continuous aggregate inside a transaction
-# block, so those files opt out of the surrounding transaction.
-NO_TRANSACTION_DIRECTIVE = "-- migrate:no-transaction"
-
-# Bootstrap administrator. The password is generated on first run, never stored
-# in the repository, and logged exactly once.
+SQL_DIR = Path(__file__).resolve().parent.parent / "sql"
+SCHEMA_PATH = SQL_DIR / "schema.sql"
+CONTRACT_PATH = SQL_DIR / "schema-contract.json"
+SEEDS_DIR = SQL_DIR / "seeds"
 ADMIN_EMAIL = "admin@example.com"
 ADMIN_USERNAME = "bootstrap-admin"
 ADMIN_PASSWORD_BYTES = 18
 BCRYPT_ROUNDS = 11
-
-SCHEMA_MIGRATIONS_DDL = """
-CREATE TABLE IF NOT EXISTS schema_migrations (
-    filename TEXT PRIMARY KEY,
-    checksum TEXT NOT NULL,
-    applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-)
-"""
-
-logger = configure_logging("migrator", stream=sys.stdout)
-
-
-@dataclass(frozen=True)
-class Migration:
-    """One migration file and how it must be applied."""
-
-    path: Path
-    sql: str
-    checksum: str
-
-    @property
-    def name(self) -> str:
-        """Return the filename used as the applied-migration key."""
-        return self.path.name
-
-    @property
-    def in_transaction(self) -> bool:
-        """Whether this file may be wrapped in a transaction."""
-        return NO_TRANSACTION_DIRECTIVE not in self.sql
-
-    @classmethod
-    def load(cls, path: Path) -> Migration:
-        """Read a migration file and compute its checksum."""
-        sql = path.read_text(encoding="utf-8")
-        return cls(
-            path=path,
-            sql=sql,
-            checksum=hashlib.sha256(sql.encode("utf-8")).hexdigest(),
-        )
-
-
-DOLLAR_TAG_PATTERN = re.compile(r"\$[A-Za-z_][A-Za-z0-9_]*\$|\$\$")
-
-
-def _end_of_region(sql: str, start: int, terminator: str) -> int:
-    """Return the index just past `terminator`, or the end of the script."""
-    found = sql.find(terminator, start)
-    return len(sql) if found == -1 else found + len(terminator)
-
-
-def _skip_region(sql: str, index: int) -> int | None:
-    """If a non-splittable region starts at `index`, return the index past it.
-
-    Comments, string literals, and dollar-quoted bodies may all contain
-    semicolons that are not statement separators.
-    """
-    rest = sql[index:]
-
-    if rest.startswith("--"):
-        return _end_of_region(sql, index, "\n")
-    if rest.startswith("/*"):
-        return _end_of_region(sql, index + 2, "*/")
-    if rest.startswith("'"):
-        return _end_of_region(sql, index + 1, "'")
-
-    tag = DOLLAR_TAG_PATTERN.match(rest)
-    if tag:
-        return _end_of_region(sql, index + len(tag.group(0)), tag.group(0))
-
-    return None
-
-
-def split_statements(sql: str) -> list[str]:
-    """Split a script into individual statements on top-level semicolons.
-
-    Needed for files applied outside a transaction: Postgres wraps a
-    multi-statement simple query in an implicit transaction block, which is
-    exactly what a continuous aggregate refuses to be created inside. Sending
-    one statement per round trip avoids that.
-    """
-    statements: list[str] = []
-    start = 0
-    index = 0
-
-    while index < len(sql):
-        skipped = _skip_region(sql, index)
-        if skipped is not None:
-            index = skipped
-            continue
-
-        if sql[index] == ";":
-            statement = sql[start:index].strip()
-            if statement:
-                statements.append(statement)
-            index += 1
-            start = index
-            continue
-
-        index += 1
-
-    trailing = sql[start:].strip()
-    if trailing:
-        statements.append(trailing)
-
-    return statements
-
-
-def discover(directory: Path) -> list[Migration]:
-    """Return every .sql file in a directory, in filename order."""
-    if not directory.is_dir():
-        return []
-    return [Migration.load(path) for path in sorted(directory.glob("*.sql"))]
-
-
-def applied_migrations(conn: psycopg2.extensions.connection) -> dict[str, str]:
-    """Return the filename to checksum map of already-applied migrations."""
-    with conn.cursor() as cursor:
-        cursor.execute(SCHEMA_MIGRATIONS_DDL)
-        conn.commit()
-        cursor.execute("SELECT filename, checksum FROM schema_migrations")
-        return dict(cursor.fetchall())
-
-
-def apply(conn: psycopg2.extensions.connection, migration: Migration) -> None:
-    """Apply one migration and record it."""
-    # psycopg2 opens a transaction implicitly on the first statement, and
-    # autocommit cannot be changed while one is open. Everything before this
-    # point is already committed, so closing the idle transaction is safe.
-    conn.rollback()
-
-    previous_autocommit = conn.autocommit
-    conn.autocommit = not migration.in_transaction
-    try:
-        with conn.cursor() as cursor:
-            if migration.in_transaction:
-                cursor.execute(migration.sql)
-            else:
-                for statement in split_statements(migration.sql):
-                    cursor.execute(statement)
-            cursor.execute(
-                "INSERT INTO schema_migrations (filename, checksum) VALUES (%s, %s)",
-                (migration.name, migration.checksum),
-            )
-        if migration.in_transaction:
-            conn.commit()
-    except Exception:
-        if migration.in_transaction:
-            conn.rollback()
-        raise
-    finally:
-        conn.autocommit = previous_autocommit
-
-
-def run(conn: psycopg2.extensions.connection, migrations: list[Migration]) -> int:
-    """Apply every outstanding migration. Returns how many were applied."""
-    already = applied_migrations(conn)
-    applied_count = 0
-
-    for migration in migrations:
-        recorded = already.get(migration.name)
-        if recorded is not None:
-            if recorded != migration.checksum:
-                raise RuntimeError(
-                    f"{migration.name} has changed since it was applied. "
-                    "Migrations are immutable; add a new file instead."
-                )
-            continue
-
-        logger.info(
-            "Applying migration",
-            extra={
-                "migration": migration.name,
-                "transactional": migration.in_transaction,
-            },
-        )
-        apply(conn, migration)
-        applied_count += 1
-
-    return applied_count
+logger = configure_logging("schema", stream=sys.stdout)
 
 
 def bootstrap_admin(conn: psycopg2.extensions.connection) -> None:
@@ -499,55 +315,97 @@ def provision_api_role(
     logger.info("API database role is ready", extra={"role": user})
 
 
-def main() -> int:
-    """Apply schema migrations, then seed fixtures."""
-    settings = DatabaseSettings.from_env()
+def command_parser() -> argparse.ArgumentParser:
+    """Describe explicit schema operations; init also checks an adopted database."""
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "mode",
+        nargs="?",
+        default="init",
+        choices=("init", "check", "adopt", "build-reference"),
+    )
+    parser.add_argument(
+        "--without-seeds",
+        action="store_true",
+        help="Install structure without demo records or accounts",
+    )
+    parser.add_argument(
+        "--contract-output",
+        type=Path,
+        help="Write a generated reference from a new disposable database",
+    )
+    return parser
 
-    migrations = discover(MIGRATIONS_DIR)
-    if not migrations:
-        logger.error("No migrations found", extra={"directory": str(MIGRATIONS_DIR)})
-        return 1
 
-    try:
-        conn = connect_db(settings)
-    except psycopg2.OperationalError:
-        logger.exception("Database connection failed")
-        return 1
+def provision(conn: psycopg2.extensions.connection, settings: DatabaseSettings) -> None:
+    """Apply configured service grants after structural verification."""
+    provision_twin_reader(conn, settings)
+    provision_api_role(conn, settings)
 
-    try:
-        applied = run(conn, migrations)
-        seeded = run(conn, discover(SEEDS_DIR))
-    except (psycopg2.Error, RuntimeError):
-        logger.exception("Migration failed")
-        return 1
 
-    try:
+def execute_mode(
+    conn: psycopg2.extensions.connection,
+    settings: DatabaseSettings,
+    args: argparse.Namespace,
+) -> None:
+    """Dispatch the explicit database action while holding the installer lock."""
+    source = SqlFile.load(SCHEMA_PATH)
+    seeds = discover(SEEDS_DIR)
+    if args.mode == "build-reference":
+        if args.contract_output is None:
+            raise ValueError("build-reference requires --contract-output")
+        reference = build_reference(conn, source, CONTRACT_PATH)
+        args.contract_output.write_text(reference.document(), encoding="utf-8")
+        logger.info("Generated schema reference from a fresh database")
+        return
+    if args.contract_output is not None:
+        raise ValueError("--contract-output is only valid with build-reference")
+    contract = SchemaContract.load(CONTRACT_PATH, source)
+    if args.mode == "adopt":
+        adopt(conn, source, contract, seeds)
+    elif args.mode == "check" or has_table(conn, "schema_installation"):
+        check_installed(conn, contract, seeds)
+    else:
+        install_fresh(conn, source, contract)
+    if args.mode == "check":
+        logger.info("Schema identity and structure verified")
+        return
+    # Role revocations and grants must commit together. Schema statements use
+    # autocommit for TimescaleDB, but account provisioning uses transactions.
+    conn.autocommit = False
+    if not args.without_seeds:
+        apply_seeds(conn, seeds)
         bootstrap_admin(conn)
-    except psycopg2.Error:
-        # The schema is applied and correct; only the convenience account
-        # failed. Blocking every dependent service on that would be wrong.
-        logger.exception("Bootstrap administrator could not be created")
-        conn.rollback()
+    provision(conn, settings)
+    logger.info("Database schema and configured roles are ready")
 
+
+def main() -> int:
+    """Run the installer and close its connection on every outcome."""
+    args = command_parser().parse_args()
+    conn = None
     try:
-        provision_twin_reader(conn, settings)
-        provision_api_role(conn, settings)
-    except (psycopg2.Error, ValueError):
-        logger.error("Service database roles could not be provisioned")
-        conn.rollback()
+        settings = DatabaseSettings.from_env()
+        conn = connect_db(settings)
+        with installer_lock(conn):
+            execute_mode(conn, settings, args)
+    except psycopg2.Error as exc:
+        # Database errors can contain SQL values. Report the error class and
+        # SQLSTATE, keeping credentials and application data out of logs.
+        logger.error(
+            "Schema database operation failed",
+            extra={
+                "error_type": type(exc).__name__,
+                "sqlstate": exc.pgcode,
+            },
+        )
+        return 1
+    except (RuntimeError, ValueError, OSError) as exc:
+        logger.error("Schema operation refused", extra={"reason": str(exc)})
         return 1
     finally:
-        if not conn.closed:
+        if conn is not None:
             conn.close()
-
-    logger.info(
-        "Database is up to date",
-        extra={
-            "migrations_applied": applied,
-            "seeds_applied": seeded,
-            "migrations_total": len(migrations),
-        },
-    )
     return 0
 
 

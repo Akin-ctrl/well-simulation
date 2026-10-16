@@ -12,7 +12,7 @@ import {
 /**
  * The audit trail defined by ADR 0034.
  *
- * Mirrors `data/sql/migrations/0006_audit_event.sql`, which is canonical. The
+ * Mirrors `data/sql/schema.sql`, which is canonical. The
  * table is a TimescaleDB hypertable there, which Drizzle cannot express, so
  * this declaration covers the columns only.
  */

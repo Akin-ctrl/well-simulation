@@ -4,13 +4,13 @@ import { Client } from 'pg';
 import { REPO_ROOT, TEST_DATABASE, databaseUrl, serverTarget } from './env';
 
 /**
- * Create a disposable database, apply the canonical migrations, and drop it
+ * Create a disposable database, apply the canonical schema, and drop it
  * again when the suite finishes.
  *
- * Migrations are applied by running `data/src/schema.py`, the same migrator the
+ * The schema is applied by running `data/src/schema.py`, the same migrator the
  * compose stack uses, rather than by a second implementation living in the test
  * harness. That keeps one applier (Standard 6) and means the suite also
- * proves the migrations apply cleanly to an empty database.
+ * proves the schema installs cleanly to an empty database.
  */
 
 async function withMaintenanceClient<T>(
@@ -45,7 +45,7 @@ async function dropTestDatabase(client: Client): Promise<void> {
   await client.query(`DROP DATABASE IF EXISTS "${TEST_DATABASE}"`);
 }
 
-function applyMigrations(): void {
+function applySchema(): void {
   const { host, port, user, password } = serverTarget();
   const python = process.env.PYTHON_BIN ?? 'python3';
 
@@ -70,10 +70,10 @@ export async function setup(): Promise<void> {
   });
 
   try {
-    applyMigrations();
+    applySchema();
   } catch (cause) {
     throw new Error(
-      `Failed to apply migrations to the test database.\n` +
+      `Failed to install the schema to the test database.\n` +
         `Ensure the migrator's dependencies are installed:  pip install -r requirements-dev.txt\n` +
         describeMigratorFailure(cause)
     );

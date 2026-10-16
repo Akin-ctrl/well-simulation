@@ -289,7 +289,7 @@ claim and would require device-specific verification and safety review.
 
 ## Implementation map
 
-- data/sql/migrations/0012_live_model_controls.sql owns the tables, immutable
+- data/sql/schema.sql owns the tables, immutable
   proposal checks, lifecycle transitions, and narrow row-lock helpers.
 - data/src/schema.py provisions separate twin and API logins. The API can
   write proposals and audit rows but cannot update the active control table.

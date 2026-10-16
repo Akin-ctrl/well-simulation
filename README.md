@@ -86,9 +86,12 @@ cp .env.example .env
 docker compose up --build
 ```
 
-The `migrator` service applies the ordered SQL migrations in `data/sql/migrations`
-before the API or the telemetry services start. Schema changes do **not** require
-recreating the volume.
+The `migrator` service installs `data/sql/schema.sql` on a new database and
+verifies its recorded baseline on later starts. A database from the numbered
+schema runner needs a one-time checked adoption. Follow the
+[data-layer instructions](data/README.md#existing-database-adoption) before
+starting the updated installer against an existing volume. Adoption preserves
+the volume and its data; later structural changes need a reviewed conversion.
 
 For an existing `.env`, add `API_DB_USER=well_api` and a separate URL-safe
 `API_DB_PASSWORD` before upgrading. The migrator creates this restricted

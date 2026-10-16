@@ -1,6 +1,7 @@
 services:
   db:
-    image: timescale/timescaledb:latest-pg14
+    # Verified PostgreSQL 14 / TimescaleDB 2.19.3 image.
+    image: timescale/timescaledb@sha256:0f5553d37abbe0f20bfe0a04dab5d1238955b5cda2711aba403090f95b6e51ff
     container_name: wellhead_db
     environment:
       - POSTGRES_USER=${POSTGRES_USER}
@@ -38,8 +39,8 @@ services:
   #   networks:
   #     - wellnet
 
-  # Applies the ordered SQL migrations, then exits. Every service that reads or
-  # writes the schema waits for it to finish successfully.
+  # Installs or checks the current schema, then exits. Existing legacy databases
+  # require an explicit, verified adoption before this default startup check.
   migrator:
     build: ./data/src
     container_name: wellhead_migrator

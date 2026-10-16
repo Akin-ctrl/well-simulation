@@ -10,12 +10,13 @@ The telemetry pipeline and the database schema. The dashboard and API live in
 | `src/wellhead_simulator.py` | Legacy random simulator, no longer started by Compose |
 | `src/modbus_gateway.py` | Fetches model snapshots and serves supported values as holding registers |
 | `src/database_ingestion.py` | Polls Modbus and writes model readings to the historian |
-| `src/schema.py` | Applies the ordered SQL migrations |
+| `src/schema.py` | Installs, checks, or adopts the current schema |
 | `src/model_source.py` | Validates model snapshots and maps all 18 seeded signals |
 | `src/telemetry_common.py` | Config, logging, database access, and the health endpoints |
 | `src/telemetry_metrics.py` | Prometheus metric definitions |
-| `sql/migrations/` | The schema. Canonical, per ADR 0006 |
-| `sql/seeds/` | Demo fleet and accounts, applied after the migrations |
+| `sql/schema.sql` | The complete current schema, per ADR 0006 |
+| `sql/schema-contract.json` | Generated comparison record and legacy checksums |
+| `sql/seeds/` | Demo fleet and accounts, applied after schema verification |
 
 ## How the data flows
 
@@ -85,9 +86,53 @@ ready once it has written readings, and not ready while it is reconnecting.
 
 ## Running it
 
-The root `README.md` has the quick start. The migrator applies
-`sql/migrations/` on every `up`, so a schema change does not need the volume
-recreated.
+The root `README.md` has the quick start. The service still named `migrator`
+runs the installer. It installs `sql/schema.sql` on an empty database or checks
+an already adopted database. It refuses an unexpected or incomplete schema.
+The Docker database image is pinned to the verified PostgreSQL 14 and
+TimescaleDB 2.19.3 image.
+
+### Existing database adoption
+
+Back up the database and test restoring that backup into a disposable database
+before adoption. TimescaleDB 2.19.3 failed the compressed-data logical restore
+test, so use the verified physical-backup procedure described in the design.
+Follow the [adoption design](../docs/design/consolidated-schema.md)
+for the full checks. The original volume stays in place.
+
+```sh
+docker compose build migrator
+docker compose run --rm --no-deps migrator python schema.py adopt
+docker compose run --rm --no-deps migrator python schema.py check
+```
+
+`adopt` checks all 13 legacy schema checksums and the actual database structure.
+It records the new baseline without replaying schema SQL. Existing ledger rows,
+readings, controls, and account records remain. Configured service grants are
+then provisioned. The usual startup command defaults to `init`.
+
+`check` reads identity, history, and structure without applying SQL or grants.
+Use `--without-seeds` with `init` to omit demo records and the bootstrap account.
+That flag does not remove existing records.
+
+### Changing the schema
+
+Edit `sql/schema.sql`. Generate `sql/schema-contract.json` from a fresh disposable
+database using `python data/src/schema.py build-reference --contract-output PATH`,
+with `POSTGRES_*` pointing to that disposable database. The command refuses a
+populated application schema. Review the generated differences and run
+`SCHEMA_DATABASE_TEST=1 python -m pytest data/tests/test_schema_database.py`.
+The tests use `TEST_POSTGRES_HOST`, `TEST_POSTGRES_PORT`, `POSTGRES_USER`, and
+`POSTGRES_PASSWORD`, creating and deleting only their own random database names.
+
+Do not edit the generated record by hand. It records structure and the source
+checksum, not a second schema to maintain. Keep the Drizzle mirror consistent.
+An existing database whose baseline differs needs a separately reviewed
+conversion plan. Editing the file does not automatically upgrade stored data.
+
+An interrupted installation stays marked incomplete. Automatic retries do not
+resume statements or delete objects. Inspect the saved progress and recover
+from a verified backup, or explicitly rebuild an expendable test database.
 
 To inspect the data:
 

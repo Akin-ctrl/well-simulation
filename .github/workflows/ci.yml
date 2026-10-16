@@ -96,7 +96,7 @@ jobs:
     # would verify almost nothing that matters.
     services:
       db:
-        image: timescale/timescaledb:latest-pg14
+        image: timescale/timescaledb@sha256:0f5553d37abbe0f20bfe0a04dab5d1238955b5cda2711aba403090f95b6e51ff
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
@@ -144,6 +144,11 @@ jobs:
       - name: Install workspace dependencies
         run: pnpm install --frozen-lockfile
         working-directory: monorepo
+
+      - name: Verify schema installation and adoption
+        run: python -m pytest data/tests/test_schema_database.py
+        env:
+          SCHEMA_DATABASE_TEST: '1'
 
       - name: Run API integration tests
         run: pnpm --filter @well-simulation/api test

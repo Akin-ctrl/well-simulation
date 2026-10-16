@@ -106,5 +106,6 @@ The project should not claim to be a high-fidelity reservoir simulator. The targ
   time-series tables.
 - [Flow diagram](../relevant_visuals/flow-diagram.pdf): the older random simulator path to the dashboard.
 
-These predate the current schema. The migrations in `data/sql/migrations` are
-canonical where the two disagree.
+These predate the current schema. The complete definition in `data/sql/schema.sql` is
+canonical where the two disagree. The [schema design](../design/consolidated-schema.md)
+explains installation, structural checks, and adoption of existing data.

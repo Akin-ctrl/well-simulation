@@ -37,7 +37,7 @@ and send it again rather than waiting.
 
 **In scope:** the API and its authentication and access control, the
 dashboard, the twin-core service, the Modbus gateway, the ingestion service,
-the SQL migrations in `data/sql/migrations`, the Docker images and
+the canonical SQL in `data/sql/schema.sql`, the Docker images and
 `docker-compose.yml`, and the CI workflow in `.github/workflows/`.
 
 **Out of scope**, because these are known and documented:

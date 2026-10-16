@@ -9,7 +9,7 @@ import {
 
 /**
  * Read-only mirrors of views and continuous aggregates owned by the SQL
- * migrations in `data/sql/migrations`, per ADR 0006.
+ * definition in `data/sql/schema.sql`, per ADR 0006.
  *
  * These are declared with `.existing()` deliberately. The previous definitions
  * carried a `.as()` body introspected from the database, which pointed at
