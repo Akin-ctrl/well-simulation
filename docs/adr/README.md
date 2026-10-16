@@ -29,7 +29,7 @@ previously written down.
 | [0002](0002-lightweight-digital-twin-architecture.md) | Use A Layered Lightweight Digital Twin Architecture | Partial |
 | [0003](0003-stateful-process-model.md) | Make A Stateful Process Model The Twin Core | Implemented |
 | [0004](0004-industrial-interface.md) | Keep Modbus TCP As The Industrial Edge Interface | Implemented |
-| [0005](0005-data-historian.md) | Use PostgreSQL And TimescaleDB As The Historian | Implemented |
+| [0005](0005-data-historian.md) | Use PostgreSQL And TimescaleDB As The Historian (amended) | Implemented; engine recovery verified separately |
 | [0006](0006-schema-management.md) | Keep SQL As The Canonical Schema Source (amended) | Implemented; single-file amendment adopted |
 | [0007](0007-control-and-what-if-boundaries.md) | Separate Live Control From What-If Simulation | API implemented; UI deferred |
 | [0008](0008-production-deployment-baseline.md) | Use A Containerized Service Baseline | Implemented |

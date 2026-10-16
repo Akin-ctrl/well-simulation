@@ -6,6 +6,7 @@ import os
 from collections.abc import Iterator
 from contextlib import closing
 from dataclasses import replace
+from io import StringIO
 from uuid import uuid4
 
 import psycopg2
@@ -15,6 +16,7 @@ from psycopg2 import sql
 
 from schema import CONTRACT_PATH, SCHEMA_PATH, SEEDS_DIR
 from schema_catalog import read_catalog
+from schema_engine import accept_engine
 from schema_install import (
     LEDGER_DDL,
     SchemaContract,
@@ -189,13 +191,6 @@ def test_bad_legacy_state_is_refused_without_adoption(
             "SET (timescaledb.materialized_only=false)",
             "aggregates",
         ),
-        (
-            "DROP TRIGGER ts_cagg_invalidation_trigger ON parameterreading; "
-            "CREATE TRIGGER ts_cagg_invalidation_trigger AFTER INSERT OR DELETE "
-            "OR UPDATE ON parameterreading FOR EACH ROW EXECUTE FUNCTION "
-            "_timescaledb_functions.continuous_agg_invalidation_trigger('2')",
-            "triggers",
-        ),
     ],
 )
 def test_actual_drift_is_detected_despite_matching_source_checksum(
@@ -215,6 +210,34 @@ def test_check_works_in_read_only_session(
     with installed.cursor() as cursor:
         cursor.execute("SET default_transaction_read_only=on")
     check_installed(installed, CONTRACT, SEEDS)
+
+
+def test_legacy_invalidation_target_is_checked_when_supported(
+    installed: psycopg2.extensions.connection,
+) -> None:
+    with installed.cursor() as cursor:
+        cursor.execute(
+            "SELECT to_regprocedure("
+            "'_timescaledb_functions.continuous_agg_invalidation_trigger()')"
+        )
+        supported = cursor.fetchone() != (None,)
+        if not supported:
+            # New TimescaleDB releases remove this internal trigger. The
+            # generated target contract must not keep requiring it.
+            assert not any(
+                "ts_cagg_invalidation_trigger" in row
+                for row in CONTRACT.catalog["triggers"]
+            )
+            check_installed(installed, CONTRACT, SEEDS)
+            return
+        cursor.execute(
+            "DROP TRIGGER ts_cagg_invalidation_trigger ON parameterreading; "
+            "CREATE TRIGGER ts_cagg_invalidation_trigger AFTER INSERT OR DELETE "
+            "OR UPDATE ON parameterreading FOR EACH ROW EXECUTE FUNCTION "
+            "_timescaledb_functions.continuous_agg_invalidation_trigger('2')"
+        )
+    with pytest.raises(RuntimeError, match="triggers"):
+        check_installed(installed, CONTRACT, SEEDS)
 
 
 def test_concurrent_installer_has_bounded_wait(
@@ -307,3 +330,122 @@ def test_failed_adoption_rolls_back_baseline_record(
         adopt(legacy, SOURCE, CONTRACT, SEEDS)
     assert not has_table(legacy, "schema_installation")
     verify_history(legacy, CONTRACT, SEEDS, require_legacy=True)
+
+
+@pytest.fixture
+def previous_engine(installed: psycopg2.extensions.connection) -> SchemaContract:
+    # Exercise acceptance against the real target catalog. The release rehearsal
+    # separately uses an actual pg_upgrade and the saved pre-upgrade reference.
+    previous = replace(
+        CONTRACT, versions={"postgres_major": "14", "timescaledb": "2.19.2"}
+    )
+    with installed.cursor() as cursor:
+        cursor.execute(
+            "UPDATE schema_installation SET contract_checksum=%s",
+            (previous.checksum,),
+        )
+    return previous
+
+
+def test_engine_acceptance_preserves_data_and_audits_once(
+    installed: psycopg2.extensions.connection, previous_engine: SchemaContract
+) -> None:
+    with installed.cursor() as cursor:
+        cursor.execute("SELECT * FROM users ORDER BY id")
+        accounts = cursor.fetchall()
+        cursor.execute("SELECT * FROM schema_migrations ORDER BY filename")
+        history = cursor.fetchall()
+    accept_engine(installed, previous_engine, CONTRACT, SEEDS)
+    accept_engine(installed, previous_engine, CONTRACT, SEEDS)
+    check_installed(installed, CONTRACT, SEEDS)
+    with installed.cursor() as cursor:
+        cursor.execute("SELECT * FROM users ORDER BY id")
+        assert cursor.fetchall() == accounts
+        cursor.execute("SELECT * FROM schema_migrations ORDER BY filename")
+        assert cursor.fetchall() == history
+        cursor.execute(
+            "SELECT actor_identifier=current_user, detail FROM auditevent "
+            "WHERE action='schema.engine.accepted'"
+        )
+        events = cursor.fetchall()
+    assert len(events) == 1
+    assert events[0][0] is True
+    assert events[0][1]["previous_contract"] == previous_engine.checksum
+    assert events[0][1]["target_versions"] == CONTRACT.versions
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        "ALTER TABLE users ALTER COLUMN session_version SET DEFAULT 9",
+        "UPDATE schema_installation SET contract_checksum='unexpected'",
+        "UPDATE schema_installation SET status='installing'",
+        "UPDATE schema_migrations SET checksum='changed'",
+    ],
+)
+def test_engine_acceptance_rejects_drift_without_changing_identity(
+    installed: psycopg2.extensions.connection,
+    previous_engine: SchemaContract,
+    mutation: str,
+) -> None:
+    with installed.cursor() as cursor:
+        cursor.execute(mutation)
+        cursor.execute("SELECT * FROM schema_installation")
+        baseline = cursor.fetchall()
+    with pytest.raises(RuntimeError):
+        accept_engine(installed, previous_engine, CONTRACT, SEEDS)
+    with installed.cursor() as cursor:
+        cursor.execute("SELECT * FROM schema_installation")
+        assert cursor.fetchall() == baseline
+        cursor.execute(
+            "SELECT count(*) FROM auditevent WHERE action='schema.engine.accepted'"
+        )
+        assert cursor.fetchone() == (0,)
+
+
+def test_engine_acceptance_rolls_back_if_audit_write_fails(
+    installed: psycopg2.extensions.connection, previous_engine: SchemaContract
+) -> None:
+    # Exhausting this sequence leaves the catalog definition unchanged but makes
+    # the actual audit insert fail, exercising the transaction's rollback.
+    with installed.cursor() as cursor:
+        cursor.execute(
+            "SELECT setval('auditevent_audit_event_id_seq', 9223372036854775807)"
+        )
+    with pytest.raises(psycopg2.Error):
+        accept_engine(installed, previous_engine, CONTRACT, SEEDS)
+    with installed.cursor() as cursor:
+        cursor.execute("SELECT contract_checksum FROM schema_installation")
+        assert cursor.fetchone() == (previous_engine.checksum,)
+
+
+@pytest.mark.parametrize("changed", ["source", "history", "versions"])
+def test_engine_acceptance_rejects_unrelated_reference_changes(
+    installed: psycopg2.extensions.connection,
+    previous_engine: SchemaContract,
+    changed: str,
+) -> None:
+    candidate = {
+        "source": replace(previous_engine, source_checksum="different"),
+        "history": replace(previous_engine, legacy_checksums={}),
+        "versions": replace(previous_engine, versions=CONTRACT.versions),
+    }[changed]
+    with pytest.raises(RuntimeError):
+        accept_engine(installed, candidate, CONTRACT, SEEDS)
+
+
+def test_compressed_null_backup_value_can_be_restored(
+    database: psycopg2.extensions.connection,
+) -> None:
+    # TimescaleDB 2.19.3 emits this valid all-null compressed batch in pg_dump,
+    # then fails to decode it during COPY. This is the observed restore defect
+    # in upstream issue 8893, independently reproduced during the upgrade.
+    with database.cursor() as cursor:
+        cursor.execute("CREATE EXTENSION IF NOT EXISTS timescaledb")
+        cursor.execute(
+            "CREATE TEMP TABLE null_batch_probe "
+            "(value _timescaledb_internal.compressed_data)"
+        )
+        cursor.copy_expert("COPY null_batch_probe FROM STDIN", StringIO("Bg==\n"))
+        cursor.execute("SELECT value::text FROM null_batch_probe")
+        assert cursor.fetchall() == [("Bg==",)]

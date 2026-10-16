@@ -2,6 +2,10 @@
 
 Status: implemented and adopted on the local database, 2026-10-13.
 
+The engine versions and initial recovery result below describe that release.
+The [2026-10-16 engine upgrade](database-engine-upgrade.md) records the subsequent
+PostgreSQL conversion, fixed logical restore, and explicit engine acceptance.
+
 The owner selected one SQL schema file on 2026-10-13. The maintained source will
 be data/sql/schema.sql. The owner then authorized implementation.
 
@@ -107,7 +111,8 @@ The record contains the SQL checksum, PostgreSQL major version, TimescaleDB
 version, expected structure, and immutable legacy file checksums. It is generated,
 not edited alongside the SQL. It contains no application rows or credentials.
 
-Compose and CI pin the verified PostgreSQL 14 / TimescaleDB 2.19.3 image by digest.
+At consolidation, Compose and CI pinned the verified PostgreSQL 14 /
+TimescaleDB 2.19.3 image by digest. The engine upgrade design records the current pin.
 The installer rejects other versions before a normal fresh installation.
 Schema tests rebuild from the SQL and compare against the generated record.
 
@@ -277,7 +282,8 @@ table names and still rejects a trigger pointing at the wrong hypertable.
 
 The verified physical backup is retained in Docker volume
 well_schema_physical_backup_20261013. The original live volume was preserved.
-No commit or push was made.
+No commit or push was made during adoption. The consolidation was later
+committed locally as cd09691 on 2026-10-16.
 
 ### Recovery finding: compressed null columns
 
@@ -346,8 +352,12 @@ volume itself as a running server, because recovery and later writes change it.
 
 A physical backup covers the whole PostgreSQL cluster, including its roles and
 other databases. Protect it like the live volume. Its recovery requires matching
-PostgreSQL and TimescaleDB binaries. A separately tested TimescaleDB upgrade is
-needed before relying on logical restores of the affected compressed data.
+PostgreSQL and TimescaleDB binaries. A separately tested engine upgrade was
+required before relying on logical restores of the affected compressed data.
+The [2026-10-16 upgrade](database-engine-upgrade.md) completed that verification.
+For a retained PostgreSQL 14 backup, use its original image and the matching
+installer/reference from cd09691 first. Convert that recovered copy before
+checking it against the current PostgreSQL 16 reference.
 
 ## Related
 

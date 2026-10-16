@@ -69,7 +69,7 @@ def _comment_end(sql: str, start: int) -> int:
     raise ValueError("Unterminated SQL block comment")
 
 
-def _skip_region(sql: str, index: int) -> int | None:
+def skip_region(sql: str, index: int) -> int | None:
     """If a non-splittable region starts at `index`, return the index past it.
 
     Comments, string literals, and dollar-quoted bodies may all contain
@@ -108,7 +108,7 @@ def split_statements(sql: str) -> list[str]:
     index = 0
 
     while index < len(sql):
-        skipped = _skip_region(sql, index)
+        skipped = skip_region(sql, index)
         if skipped is not None:
             index = skipped
             continue

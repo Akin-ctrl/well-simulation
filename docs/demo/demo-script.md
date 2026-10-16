@@ -88,4 +88,4 @@ The overview, analytics, per-wellhead detail pages, Alarm Center, live telemetry
 and active alarm data are implemented. The backend also implements stateful
 synthetic wells, snapshots, saved forecasts, and isolated scenarios. Live
 synthetic controls use the Milestone 8B draft and activation API. Forecast and scenario
-dashboard features remain deferred.
+dashboard features remain to be built in Milestone 9.

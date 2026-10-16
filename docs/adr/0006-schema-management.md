@@ -100,3 +100,22 @@ The [consolidation design](../design/consolidated-schema.md) records the
 layout, installer behavior, failure cases, and verification gates. The original
 decision above remains as history; this amendment governs new schema work.
 
+## Amendment 2026-10-16: Accept verified engine changes explicitly
+
+The generated reference includes engine versions. A reviewed engine upgrade
+therefore needs an explicit acceptance step even when schema.sql stays unchanged.
+The accept-engine command requires the saved previous reference to match the
+installed identity, preserves the SQL and legacy-history checksums, and verifies
+the current engine and actual database structure against the new reference.
+It updates the recorded identity and writes an audit event in one transaction.
+
+Normal startup still refuses a mismatched identity. Acceptance does not apply
+schema statements or replace backup and application testing. Comparison allows
+the verified PostgreSQL difference between casting a list of text values as a
+whole and casting each value individually. It still detects changed values,
+types, expressions, and unrelated structure.
+
+This adds an explicit operational step and tests for engine compatibility. It
+keeps one SQL source and avoids adding a new numbered-file workflow. See the
+[engine upgrade design](../design/database-engine-upgrade.md) for its checks.
+

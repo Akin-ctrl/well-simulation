@@ -12,6 +12,8 @@ import json
 import psycopg2.extensions
 from psycopg2 import sql
 
+from schema_normalize import comparison_rows
+
 Catalog = dict[str, list[str]]
 
 # Installer bookkeeping is checked by the installer, outside the application
@@ -61,8 +63,8 @@ QUERIES: dict[str, str] = {
                    pg_get_triggerdef(t.oid)), t.tgenabled
         FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid
         LEFT JOIN _timescaledb_catalog.hypertable h
-          ON t.tgfoid =
-            '_timescaledb_functions.continuous_agg_invalidation_trigger()'::regprocedure
+          ON t.tgfoid = to_regprocedure(
+            '_timescaledb_functions.continuous_agg_invalidation_trigger()')
           AND t.tgargs = convert_to(h.id::text, 'UTF8') || decode('00', 'hex')
         WHERE c.oid IN ({RELATIONS}) AND NOT t.tgisinternal
     """,
@@ -126,10 +128,13 @@ QUERIES: dict[str, str] = {
         FROM timescaledb_information.compression_settings
         WHERE hypertable_schema = 'public'
     """,
+    # Recent TimescaleDB versions support only finalized aggregates and remove
+    # that information column. Older engines still expose and check the flag.
     "aggregates": """
         SELECT view_name, hypertable_schema, hypertable_name, materialized_only,
-               compression_enabled, view_definition, finalized
-        FROM timescaledb_information.continuous_aggregates
+               compression_enabled, view_definition,
+               coalesce((to_jsonb(a)->>'finalized')::boolean, true)
+        FROM timescaledb_information.continuous_aggregates a
         WHERE view_schema = 'public'
     """,
     "jobs": """
@@ -183,7 +188,8 @@ def differences(expected: Catalog, actual: Catalog) -> list[str]:
     """Describe changed object identities without logging function bodies or data."""
     changes: list[str] = []
     for section in sorted(expected.keys() | actual.keys()):
-        before, after = expected.get(section, []), actual.get(section, [])
+        before = comparison_rows(section, expected.get(section, []))
+        after = comparison_rows(section, actual.get(section, []))
         if before != after:
             names = sorted(
                 {str(json.loads(row)[0]) for row in set(before) ^ set(after)}

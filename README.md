@@ -73,11 +73,17 @@ Milestones 4 through 8 are implemented: the model feeds Modbus and the historian
 recovers saved state, and runs forecasts and private scenarios. The
 [8B design](docs/design/twin-core-milestone-8b.md) covers the implemented live
 synthetic control lifecycle and its verification.
-Dashboard forecast and scenario features belong to the deferred Milestone 9.
+Milestone 9 is the next feature discussion: model status, forecast results,
+scenario inputs, and comparison charts in the dashboard. These screens are
+not implemented yet.
 The published [ADR index](docs/adr/README.md) records decision status; local
 roadmaps are working notes, not dependencies for understanding the project.
 
 ## Quick Start
+
+New installations use PostgreSQL 16.15 and TimescaleDB 2.30.2. For an existing
+PostgreSQL 14 volume, complete the [engine conversion and recovery checks](docs/design/database-engine-upgrade.md)
+before starting the updated database image.
 
 ```bash
 cp .env.example .env
@@ -92,6 +98,8 @@ schema runner needs a one-time checked adoption. Follow the
 [data-layer instructions](data/README.md#existing-database-adoption) before
 starting the updated installer against an existing volume. Adoption preserves
 the volume and its data; later structural changes need a reviewed conversion.
+The engine conversion preserves the original volume and selects the verified
+new volume through TIMESCALE_DATA_VOLUME.
 
 For an existing `.env`, add `API_DB_USER=well_api` and a separate URL-safe
 `API_DB_PASSWORD` before upgrading. The migrator creates this restricted

@@ -624,18 +624,9 @@
       "[\"wellhead_wellhead_id_seq\", \"integer\", 1, 1, 2147483647, 1, 1, false, \"wellhead\", \"wellhead_id\"]"
     ],
     "triggers": [
-      "[\"alarmevent\", \"ts_cagg_invalidation_trigger\", \"CREATE TRIGGER ts_cagg_invalidation_trigger AFTER INSERT OR DELETE OR UPDATE ON public.alarmevent FOR EACH ROW EXECUTE FUNCTION _timescaledb_functions.continuous_agg_invalidation_trigger('public.alarmevent')\", \"O\"]",
-      "[\"alarmevent\", \"ts_insert_blocker\", \"CREATE TRIGGER ts_insert_blocker BEFORE INSERT ON public.alarmevent FOR EACH ROW EXECUTE FUNCTION _timescaledb_functions.insert_blocker()\", \"O\"]",
-      "[\"auditevent\", \"ts_insert_blocker\", \"CREATE TRIGGER ts_insert_blocker BEFORE INSERT ON public.auditevent FOR EACH ROW EXECUTE FUNCTION _timescaledb_functions.insert_blocker()\", \"O\"]",
       "[\"control_command\", \"enforce_control_lifecycle\", \"CREATE TRIGGER enforce_control_lifecycle BEFORE UPDATE ON public.control_command FOR EACH ROW EXECUTE FUNCTION enforce_control_lifecycle()\", \"O\"]",
       "[\"model_parameter_change\", \"enforce_parameter_change_lifecycle\", \"CREATE TRIGGER enforce_parameter_change_lifecycle BEFORE UPDATE ON public.model_parameter_change FOR EACH ROW EXECUTE FUNCTION enforce_parameter_change_lifecycle()\", \"O\"]",
-      "[\"parameterreading\", \"evaluate_wellhead_alarms_trigger\", \"CREATE TRIGGER evaluate_wellhead_alarms_trigger AFTER INSERT ON public.parameterreading REFERENCING NEW TABLE AS inserted FOR EACH STATEMENT EXECUTE FUNCTION evaluate_wellhead_alarms()\", \"O\"]",
-      "[\"parameterreading\", \"ts_cagg_invalidation_trigger\", \"CREATE TRIGGER ts_cagg_invalidation_trigger AFTER INSERT OR DELETE OR UPDATE ON public.parameterreading FOR EACH ROW EXECUTE FUNCTION _timescaledb_functions.continuous_agg_invalidation_trigger('public.parameterreading')\", \"O\"]",
-      "[\"parameterreading\", \"ts_insert_blocker\", \"CREATE TRIGGER ts_insert_blocker BEFORE INSERT ON public.parameterreading FOR EACH ROW EXECUTE FUNCTION _timescaledb_functions.insert_blocker()\", \"O\"]",
-      "[\"prediction_point\", \"ts_insert_blocker\", \"CREATE TRIGGER ts_insert_blocker BEFORE INSERT ON public.prediction_point FOR EACH ROW EXECUTE FUNCTION _timescaledb_functions.insert_blocker()\", \"O\"]",
-      "[\"scenario_point\", \"ts_insert_blocker\", \"CREATE TRIGGER ts_insert_blocker BEFORE INSERT ON public.scenario_point FOR EACH ROW EXECUTE FUNCTION _timescaledb_functions.insert_blocker()\", \"O\"]",
-      "[\"twin_recovery_event\", \"ts_insert_blocker\", \"CREATE TRIGGER ts_insert_blocker BEFORE INSERT ON public.twin_recovery_event FOR EACH ROW EXECUTE FUNCTION _timescaledb_functions.insert_blocker()\", \"O\"]",
-      "[\"twin_state_snapshot\", \"ts_insert_blocker\", \"CREATE TRIGGER ts_insert_blocker BEFORE INSERT ON public.twin_state_snapshot FOR EACH ROW EXECUTE FUNCTION _timescaledb_functions.insert_blocker()\", \"O\"]"
+      "[\"parameterreading\", \"evaluate_wellhead_alarms_trigger\", \"CREATE TRIGGER evaluate_wellhead_alarms_trigger AFTER INSERT ON public.parameterreading REFERENCING NEW TABLE AS inserted FOR EACH STATEMENT EXECUTE FUNCTION evaluate_wellhead_alarms()\", \"O\"]"
     ],
     "types": [
       "[\"model_version_text\", \"d\", \"text\", false, null, [], [\"CHECK ((VALUE ~ '^[0-9]+\\\\.[0-9]+\\\\.[0-9]+$'::text))\"]]",
@@ -665,7 +656,7 @@
   },
   "source_checksum": "7f0049e14efc153a96d9252f884b764aa48b417fa94e02b7aae4ba7c897eac13",
   "versions": {
-    "postgres_major": "14",
-    "timescaledb": "2.19.3"
+    "postgres_major": "16",
+    "timescaledb": "2.30.2"
   }
 }

@@ -42,6 +42,7 @@ acknowledge or shelve actions because the data model cannot store those states.
 - `design/twin-core-milestone-8.md`: forecasts, scenarios, and saved results
 - `design/twin-core-milestone-8b.md`: live model controls, authorization, and recovery
 - `design/consolidated-schema.md`: single schema source and checked adoption of existing data
+- `design/database-engine-upgrade.md`: engine conversion, backup restoration, and recorded acceptance
 - `design/reference-well-physics.md`: phase and diagnostic equations
 - `openapi/README.md`: the API contracts and the rules for changing them
 - `roadmap.md`: the local feature plan (ignored by Git)

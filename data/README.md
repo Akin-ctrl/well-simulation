@@ -89,14 +89,17 @@ ready once it has written readings, and not ready while it is reconnecting.
 The root `README.md` has the quick start. The service still named `migrator`
 runs the installer. It installs `sql/schema.sql` on an empty database or checks
 an already adopted database. It refuses an unexpected or incomplete schema.
-The Docker database image is pinned to the verified PostgreSQL 14 and
-TimescaleDB 2.19.3 image.
+Compose and CI pin PostgreSQL 16.15 with TimescaleDB 2.30.2. An existing
+PostgreSQL 14 volume needs the [engine upgrade procedure](../docs/design/database-engine-upgrade.md)
+before it can run with this image. A new empty installation uses the current
+image directly.
 
 ### Existing database adoption
 
 Back up the database and test restoring that backup into a disposable database
-before adoption. TimescaleDB 2.19.3 failed the compressed-data logical restore
-test, so use the verified physical-backup procedure described in the design.
+before adoption. An old TimescaleDB 2.19.3 database needs the physical-backup
+procedure because its compressed-null logical restore is broken. Upgrade its
+engine before comparing it with the current generated reference.
 Follow the [adoption design](../docs/design/consolidated-schema.md)
 for the full checks. The original volume stays in place.
 
@@ -133,6 +136,20 @@ conversion plan. Editing the file does not automatically upgrade stored data.
 An interrupted installation stays marked incomplete. Automatic retries do not
 resume statements or delete objects. Inspect the saved progress and recover
 from a verified backup, or explicitly rebuild an expendable test database.
+
+### Changing the database engine
+
+Follow the [engine upgrade design](../docs/design/database-engine-upgrade.md).
+It separates a PostgreSQL major-version upgrade from the TimescaleDB extension
+update and verifies both on a copy before changing the running stack.
+Save the previous generated contract before building the new one.
+After the upgrade, use accept-engine --previous-contract PATH to verify and
+record the changed engine identity. Normal startup never accepts it implicitly.
+
+TIMESCALE_DATA_VOLUME selects the verified converted Docker volume. Leave it
+empty for a new stack to use its normal project-specific volume. Keeping the
+old default name makes an unconverted PostgreSQL 14 volume fail to start under
+PostgreSQL 16, rather than silently starting an empty historian.
 
 To inspect the data:
 

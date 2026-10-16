@@ -109,3 +109,6 @@ The project should not claim to be a high-fidelity reservoir simulator. The targ
 These predate the current schema. The complete definition in `data/sql/schema.sql` is
 canonical where the two disagree. The [schema design](../design/consolidated-schema.md)
 explains installation, structural checks, and adoption of existing data.
+Compose and CI pin PostgreSQL 16.15 with TimescaleDB 2.30.2. The
+[engine upgrade design](../design/database-engine-upgrade.md) covers converting
+an existing volume, verifying recovery, and accepting the new generated reference.

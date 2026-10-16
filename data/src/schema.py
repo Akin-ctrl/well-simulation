@@ -13,6 +13,7 @@ import psycopg2
 import psycopg2.extensions
 from psycopg2 import sql
 
+from schema_engine import accept_engine
 from schema_install import (
     SchemaContract,
     adopt,
@@ -322,7 +323,7 @@ def command_parser() -> argparse.ArgumentParser:
         "mode",
         nargs="?",
         default="init",
-        choices=("init", "check", "adopt", "build-reference"),
+        choices=("init", "check", "adopt", "build-reference", "accept-engine"),
     )
     parser.add_argument(
         "--without-seeds",
@@ -333,6 +334,11 @@ def command_parser() -> argparse.ArgumentParser:
         "--contract-output",
         type=Path,
         help="Write a generated reference from a new disposable database",
+    )
+    parser.add_argument(
+        "--previous-contract",
+        type=Path,
+        help="Verified pre-upgrade reference, required only by accept-engine",
     )
     return parser
 
@@ -351,6 +357,8 @@ def execute_mode(
     """Dispatch the explicit database action while holding the installer lock."""
     source = SqlFile.load(SCHEMA_PATH)
     seeds = discover(SEEDS_DIR)
+    if (args.mode == "accept-engine") != (args.previous_contract is not None):
+        raise ValueError("--previous-contract is required only for accept-engine")
     if args.mode == "build-reference":
         if args.contract_output is None:
             raise ValueError("build-reference requires --contract-output")
@@ -361,6 +369,11 @@ def execute_mode(
     if args.contract_output is not None:
         raise ValueError("--contract-output is only valid with build-reference")
     contract = SchemaContract.load(CONTRACT_PATH, source)
+    if args.mode == "accept-engine":
+        previous = SchemaContract.load(args.previous_contract, source)
+        accept_engine(conn, previous, contract, seeds)
+        logger.info("Verified engine change accepted and audited")
+        return
     if args.mode == "adopt":
         adopt(conn, source, contract, seeds)
     elif args.mode == "check" or has_table(conn, "schema_installation"):

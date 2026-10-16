@@ -1,7 +1,7 @@
 services:
   db:
-    # Verified PostgreSQL 14 / TimescaleDB 2.19.3 image.
-    image: timescale/timescaledb@sha256:0f5553d37abbe0f20bfe0a04dab5d1238955b5cda2711aba403090f95b6e51ff
+    # PostgreSQL 16.15 / TimescaleDB 2.30.2. See the engine upgrade design.
+    image: timescale/timescaledb@sha256:6f139d56042989bd35f50ba5986e492cd32e35cc6778c50be2659add298dc09f
     container_name: wellhead_db
     environment:
       - POSTGRES_USER=${POSTGRES_USER}
@@ -206,6 +206,9 @@ services:
 
 volumes:
   timescaledb_data:
+    # Keep the existing default name. A major-version upgrade selects its
+    # verified new volume explicitly, preserving the original for recovery.
+    name: ${TIMESCALE_DATA_VOLUME:-${COMPOSE_PROJECT_NAME}_timescaledb_data}
   pgadmin_data:
 
 networks:
