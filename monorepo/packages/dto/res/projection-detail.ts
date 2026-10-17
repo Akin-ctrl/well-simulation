@@ -1,4 +1,5 @@
 import z from 'zod';
+import type { BranchOrigin } from './snapshots';
 import { controlChangeSchema } from '../req/projection';
 import { projectionResponseSchema } from './projection';
 
@@ -38,6 +39,7 @@ export type RunSummary = {
   createdAt: string;
   baseSimulatedAt: string;
   modelVersion: string;
+  branchOrigin: BranchOrigin;
   horizonSeconds: number;
   stepSeconds: number;
   confidenceScore: number;

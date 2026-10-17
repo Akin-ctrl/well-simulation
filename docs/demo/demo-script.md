@@ -82,3 +82,12 @@ the result before submitting again. The application does not retry the POST.
   The [operating workspace design](../design/operating-workspace.md) records both flows.
   Field calibration, physical control, and alarm acknowledgement remain outside
   this demo's implemented scope.
+
+## Compare an earlier state
+
+Open Scenarios and select Saved snapshot. Search for a time in the displayed time
+zone, choose a compatible candidate, and review its exact time. Name the run,
+choose a control change, and run it. Check Starting state in the result, then
+reload the link to confirm that it reopens the same saved branch. The model uses
+alarm rules active at execution. Older branches can lose chart points sooner
+because retention follows simulated dates.

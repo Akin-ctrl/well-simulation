@@ -338,4 +338,157 @@ describe('Milestone 8 projection API', () => {
       )
     ).toBe(true);
   });
+  it('authenticates strict snapshot searches and preserves exact identifiers', async () => {
+    const at = new Date().toISOString();
+    const path = `/twin/wellheads/1/snapshots?${new URLSearchParams({ at })}`;
+    expect((await request(path)).status).toBe(401);
+    expect((await request(path + '&extra=1', { cookie })).status).toBe(400);
+    expect(
+      (await request('/twin/wellheads/1/snapshots?at=invalid', { cookie })).status
+    ).toBe(400);
+    const payload = {
+      wellheadId: 1,
+      checkedAt: at,
+      hasMore: false,
+      items: [
+        {
+          snapshotId: '9007199254740993',
+          simulatedAt: at,
+          modelVersion: '0.3.0',
+          compatible: true,
+          reason: 'compatible',
+        },
+      ],
+    };
+    const call = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(new Response(JSON.stringify(payload)));
+    try {
+      const response = await request(path, { cookie });
+      expect(response.status).toBe(200);
+      expect(await responseData(response)).toEqual(payload);
+      const headers = new Headers(call.mock.calls[0]?.[1]?.headers);
+      expect(headers.get('x-twin-internal-token')?.length).toBeGreaterThanOrEqual(32);
+      call.mockResolvedValueOnce(
+        new Response(JSON.stringify({ ...payload, wellheadId: 2 }))
+      );
+      expect((await request(path, { cookie })).status).toBe(503);
+    } finally {
+      call.mockRestore();
+    }
+  });
+
+  it('keeps historical provenance in saved detail and history after source expiry', async () => {
+    const origin = {
+      kind: 'snapshot',
+      snapshotId: '9007199254740993',
+      simulatedAt: baseAt,
+    };
+    await withDb((client) =>
+      client.query('UPDATE scenario_run SET base_state=$1 WHERE run_id=$2', [
+        { branchOrigin: origin },
+        scenarioId,
+      ])
+    );
+    try {
+      const saved = await responseData<ProjectionDetail>(
+        await request(`/twin/scenarios/${scenarioId}`, { cookie })
+      );
+      expect(saved.branchOrigin).toEqual(origin);
+      const history = await responseData<RunHistory>(
+        await request('/twin/wellheads/1/runs?kind=scenario', { cookie })
+      );
+      expect(
+        history.items.find((item) => item.runId === scenarioId)?.branchOrigin
+      ).toEqual(origin);
+      // No source snapshot exists: saved reads depend on the run's own base record.
+    } finally {
+      await withDb((client) =>
+        client.query("UPDATE scenario_run SET base_state='{}' WHERE run_id=$1", [
+          scenarioId,
+        ])
+      );
+    }
+  });
+
+  it('passes snapshot identity unchanged and rejects a mismatched upstream source', async () => {
+    const selection = { snapshotId: '9007199254740993', simulatedAt: baseAt };
+    const input = {
+      wellheadId: 1,
+      name: 'Past pressure',
+      horizonSeconds: 300,
+      stepSeconds: 300,
+      controls: [{ offsetMinutes: 0, input: { pumpOn: false } }],
+      baseSnapshot: selection,
+    };
+    const payload = {
+      runId,
+      kind: 'scenario',
+      wellheadId: 1,
+      name: input.name,
+      source: 'synthetic_reduced_order_model',
+      fieldCalibrated: false,
+      modelVersion: '0.3.0',
+      baseSimulatedAt: baseAt,
+      generatedAt: baseAt,
+      horizonSeconds: 300,
+      stepSeconds: 300,
+      branchOrigin: { kind: 'snapshot', ...selection },
+      confidence: {
+        method: 'heuristic_uncalibrated',
+        score: 0.4,
+        label: 'moderate',
+        reasons: ['historical_snapshot'],
+      },
+      points: [
+        {
+          elapsedSeconds: 300,
+          timestamp: forecastAt,
+          values: { flow_rate: 0 },
+          baselineValues: { flow_rate: 100 },
+          alarmRisk: 'none',
+          baselineAlarmRisk: 'none',
+          triggeredRuleIds: [],
+        },
+      ],
+    };
+    const call = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(new Response(JSON.stringify(payload), { status: 201 }));
+    try {
+      expect(
+        (await request('/twin/scenarios', { method: 'POST', cookie, body: input }))
+          .status
+      ).toBe(200);
+      expect(JSON.parse(String(call.mock.calls[0]?.[1]?.body)).baseSnapshot).toEqual(
+        selection
+      );
+      call.mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ ...payload, branchOrigin: { kind: 'current' } }),
+          { status: 201 }
+        )
+      );
+      expect(
+        (await request('/twin/scenarios', { method: 'POST', cookie, body: input }))
+          .status
+      ).toBe(502);
+      call.mockResolvedValueOnce(new Response('{}', { status: 409 }));
+      expect(
+        (await request('/twin/scenarios', { method: 'POST', cookie, body: input }))
+          .status
+      ).toBe(409);
+      expect(
+        (
+          await request('/twin/wellheads/1/forecast', {
+            method: 'POST',
+            cookie,
+            body: { baseSnapshot: selection },
+          })
+        ).status
+      ).toBe(400);
+    } finally {
+      call.mockRestore();
+    }
+  });
 });

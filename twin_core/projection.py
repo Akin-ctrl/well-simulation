@@ -58,6 +58,17 @@ class ProjectionBase:
     parameters: ModelParameters
     restored_from: datetime | None
     last_recovery_event_at: datetime | None
+    snapshot_id: str | None = None
+
+    def branch_origin(self) -> dict[str, str]:
+        """Identify the exact source independently from execution time."""
+        if self.snapshot_id is None:
+            return {"kind": "current"}
+        return {
+            "kind": "snapshot",
+            "snapshotId": self.snapshot_id,
+            "simulatedAt": self.state.simulated_at.isoformat(),
+        }
 
 
 @dataclass(frozen=True)
@@ -159,6 +170,7 @@ class ProjectionResult:
             "modelVersion": self.base.model_version,
             "baseSimulatedAt": self.base.state.simulated_at.isoformat(),
             "generatedAt": self.generated_at.isoformat(),
+            "branchOrigin": self.base.branch_origin(),
             "horizonSeconds": self.horizon_seconds,
             "stepSeconds": self.step_seconds,
             "confidence": {
@@ -290,6 +302,8 @@ def _confidence(
 ) -> tuple[float, tuple[str, ...]]:
     """Explain a bounded heuristic score, never a statistical interval."""
     reasons = ["synthetic_uncalibrated", "forecast_horizon"]
+    if base.snapshot_id is not None:
+        reasons.append("historical_snapshot")
     score = 0.65 - 0.25 * horizon_seconds / MAX_HORIZON_SECONDS
     if (
         base.restored_from is not None
@@ -327,6 +341,8 @@ def project(
 ) -> ProjectionResult:
     """Integrate the existing one-second model on private immutable copies."""
     validate_projection_request(kind, name, controls, horizon_seconds, step_seconds)
+    if kind == "forecast" and base.snapshot_id is not None:
+        raise ValueError("Forecasts require current state")
 
     current = base.state
     baseline = base.state

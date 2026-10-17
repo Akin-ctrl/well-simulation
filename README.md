@@ -50,6 +50,7 @@ The dashboard connects monitoring with the existing model analysis:
 - Forecast and scenario forms with shared input validation.
 - Saved comparison charts, original inputs, confidence reasons, and value tables.
 - Per-well history with direct links that reopen results without running the model.
+- Historical scenarios from exact compatible model snapshots, with saved origin metadata.
 
 The Alarm Center has no acknowledge or shelve buttons because the backend cannot
 store those states yet.
@@ -218,6 +219,8 @@ shown in the monitoring views has no active alarms.
 - [Saved forecast](docs/screenshots/forecast.png)
 - [Scenario comparison](docs/screenshots/scenario.png)
 - [Saved-run history](docs/screenshots/saved-runs.png)
+- [Historical scenario](docs/screenshots/historical-scenario.png)
+- [Historical scenario on a phone](docs/screenshots/historical-scenario-mobile.png)
 - [Scenario on a phone-sized viewport](docs/screenshots/scenario-mobile.png)
 
 ## Browser verification

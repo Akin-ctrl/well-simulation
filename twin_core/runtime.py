@@ -24,6 +24,14 @@ from twin_core.database import (
     HistorianReader,
     TelemetrySnapshot,
 )
+from twin_core.historical import (
+    MAX_SNAPSHOT_AGE,
+    SNAPSHOT_PAGE_SIZE,
+    SNAPSHOT_SEARCH_WINDOW,
+    SnapshotMissingError,
+    SnapshotSelection,
+    historical_base,
+)
 from twin_core.metrics import TwinMetrics
 from twin_core.model import MODEL_STEP_SECONDS, ModelParameters, ProcessState
 from twin_core.persistence import (
@@ -34,6 +42,7 @@ from twin_core.persistence import (
     TwinPersistence,
 )
 from twin_core.projection import (
+    ProjectionBase,
     ProjectionResult,
     ScheduledControl,
     project,
@@ -479,6 +488,66 @@ class TwinRuntime:
         """Read current lifecycle state for one active wellhead."""
         return self.registry.get(wellhead_id)
 
+    def snapshot_candidates(self, wellhead_id: int, at: datetime) -> dict[str, object]:
+        """Find a small saved-state window using installed parameter identity."""
+        now = self._wall()
+        if not now - MAX_SNAPSHOT_AGE <= at <= now:
+            raise ValueError("Search time must be within the preceding 89 days")
+        parameters = self.registry.parameters_for(wellhead_id)
+        if parameters is None or self.persistence is None:
+            raise ProjectionUnavailableError("Snapshot parameters are unavailable")
+        if not self._read_slots.acquire(blocking=False):
+            raise ReadCapacityError("Snapshot read capacity is full")
+        try:
+            candidates = self.persistence.find_snapshots(
+                wellhead_id,
+                max(at - SNAPSHOT_SEARCH_WINDOW, now - MAX_SNAPSHOT_AGE),
+                at,
+            )
+        finally:
+            self._read_slots.release()
+        fingerprint = parameter_fingerprint(parameters)
+        return {
+            "wellheadId": wellhead_id,
+            "checkedAt": now.isoformat(),
+            "hasMore": len(candidates) > SNAPSHOT_PAGE_SIZE,
+            "items": [
+                {
+                    **item.selection.to_payload(),
+                    "modelVersion": item.model_version,
+                    "compatible": item.reason(self.defaults.version, fingerprint)
+                    == "compatible",
+                    "reason": item.reason(self.defaults.version, fingerprint),
+                }
+                for item in candidates[:SNAPSHOT_PAGE_SIZE]
+            ],
+        }
+
+    def _historical_base(
+        self, wellhead_id: int, selection: SnapshotSelection
+    ) -> ProjectionBase:
+        """Read an exact snapshot within the shared database concurrency bound."""
+        parameters = self.registry.parameters_for(wellhead_id)
+        if parameters is None or self.persistence is None:
+            raise ProjectionUnavailableError("Snapshot parameters are unavailable")
+        if not self._read_slots.acquire(blocking=False):
+            raise ProjectionBusyError("Snapshot read capacity is full")
+        try:
+            saved = self.persistence.selected_snapshot(wellhead_id, selection)
+        finally:
+            self._read_slots.release()
+        if saved is None:
+            raise SnapshotMissingError("Selected snapshot no longer exists")
+        candidate, payload = saved
+        return historical_base(
+            wellhead_id,
+            candidate,
+            payload,
+            parameters,
+            self.defaults.version,
+            self._wall(),
+        )
+
     def create_projection(
         self,
         kind: Literal["forecast", "scenario"],
@@ -489,6 +558,7 @@ class TwinRuntime:
         *,
         name: str | None = None,
         controls: tuple[ScheduledControl, ...] = (),
+        base_snapshot: SnapshotSelection | None = None,
     ) -> ProjectionResult:
         """Run one bounded private model copy and persist it atomically."""
         if self.persistence is None:
@@ -498,15 +568,23 @@ class TwinRuntime:
             raise ProjectionBusyError("Projection capacity is full")
         started = self._monotonic()
         try:
-            base = self.registry.projection_base(wellhead_id)
+            if base_snapshot is not None and kind != "scenario":
+                raise ValueError("Only scenarios accept a saved starting state")
+            base = (
+                self._historical_base(wellhead_id, base_snapshot)
+                if base_snapshot is not None
+                else self.registry.projection_base(wellhead_id)
+            )
             now = self._wall()
             with self._lock:
                 holding = self._holding
-            if (
-                base is None
-                or holding
-                or abs((now - base.state.simulated_at).total_seconds())
-                > MAX_READY_TICK_AGE_SECONDS
+            if base is None or (
+                base_snapshot is None
+                and (
+                    holding
+                    or abs((now - base.state.simulated_at).total_seconds())
+                    > MAX_READY_TICK_AGE_SECONDS
+                )
             ):
                 raise ProjectionUnavailableError("Running model state is not current")
             rules = self.persistence.load_alarm_rules()

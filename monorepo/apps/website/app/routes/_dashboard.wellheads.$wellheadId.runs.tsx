@@ -55,7 +55,8 @@ export async function clientLoader({
       checkedAt: new Date().toISOString(),
     };
   } catch (error) {
-    if (error instanceof ApiError && [401, 403].includes(error.statusCode ?? 0)) throw error;
+    if (error instanceof ApiError && [401, 403].includes(error.statusCode ?? 0))
+      throw error;
     return {
       kind,
       offset: parsed.success ? parsed.data.offset : 0,
@@ -181,6 +182,12 @@ export default function SavedRuns() {
                         <Link to={projectionUrl(run.wellheadId, run.kind, run.runId)}>
                           {run.name ?? 'Forecast'}
                         </Link>
+                        <p className='twin-caption'>
+                          {run.branchOrigin.kind === 'snapshot'
+                            ? 'Saved snapshot'
+                            : 'Current state'}{' '}
+                          · {timeText(run.baseSimulatedAt)}
+                        </p>
                         <details className='twin-caption'>
                           <summary>Run ID</summary>
                           {run.runId}

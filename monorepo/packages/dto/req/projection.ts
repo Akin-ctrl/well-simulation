@@ -1,4 +1,5 @@
 import z from 'zod';
+import { snapshotSelectionSchema } from './snapshots';
 
 export const MAX_SCENARIO_STEPS = 16;
 
@@ -32,6 +33,7 @@ export const scenarioRequestSchema = z
   .object({
     wellheadId: z.number().int().positive().max(2_147_483_647),
     name: z.string().trim().min(1).max(120),
+    baseSnapshot: snapshotSelectionSchema.optional(),
     ...windowFields,
     controls: z
       .array(

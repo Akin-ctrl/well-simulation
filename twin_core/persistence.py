@@ -18,6 +18,11 @@ from psycopg2.extras import Json, execute_batch
 
 from twin_core.config import ParameterOverride, ServiceSettings
 from twin_core.database import DatabaseUnavailableError
+from twin_core.historical import (
+    SNAPSHOT_PAGE_SIZE,
+    SnapshotCandidate,
+    SnapshotSelection,
+)
 from twin_core.metrics import TwinMetrics
 from twin_core.projection import (
     MODEL_SIGNALS,
@@ -113,6 +118,50 @@ class TwinPersistence:
             for row in rows
         }
 
+    def find_snapshots(
+        self, wellhead_id: int, start: datetime, end: datetime
+    ) -> tuple[SnapshotCandidate, ...]:
+        """Read one bounded time window without transferring full process JSON."""
+        try:
+            with closing(self._connect(read_only=True)) as conn, conn.cursor() as cur:
+                cur.execute(
+                    "SELECT snapshot_id, simulated_at, model_version, "
+                    "parameter_fingerprint FROM twin_state_snapshot "
+                    "WHERE wellhead_id = %s AND simulated_at >= %s "
+                    "AND simulated_at <= %s "
+                    "ORDER BY simulated_at DESC, snapshot_id DESC LIMIT %s",
+                    (wellhead_id, start, end, SNAPSHOT_PAGE_SIZE + 1),
+                )
+                return tuple(
+                    SnapshotCandidate(
+                        SnapshotSelection(str(row[0]), row[1]), row[2], row[3]
+                    )
+                    for row in cur.fetchall()
+                )
+        except psycopg2.Error as exc:
+            raise DatabaseUnavailableError("Could not find saved snapshots") from exc
+
+    def selected_snapshot(
+        self, wellhead_id: int, selection: SnapshotSelection
+    ) -> tuple[SnapshotCandidate, object] | None:
+        """Use well ownership and both primary-key fields for an exact read."""
+        try:
+            with closing(self._connect(read_only=True)) as conn, conn.cursor() as cur:
+                cur.execute(
+                    "SELECT model_version, parameter_fingerprint, state "
+                    "FROM twin_state_snapshot WHERE wellhead_id = %s "
+                    "AND snapshot_id = %s AND simulated_at = %s",
+                    (wellhead_id, int(selection.snapshot_id), selection.simulated_at),
+                )
+                row = cur.fetchone()
+                return (
+                    (SnapshotCandidate(selection, row[0], row[1]), row[2])
+                    if row is not None
+                    else None
+                )
+        except psycopg2.Error as exc:
+            raise DatabaseUnavailableError("Could not read selected snapshot") from exc
+
     def load_overrides(
         self, wellhead_ids: Sequence[int], model_version: str
     ) -> dict[int, dict[str, ParameterOverride]]:
@@ -192,7 +241,7 @@ class TwinPersistence:
             base.state.simulated_at,
             result.horizon_seconds,
             result.step_seconds,
-            Json(base.state.to_payload()),
+            Json({**base.state.to_payload(), "branchOrigin": base.branch_origin()}),
             Json(asdict(base.parameters)),
             Json(asdict(base.controls)),
         )

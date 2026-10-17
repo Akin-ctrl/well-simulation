@@ -19,6 +19,37 @@ tags:
   - name: Dashboard
   - name: Twin
 paths:
+  /twin/wellheads/{wellheadId}/snapshots:
+    get:
+      summary: Find exact saved states for historical scenarios.
+      description: Requires scenario analysis permission. Search covers 24 hours at or before a UTC time within the preceding 89 days. Compatibility is checked again when running.
+      operationId: findTwinSnapshots
+      security: [{cookieAuth: []}]
+      parameters:
+        - name: wellheadId
+          in: path
+          required: true
+          schema: {type: integer, minimum: 1, maximum: 2147483647}
+        - name: at
+          in: query
+          required: true
+          schema: {$ref: '#/components/schemas/SnapshotSelection/properties/simulatedAt'}
+      responses:
+        '200':
+          description: Bounded snapshot metadata, newest first.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, msg, status]
+                properties:
+                  data: {$ref: '#/components/schemas/SnapshotList'}
+                  msg: {type: string}
+                  status: {type: integer, const: 200}
+        '400': {description: Invalid search fields or time.}
+        '403': {description: Missing authority.}
+        '404': {description: Unknown active well.}
+        '503': {description: Model parameters or snapshot storage unavailable.}
   /health:
     get:
       tags: [Health]
@@ -371,6 +402,7 @@ paths:
         "401": {$ref: "#/components/responses/Unauthorized"}
         "403": {$ref: "#/components/responses/Forbidden"}
         "404": {$ref: "#/components/responses/NotFound"}
+        "409": {description: Selected snapshot is incompatible or outside the supported age window.}
         "503": {$ref: "#/components/responses/ServerError"}
         "504": {$ref: "#/components/responses/ServerError"}
   /twin/forecasts/{runId}:
@@ -1694,11 +1726,58 @@ components:
         horizonSeconds: {type: integer, minimum: 300, maximum: 7200, default: 1800}
         stepSeconds: {type: integer, minimum: 5, maximum: 300, default: 60}
       description: Horizon must be divisible by step size.
+    SnapshotSelection:
+      type: object
+      additionalProperties: false
+      required: [snapshotId, simulatedAt]
+      properties:
+        snapshotId:
+          type: string
+          pattern: '^[1-9][0-9]{0,18}$'
+          description: Exact decimal bigint, at most 9223372036854775807.
+        simulatedAt:
+          type: string
+          format: date-time
+          description: UTC timestamp with at most six fractional digits.
+    BranchOrigin:
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required: [kind]
+          properties:
+            kind: {type: string, const: current}
+        - type: object
+          additionalProperties: false
+          required: [kind, snapshotId, simulatedAt]
+          properties:
+            kind: {type: string, const: snapshot}
+            snapshotId: {$ref: '#/components/schemas/SnapshotSelection/properties/snapshotId'}
+            simulatedAt: {$ref: '#/components/schemas/SnapshotSelection/properties/simulatedAt'}
+    SnapshotList:
+      type: object
+      required: [wellheadId, checkedAt, items, hasMore]
+      properties:
+        wellheadId: {type: integer, minimum: 1}
+        checkedAt: {type: string, format: date-time}
+        hasMore: {type: boolean}
+        items:
+          type: array
+          maxItems: 20
+          items:
+            type: object
+            required: [snapshotId, simulatedAt, modelVersion, compatible, reason]
+            properties:
+              snapshotId: {$ref: '#/components/schemas/SnapshotSelection/properties/snapshotId'}
+              simulatedAt: {$ref: '#/components/schemas/SnapshotSelection/properties/simulatedAt'}
+              modelVersion: {type: string}
+              compatible: {type: boolean}
+              reason: {type: string, enum: [compatible, model_version_changed, parameters_changed]}
     ScenarioRequest:
       type: object
       additionalProperties: false
       required: [wellheadId, name, controls]
       properties:
+        baseSnapshot: {$ref: "#/components/schemas/SnapshotSelection"}
         wellheadId: {type: integer, minimum: 1}
         name: {type: string, minLength: 1, maxLength: 120}
         horizonSeconds: {type: integer, minimum: 300, maximum: 7200, default: 1800}
@@ -1758,8 +1837,9 @@ components:
     RunSummary:
       type: object
       required: [runId, kind, wellheadId, name, createdAt, baseSimulatedAt,
-        modelVersion, horizonSeconds, stepSeconds, confidenceScore]
+        modelVersion, horizonSeconds, stepSeconds, confidenceScore, branchOrigin]
       properties:
+        branchOrigin: {$ref: "#/components/schemas/BranchOrigin"}
         runId: {type: string, format: uuid}
         kind: {type: string, enum: [forecast, scenario]}
         wellheadId: {type: integer, minimum: 1}
@@ -1806,7 +1886,7 @@ components:
           type: object
           required: [runId, kind, wellheadId, source, fieldCalibrated, modelVersion,
             baseSimulatedAt, generatedAt, horizonSeconds, stepSeconds,
-            confidence, points]
+            confidence, points, branchOrigin]
           properties:
             runId: {type: string, format: uuid}
             kind: {type: string, enum: [forecast, scenario]}
@@ -1815,6 +1895,7 @@ components:
             source: {type: string, const: synthetic_reduced_order_model}
             fieldCalibrated: {type: boolean, const: false}
             modelVersion: {type: string}
+            branchOrigin: {$ref: "#/components/schemas/BranchOrigin"}
             baseSimulatedAt: {type: string, format: date-time}
             generatedAt: {type: string, format: date-time}
             horizonSeconds: {type: integer}

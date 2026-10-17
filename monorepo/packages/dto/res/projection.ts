@@ -1,4 +1,5 @@
 import z from 'zod';
+import { branchOriginSchema } from './snapshots';
 
 export const alarmRiskSchema = z.enum(['none', 'warning', 'critical', 'unknown']);
 
@@ -23,6 +24,7 @@ export const projectionResponseSchema = z.object({
   modelVersion: z.string(),
   baseSimulatedAt: z.string(),
   generatedAt: z.string(),
+  branchOrigin: branchOriginSchema.default({ kind: 'current' }),
   horizonSeconds: z.number().int().min(300).max(7200),
   stepSeconds: z.number().int().min(5).max(300),
   confidence: z.object({

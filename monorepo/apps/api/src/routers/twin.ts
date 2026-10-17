@@ -24,7 +24,13 @@ import { requireCapability, sessionUserId } from '../middleware/authorize';
 import { responseHandler } from '../utils/handler';
 
 import { projectionDetail, runHistory } from '../projection-details';
-import { modelStatus } from '../twin-control-client';
+import { modelStatus, snapshotCandidates } from '../twin-control-client';
+import {
+  snapshotSearchSchema,
+  snapshotSelectionSchema,
+  snapshotTimeKey,
+} from '@well-simulation/dto/req/snapshots';
+import { storedBranchOrigin } from '@well-simulation/dto/res/snapshots';
 
 const MAX_TWIN_RESPONSE_BYTES = 5_000_000;
 const TWIN_TIMEOUT_MS = 12_000;
@@ -70,9 +76,12 @@ async function runTwin(
     }
     throw new HTTPException(503, { message: 'Twin service unavailable' });
   }
-  if (response.status === 400 || response.status === 404 || response.status === 503) {
-    throw new HTTPException(response.status, {
-      message: 'Twin request could not complete',
+  if ([400, 404, 409, 503].includes(response.status)) {
+    throw new HTTPException(response.status as 400 | 404 | 409 | 503, {
+      message:
+        response.status === 409
+          ? 'The selected snapshot no longer matches this model'
+          : 'Twin request could not complete',
     });
   }
   if (response.status !== 201) {
@@ -88,7 +97,22 @@ async function runTwin(
     throw new HTTPException(502, { message: 'Twin service response is too large' });
   }
   try {
-    return projectionResponseSchema.parse(JSON.parse(text));
+    const result = projectionResponseSchema.parse(JSON.parse(text));
+    if ('baseSnapshot' in body && body.baseSnapshot !== undefined) {
+      const selected = snapshotSelectionSchema.parse(body.baseSnapshot);
+      if (
+        result.kind !== 'scenario' ||
+        result.branchOrigin.kind !== 'snapshot' ||
+        result.branchOrigin.snapshotId !== selected.snapshotId ||
+        snapshotTimeKey(result.branchOrigin.simulatedAt) !==
+          snapshotTimeKey(selected.simulatedAt) ||
+        result.baseSimulatedAt !== result.branchOrigin.simulatedAt
+      )
+        throw new Error('Historical source mismatch');
+    } else if (result.branchOrigin.kind !== 'current') {
+      throw new Error('Current source mismatch');
+    }
+    return result;
   } catch {
     throw new HTTPException(502, { message: 'Twin service response is invalid' });
   }
@@ -104,6 +128,7 @@ function baseResponse(run: {
   stepSeconds: number;
   confidenceScore: number;
   confidenceReasons: string[];
+  baseState: Record<string, unknown>;
 }) {
   return {
     runId: run.runId,
@@ -113,6 +138,7 @@ function baseResponse(run: {
     modelVersion: run.modelVersion,
     baseSimulatedAt: run.baseSimulatedAt,
     generatedAt: run.createdAt,
+    branchOrigin: storedBranchOrigin(run.baseState),
     horizonSeconds: run.horizonSeconds,
     stepSeconds: run.stepSeconds,
     confidence: {
@@ -192,6 +218,18 @@ async function savedScenario(runId: string) {
 export const twinRouter = new Hono()
   .use('*', bodyLimit({ maxSize: 4096 }))
   .get('/status', requireCapability('dashboard:read'), responseHandler(modelStatus))
+  .get(
+    '/wellheads/:wellheadId/snapshots',
+    requireCapability('scenario:run'),
+    validator('query', (value) => snapshotSearchSchema.parse(value)),
+    (c) =>
+      responseHandler(() =>
+        snapshotCandidates(
+          positiveWellheadId(c.req.param('wellheadId')),
+          c.req.valid('query').at
+        )
+      )(c)
+  )
   .get(
     '/wellheads/:wellheadId/runs',
     requireCapability('dashboard:read'),

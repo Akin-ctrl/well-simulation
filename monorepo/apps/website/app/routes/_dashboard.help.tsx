@@ -45,6 +45,12 @@ export default function Guide() {
               choke to 80% at minute 5. Choose Run scenario. This changes the model
               copy; the running well keeps its controls.
             </p>
+            <p>
+              To review an earlier state, choose Saved snapshot, search by time, and
+              select a compatible snapshot. The scenario clock starts at that time.
+              Historical runs use alarm rules active when you run them; chart retention
+              follows their simulated dates.
+            </p>
           </li>
           <li>
             <h3>Compare the result</h3>

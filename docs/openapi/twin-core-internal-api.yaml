@@ -19,6 +19,32 @@ tags:
   - name: Forecasts
   - name: Scenarios
 paths:
+  /wellheads/{wellheadId}/snapshots:
+    get:
+      summary: Find exact saved states for historical scenarios.
+      description: Requires the internal service token. Search covers 24 hours at or before a UTC time within the preceding 89 days. Compatibility is checked again when running.
+      operationId: findInternalSnapshots
+      security: [{serviceToken: []}]
+      parameters:
+        - name: wellheadId
+          in: path
+          required: true
+          schema: {type: integer, minimum: 1, maximum: 2147483647}
+        - name: at
+          in: query
+          required: true
+          schema: {$ref: '#/components/schemas/SnapshotSelection/properties/simulatedAt'}
+      responses:
+        '200':
+          description: Bounded snapshot metadata, newest first.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SnapshotList'
+        '400': {description: Invalid search fields or time.}
+        '403': {description: Missing authority.}
+        '404': {description: Unknown active well.}
+        '503': {description: Model parameters or snapshot storage unavailable.}
   /health:
     get:
       tags: [Health]
@@ -174,6 +200,7 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+        "409": {description: Selected snapshot is incompatible or outside the supported age window.}
         "503":
           $ref: "#/components/responses/HistorianUnavailable"
   /wellheads/{wellheadId}/controls:
@@ -901,11 +928,58 @@ components:
       description: Horizon must be divisible by step size.
     ForecastResponse:
       $ref: "#/components/schemas/ProjectionResponse"
+    SnapshotSelection:
+      type: object
+      additionalProperties: false
+      required: [snapshotId, simulatedAt]
+      properties:
+        snapshotId:
+          type: string
+          pattern: '^[1-9][0-9]{0,18}$'
+          description: Exact decimal bigint, at most 9223372036854775807.
+        simulatedAt:
+          type: string
+          format: date-time
+          description: UTC timestamp with at most six fractional digits.
+    BranchOrigin:
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required: [kind]
+          properties:
+            kind: {type: string, const: current}
+        - type: object
+          additionalProperties: false
+          required: [kind, snapshotId, simulatedAt]
+          properties:
+            kind: {type: string, const: snapshot}
+            snapshotId: {$ref: '#/components/schemas/SnapshotSelection/properties/snapshotId'}
+            simulatedAt: {$ref: '#/components/schemas/SnapshotSelection/properties/simulatedAt'}
+    SnapshotList:
+      type: object
+      required: [wellheadId, checkedAt, items, hasMore]
+      properties:
+        wellheadId: {type: integer, minimum: 1}
+        checkedAt: {type: string, format: date-time}
+        hasMore: {type: boolean}
+        items:
+          type: array
+          maxItems: 20
+          items:
+            type: object
+            required: [snapshotId, simulatedAt, modelVersion, compatible, reason]
+            properties:
+              snapshotId: {$ref: '#/components/schemas/SnapshotSelection/properties/snapshotId'}
+              simulatedAt: {$ref: '#/components/schemas/SnapshotSelection/properties/simulatedAt'}
+              modelVersion: {type: string}
+              compatible: {type: boolean}
+              reason: {type: string, enum: [compatible, model_version_changed, parameters_changed]}
     ScenarioRequest:
       type: object
       additionalProperties: false
       required: [wellheadId, name, horizonSeconds, stepSeconds, controls]
       properties:
+        baseSnapshot: {$ref: "#/components/schemas/SnapshotSelection"}
         wellheadId:
           type: integer
           minimum: 1
@@ -961,8 +1035,9 @@ components:
       type: object
       required: [runId, kind, wellheadId, name, source, fieldCalibrated,
         modelVersion, baseSimulatedAt, generatedAt, horizonSeconds,
-        stepSeconds, confidence, points]
+        stepSeconds, confidence, points, branchOrigin]
       properties:
+        branchOrigin: {$ref: "#/components/schemas/BranchOrigin"}
         runId:
           type: string
           format: uuid

@@ -51,7 +51,7 @@ previously written down.
 | [0024](0024-twin-persistence-schema.md) | Use Relational Twin Metadata With Time-Series Run Outputs | Implemented |
 | [0025](0025-forecast-horizon-confidence.md) | Use Short Operational Forecasts With Heuristic Confidence | Implemented |
 | [0026](0026-retention-and-compression.md) | Use Tiered Retention And TimescaleDB Compression | Implemented |
-| [0027](0027-historical-branching.md) | Stage Historical Scenario Branching From Model Snapshots | Not started |
+| [0027](0027-historical-branching.md) | Stage Historical Scenario Branching From Model Snapshots | Implemented |
 | [0028](0028-api-specification-workflow.md) | Use Per-Service OpenAPI Specs Committed To Documentation | Implemented |
 | [0029](0029-metrics-stack.md) | Expose Prometheus-Compatible Metrics With Optional Observability Stack | Partial |
 | [0030](0030-portfolio-deployment-scope.md) | Target A Self-Contained Portfolio Deployment | Implemented |

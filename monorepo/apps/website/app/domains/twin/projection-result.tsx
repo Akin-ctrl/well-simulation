@@ -26,6 +26,8 @@ const REASONS: Record<string, string> = {
     'This reference model uses synthetic parameters without field calibration.',
   forecast_horizon:
     'Confidence decreases as the forecast extends further into the future.',
+  historical_snapshot:
+    'This scenario starts from a saved snapshot and uses the alarm rules active when it was run.',
   recent_recovery: 'The model recently recovered from a saved state or a clock gap.',
   no_active_alarm_rules: 'There are no active alarm rules for threshold comparison.',
   near_alarm_threshold: 'A projected value approaches an active threshold.',
@@ -74,6 +76,12 @@ export function ProjectionResult({ run }: { run: ProjectionDetail }) {
           <p className='twin-muted mb-4'>
             This saved result keeps its original inputs. Editing the draft does not
             change it.
+          </p>
+          <p className='twin-caption mb-4'>
+            Starting state:{' '}
+            {run.branchOrigin.kind === 'snapshot'
+              ? `Saved snapshot ${run.branchOrigin.snapshotId} at ${timeText(run.branchOrigin.simulatedAt)}. Chart retention follows simulated dates, so older scenarios may remain available for less time.`
+              : `Current state at ${timeText(run.baseSimulatedAt)}.`}
           </p>
           <div className='twin-filter'>
             <div>

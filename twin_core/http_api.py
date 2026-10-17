@@ -9,11 +9,17 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import ClassVar, Literal
-from urllib.parse import urlsplit
+from urllib.parse import parse_qs, urlsplit
 
 from prometheus_client import CONTENT_TYPE_LATEST
 
 from twin_core.database import DatabaseUnavailableError
+from twin_core.historical import (
+    SnapshotConflictError,
+    SnapshotMissingError,
+    SnapshotSelection,
+    utc_instant,
+)
 from twin_core.model import ControlInputs
 from twin_core.projection import (
     MAX_CONTROL_STEPS,
@@ -33,6 +39,7 @@ from twin_core.runtime import (
 WELLHEAD_PATH = re.compile(
     r"/wellheads/([1-9][0-9]{0,9})/(state|latest-telemetry|controls|parameters)"
 )
+SNAPSHOT_PATH = re.compile(r"/wellheads/([1-9][0-9]{0,9})/snapshots")
 FORECAST_PATH = re.compile(r"/wellheads/([1-9][0-9]{0,9})/forecast")
 COMMAND_NOTIFY_PATH = re.compile(
     r"/control-commands/[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}/notify"
@@ -59,6 +66,7 @@ class ProjectionInput:
     step_seconds: int
     name: str | None = None
     controls: tuple[ScheduledControl, ...] = ()
+    base_snapshot: SnapshotSelection | None = None
 
 
 def _object(value: object, name: str) -> dict[str, object]:
@@ -129,7 +137,13 @@ def _projection_input(path: str, body: dict[str, object]) -> ProjectionInput:
         if set(body) - {"horizonSeconds", "stepSeconds"}:
             raise ValueError("Unknown forecast field")
         return ProjectionInput("forecast", int(match.group(1)), horizon, step)
-    if set(body) != {"wellheadId", "name", "horizonSeconds", "stepSeconds", "controls"}:
+    if set(body) - {"baseSnapshot"} != {
+        "wellheadId",
+        "name",
+        "horizonSeconds",
+        "stepSeconds",
+        "controls",
+    }:
         raise ValueError("Scenario fields are incomplete or unknown")
     wellhead_id = body["wellheadId"]
     if type(wellhead_id) is not int or not 1 <= wellhead_id <= 2_147_483_647:
@@ -144,6 +158,9 @@ def _projection_input(path: str, body: dict[str, object]) -> ProjectionInput:
         step,
         name.strip(),
         _scenario_steps(body["controls"]),
+        SnapshotSelection.from_payload(body["baseSnapshot"])
+        if "baseSnapshot" in body
+        else None,
     )
 
 
@@ -167,6 +184,10 @@ class TwinRequestHandler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:
         """Route a bounded read or return a structured error."""
         parsed = urlsplit(self.path)
+        snapshot_match = SNAPSHOT_PATH.fullmatch(parsed.path)
+        if snapshot_match is not None:
+            self._snapshots(int(snapshot_match.group(1)), parsed.query, parsed.fragment)
+            return
         if parsed.query or parsed.fragment:
             self._json(400, {"error": "query_not_supported"})
             return
@@ -204,6 +225,33 @@ class TwinRequestHandler(BaseHTTPRequestHandler):
             return
 
         self._wellhead(int(match.group(1)), match.group(2))
+
+    def _snapshots(self, wellhead_id: int, query: str, fragment: str) -> None:
+        """Authenticate before reading or revealing snapshot availability."""
+        if not self._authorized():
+            return
+        try:
+            fields = parse_qs(
+                query, keep_blank_values=True, strict_parsing=True, max_num_fields=2
+            )
+            if fragment or set(fields) != {"at"} or len(fields["at"]) != 1:
+                raise ValueError("One search timestamp is required")
+            at = utc_instant(fields["at"][0])
+            if self.runtime.state(wellhead_id) is None:
+                self._json(404, {"error": "wellhead_not_found"})
+                return
+            result = self.runtime.snapshot_candidates(wellhead_id, at)
+        except ValueError:
+            self._json(400, {"error": "invalid_snapshot_search"})
+            return
+        except (
+            DatabaseUnavailableError,
+            ReadCapacityError,
+            ProjectionUnavailableError,
+        ):
+            self._json(503, {"error": "snapshots_unavailable"})
+            return
+        self._json(200, result)
 
     def _wellhead(self, wellhead_id: int, view: str) -> None:
         """Serve one active wellhead view."""
@@ -340,7 +388,14 @@ class TwinRequestHandler(BaseHTTPRequestHandler):
                 request.step_seconds,
                 name=request.name,
                 controls=request.controls,
+                base_snapshot=request.base_snapshot,
             )
+        except SnapshotMissingError:
+            self._json(404, {"error": "snapshot_not_found"})
+            return
+        except SnapshotConflictError:
+            self._json(409, {"error": "snapshot_incompatible"})
+            return
         except ProjectionBusyError:
             self._json(503, {"error": "projection_busy"})
             return

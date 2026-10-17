@@ -7,6 +7,7 @@ function result(stepSeconds: number): ProjectionDetail {
   return {
     runId: 'fdf20e93-ff4a-4db6-8db5-af9622314998',
     kind: 'scenario',
+    branchOrigin: { kind: 'current' },
     wellheadId: 1,
     name: 'Test',
     source: 'synthetic_reduced_order_model',

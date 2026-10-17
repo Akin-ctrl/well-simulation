@@ -13,6 +13,7 @@ import {
   storedScheduledControlSchema,
   type RunHistory,
 } from '@well-simulation/dto/res/projection-detail';
+import { storedBranchOrigin } from '@well-simulation/dto/res/snapshots';
 import { SCENARIO_CONTROLS } from '@well-simulation/dto/req/scenario-controls';
 import type { ProjectionResponse } from '@well-simulation/dto/res/projection';
 
@@ -76,6 +77,7 @@ export async function runHistory(
       horizonSeconds: table.horizonSeconds,
       stepSeconds: table.stepSeconds,
       confidenceScore: table.confidenceScore,
+      origin: sql<unknown>`coalesce(${table.baseState}->'branchOrigin', '{"kind":"current"}'::jsonb)`,
     })
     .from(table)
     .where(eq(table.wellheadId, wellheadId))
@@ -83,7 +85,11 @@ export async function runHistory(
     .limit(limit + 1)
     .offset(offset);
   return {
-    items: rows.slice(0, limit).map((row) => ({ ...row, kind })),
+    items: rows.slice(0, limit).map(({ origin, ...row }) => ({
+      ...row,
+      kind,
+      branchOrigin: storedBranchOrigin({ branchOrigin: origin }),
+    })),
     hasMore: rows.length > limit,
   };
 }

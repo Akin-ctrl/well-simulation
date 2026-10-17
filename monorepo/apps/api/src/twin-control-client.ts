@@ -8,6 +8,7 @@ import {
   parameterCatalogueSchema,
 } from '@well-simulation/dto/res/controls';
 import { config } from './config';
+import { snapshotListSchema } from '@well-simulation/dto/res/snapshots';
 import {
   fleetModelStatusSchema,
   type FleetModelStatus,
@@ -114,4 +115,18 @@ export async function modelStatus(): Promise<FleetModelStatus> {
     );
     return { checkedAt: new Date().toISOString(), available: false, wellheads: [] };
   }
+}
+
+/** Read bounded candidate metadata without exposing the service credential. */
+export async function snapshotCandidates(wellheadId: number, at: string) {
+  const result = snapshotListSchema.safeParse(
+    await twinRequest(
+      `/wellheads/${wellheadId}/snapshots?${new URLSearchParams({ at })}`,
+      undefined,
+      32_000
+    )
+  );
+  if (!result.success || result.data.wellheadId !== wellheadId)
+    throw new HTTPException(503, { message: 'Saved snapshots unavailable' });
+  return result.data;
 }

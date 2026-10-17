@@ -6,9 +6,10 @@ import json
 import os
 import threading
 from collections.abc import Generator
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from http.server import ThreadingHTTPServer
 from urllib.error import HTTPError
+from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 import pytest
@@ -24,6 +25,7 @@ from twin_core.database import (
     TelemetrySnapshot,
     make_snapshot,
 )
+from twin_core.historical import SnapshotCandidate, SnapshotSelection
 from twin_core.http_api import create_server
 from twin_core.metrics import TwinMetrics
 from twin_core.persistence import TwinPersistence
@@ -457,3 +459,69 @@ def test_model_status_does_not_call_a_fresh_tick_fresh_output(
     assert wells[0]["processAgeSeconds"] == 100
     assert wells[0]["current"] is False
     assert wells[0]["reason"] == "model_step_failed"
+
+
+def test_snapshot_finder_authentication_bounds_and_exact_selection(
+    projection_server: ProjectionServer,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    server, store, runtime = projection_server
+    base = runtime.registry.projection_base(1)
+    assert base is not None
+    at = base.state.simulated_at - timedelta(days=1)
+    selection = SnapshotSelection("9007199254740993", at)
+    item = SnapshotCandidate(selection, base.model_version, base.parameter_fingerprint)
+    monkeypatch.setattr(store, "find_snapshots", lambda *_: (item,))
+    payload = {**base.state.to_payload(), "simulatedAt": at.isoformat()}
+    monkeypatch.setattr(
+        store,
+        "selected_snapshot",
+        lambda well, selected: (item, payload)
+        if well == 1 and selected == selection
+        else None,
+    )
+    query = urlencode({"at": base.state.simulated_at.isoformat()})
+    assert _get(server, "/wellheads/999/snapshots?" + query)[0] == 403
+
+    def get(path: str) -> tuple[int, dict[str, object]]:
+        request = Request(
+            f"http://127.0.0.1:{server.server_port}" + path,
+            headers={"X-Twin-Internal-Token": "a" * 32},
+        )
+        try:
+            with urlopen(request, timeout=3) as response:  # noqa: S310
+                return response.status, json.load(response)
+        except HTTPError as error:
+            return error.code, json.load(error)
+
+    status, body = get("/wellheads/1/snapshots?" + query)
+    assert status == 200
+    assert body["items"][0]["snapshotId"] == selection.snapshot_id  # type: ignore[index]
+    for suffix in ["", query + "&" + query, query + "&extra=1", "at=not-a-date"]:
+        assert get("/wellheads/1/snapshots?" + suffix)[0] == 400
+    request_body = {
+        "wellheadId": 1,
+        "name": "Past state",
+        "horizonSeconds": 300,
+        "stepSeconds": 60,
+        "controls": [{"offsetMinutes": 0, "input": {"pumpOn": False}}],
+        "baseSnapshot": selection.to_payload(),
+    }
+    status, body = _post(server, "/scenarios", request_body)
+    assert status == 201 and body["baseSimulatedAt"] == at.isoformat()
+    assert store.saved[-1][0].base.snapshot_id == selection.snapshot_id
+    assert runtime.registry.projection_base(1) == base
+    request_body["baseSnapshot"] = {**selection.to_payload(), "snapshotId": "2"}
+    assert _post(server, "/scenarios", request_body)[0] == 404
+    request_body["baseSnapshot"] = selection.to_payload()
+    monkeypatch.setattr(
+        store,
+        "selected_snapshot",
+        lambda *_: (SnapshotCandidate(selection, "old", "changed"), payload),
+    )
+    assert _post(server, "/scenarios", request_body)[0] == 409
+    request_body["baseSnapshot"] = {
+        **selection.to_payload(),
+        "snapshotId": 9007199254740993,
+    }
+    assert _post(server, "/scenarios", request_body)[0] == 400

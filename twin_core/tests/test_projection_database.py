@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import replace
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from urllib.parse import unquote, urlparse
 from uuid import uuid4
 
@@ -12,6 +12,7 @@ import psycopg2
 import pytest
 from twin_core.config import ServiceSettings, load_defaults, resolve_parameters
 from twin_core.database import DatabaseUnavailableError
+from twin_core.historical import historical_base
 from twin_core.model import ControlInputs, ModelParameters, initial_state
 from twin_core.persistence import TwinPersistence
 from twin_core.projection import (
@@ -136,3 +137,79 @@ def test_forecast_and_scenario_commit_complete_runs_and_rollback_duplicates(
                     "UPDATE prediction_run SET confidence_score = 0 WHERE run_id = %s",
                     (forecast.run_id,),
                 )
+
+
+def test_historical_branch_reads_exact_source_and_preserves_it(
+    projection_database: tuple[TwinPersistence, str, str, int],
+) -> None:
+    """Use a real retained source and the restricted model role for the branch."""
+    store, _, verify_dsn, wellhead_id = projection_database
+    now = datetime.now(timezone.utc)
+    defaults = load_defaults()
+    parameters = ModelParameters.from_values(
+        resolve_parameters(defaults, {}, {}, wellhead_id)
+    )
+    candidates = store.find_snapshots(wellhead_id, now - timedelta(days=1), now)
+    matching = next(
+        item
+        for item in candidates
+        if item.parameter_fingerprint == parameter_fingerprint(parameters)
+    )
+    source = store.selected_snapshot(wellhead_id, matching.selection)
+    assert source is not None
+    assert store.selected_snapshot(wellhead_id + 10000, matching.selection) is None
+    assert (
+        store.selected_snapshot(
+            wellhead_id,
+            replace(
+                matching.selection,
+                simulated_at=matching.selection.simulated_at
+                + timedelta(microseconds=1),
+            ),
+        )
+        is None
+    )
+    base = historical_base(
+        wellhead_id, source[0], source[1], parameters, defaults.version, now
+    )
+    result = project(
+        "scenario",
+        str(uuid4()),
+        base,
+        now,
+        300,
+        60,
+        store.load_alarm_rules(),
+        name="Historical database check",
+        controls=(ScheduledControl(0, ControlChange(pump_on=False)),),
+    )
+    try:
+        store.write_projection(result, 1)
+        assert store.selected_snapshot(wellhead_id, matching.selection) == source
+        with psycopg2.connect(verify_dsn) as conn, conn.cursor() as cur:
+            cur.execute(
+                "SELECT base_state, control_values FROM scenario_run WHERE run_id=%s",
+                (result.run_id,),
+            )
+            row = cur.fetchone()
+            assert row is not None
+            assert (
+                row[0]["branchOrigin"]["snapshotId"] == matching.selection.snapshot_id
+            )
+            assert (
+                row[1]["choke_position_percent"] == base.controls.choke_position_percent
+            )
+            cur.execute(
+                "SELECT count(*), min(forecast_at), max(forecast_at) "
+                "FROM scenario_point WHERE run_id=%s",
+                (result.run_id,),
+            )
+            assert cur.fetchone() == (
+                5,
+                matching.selection.simulated_at + timedelta(seconds=60),
+                matching.selection.simulated_at + timedelta(seconds=300),
+            )
+    finally:
+        with psycopg2.connect(verify_dsn) as conn, conn.cursor() as cur:
+            cur.execute("DELETE FROM scenario_point WHERE run_id=%s", (result.run_id,))
+            cur.execute("DELETE FROM scenario_run WHERE run_id=%s", (result.run_id,))

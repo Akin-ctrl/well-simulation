@@ -144,3 +144,12 @@ explains installation, structural checks, and adoption of existing data.
 Compose and CI pin PostgreSQL 16.15 with TimescaleDB 2.30.2. The
 [engine upgrade design](../design/database-engine-upgrade.md) covers converting
 an existing volume, verifying recovery, and accepting the new generated reference.
+
+## Historical scenario source
+
+A scenario can copy an exact retained model snapshot. The model service validates
+the saved timestamp, physical state, version and parameter fingerprint before
+running private baseline and scenario copies. The saved run carries its source
+identity and complete inputs. Historical scenarios use alarm rules active at
+execution; chart retention follows simulated dates. Forecasts continue from
+current state. See [historical scenarios](../design/historical-scenarios.md).

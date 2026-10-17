@@ -1,3 +1,5 @@
+import type { SnapshotSelection } from '@well-simulation/dto/req/snapshots';
+import { SnapshotPicker } from './snapshot-picker';
 import { useRef, useState } from 'react';
 import { useFetcher, useRouteLoaderData } from 'react-router';
 import { DEFAULT_ROLE, hasCapability } from '@well-simulation/dto/auth/roles';
@@ -32,6 +34,8 @@ export function ProjectionForm({
   const [rows, setRows] = useState<ScheduleRow[]>([
     { id: 1, offsetMinutes: '5', control: 'chokePositionPercent', value: '80' },
   ]);
+  const [baseSnapshot, setBaseSnapshot] = useState<SnapshotSelection | null>(null);
+  const [historical, setHistorical] = useState(false);
   const nextId = useRef(2);
   const [attempted, setAttempted] = useState(false);
   const [stepMessage, setStepMessage] = useState('');
@@ -40,7 +44,14 @@ export function ProjectionForm({
   const validation =
     kind === 'forecast'
       ? forecastRequestSchema.safeParse({ horizonSeconds, stepSeconds })
-      : scenarioInput(wellheadId, name, horizonSeconds, stepSeconds, rows);
+      : scenarioInput(
+          wellheadId,
+          name,
+          horizonSeconds,
+          stepSeconds,
+          rows,
+          baseSnapshot ?? undefined
+        );
   const issues =
     attempted && !validation.success
       ? fieldIssues(validation.error.issues, kind, rows)
@@ -80,7 +91,12 @@ export function ProjectionForm({
           <h2 id={`${kind}-form-title`}>
             {kind === 'forecast' ? 'Forecast inputs' : 'New scenario inputs'}
           </h2>
-          <p className='twin-caption'>New draft · Start from the current well state.</p>
+          <p className='twin-caption'>
+            New draft ·{' '}
+            {historical
+              ? 'Start from your selected saved snapshot.'
+              : 'Start from the current well state.'}
+          </p>
         </div>
       </div>
       <fetcher.Form
@@ -89,7 +105,7 @@ export function ProjectionForm({
         aria-labelledby={`${kind}-form-title`}
         className='twin-form twin-panel-body'
         onSubmit={(event) => {
-          if (pending || !allowed) {
+          if (pending || !allowed || (historical && !baseSnapshot)) {
             event.preventDefault();
             return;
           }
@@ -134,6 +150,18 @@ export function ProjectionForm({
           <legend className='sr-only'>
             {kind === 'forecast' ? 'Forecast parameters' : 'Scenario parameters'}
           </legend>
+          {kind === 'scenario' && (
+            <SnapshotPicker
+              wellheadId={wellheadId}
+              allowed={allowed}
+              pending={pending}
+              rejection={fetcher.data?.error}
+              onSelection={(selection, isHistorical) => {
+                setBaseSnapshot(selection);
+                setHistorical(isHistorical);
+              }}
+            />
+          )}
           {kind === 'scenario' && (
             <div className='twin-field'>
               <label htmlFor='scenario-name'>Scenario name</label>
@@ -323,6 +351,7 @@ export function ProjectionForm({
           <button
             type='submit'
             aria-disabled={pending}
+            disabled={historical && !baseSnapshot}
             className='twin-button twin-primary mt-5 w-full'
           >
             {pending
@@ -332,6 +361,11 @@ export function ProjectionForm({
                 : 'Run scenario'}
           </button>
         </fieldset>
+        {historical && !baseSnapshot && (
+          <p className='twin-caption'>
+            Select a compatible snapshot before running this scenario.
+          </p>
+        )}
         {!allowed && (
           <p className='twin-message'>Your account cannot run model analysis.</p>
         )}

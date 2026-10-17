@@ -1,3 +1,4 @@
+import type { SnapshotSelection } from '@well-simulation/dto/req/snapshots';
 import { ApiError } from '@well-simulation/dto/error';
 import {
   booleanStateLabel,
@@ -50,6 +51,7 @@ export function errorState(error: unknown): {
     401: 'Your session has ended. Sign in again.',
     403: 'Your account does not have permission for this action.',
     404: 'We could not find this well or saved result.',
+    409: 'The selected snapshot no longer matches this model. Find and select another snapshot.',
     410: 'The saved result points have expired. Its history entry remains available.',
     429: 'Too many requests. Wait before trying again.',
     503: 'The model or database is busy or unavailable.',
@@ -76,11 +78,13 @@ export function scenarioInput(
   name: string,
   horizonSeconds: number,
   stepSeconds: number,
-  rows: ScheduleRow[]
+  rows: ScheduleRow[],
+  baseSnapshot?: SnapshotSelection
 ) {
   return scenarioRequestSchema.safeParse({
     wellheadId,
     name,
+    baseSnapshot,
     horizonSeconds,
     stepSeconds,
     controls: rows.map((row) => ({

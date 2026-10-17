@@ -50,8 +50,10 @@ export function ProjectionPage({ kind }: { kind: ProjectionKind }) {
           </>
         )}
         <p>
-          A new run starts from the current well state. Editing the draft does not
-          change a saved result.
+          {kind === 'forecast'
+            ? 'A forecast starts from the current well state.'
+            : 'A scenario starts from current state or your selected saved snapshot. Historical runs use matching model parameters and alarm rules active when you run them.'}{' '}
+          Editing the draft does not change a saved result.
         </p>
       </PageHelp>
       <div className='twin-analysis'>

@@ -5,6 +5,8 @@
 .twin-workspace {
   color: var(--twin-text);
   line-height: 1.5;
+  color-scheme: light;
+  accent-color: var(--twin-primary);
 }
 .twin-workspace h1 {
   font-size: 1.9rem;
@@ -130,7 +132,20 @@
 .twin-workspace label.twin-inline {
   min-height: 44px;
 }
-.twin-form input[type='checkbox'] {
+.twin-form label.twin-check {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-height: 44px;
+}
+.twin-snapshot-card {
+  padding: 1rem;
+  border: 1px solid var(--twin-line);
+  border-radius: 6px;
+  overflow-wrap: anywhere;
+}
+.twin-form input[type='checkbox'],
+.twin-form input[type='radio'] {
   width: 20px;
   min-height: 20px;
   height: 20px;
