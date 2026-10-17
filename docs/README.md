@@ -80,3 +80,6 @@ local roadmaps are optional working notes and are absent from a clean checkout.
 
 The [dashboard usability design](design/dashboard-usability.md) records the
 revised workflow, design checks and delivery sequence.
+
+The [operating workspace design](design/operating-workspace.md) covers the
+control and parameter screens, role boundaries and uncertain-response recovery.

@@ -103,6 +103,20 @@ Milestone 8B replaces the API's Compose database administrator credential with a
 - The 30-second expiry can reject a command during a restart. The operator must review and submit a new draft, so an old command never surprises them later.
 - One operator can activate their own draft. This is suitable for a synthetic portfolio system, not a claim of independent approval.
 
+## Amendment, 2026-10-17: operating screens and outcome recovery
+
+The owner requested live control and parameter screens after the dashboard
+usability work. The [operating workspace design](../design/operating-workspace.md)
+keeps the existing draft, review, activation and publication boundaries.
+OPERATIONS uses Controls. ADMIN uses Parameters and does not gain control authority.
+
+Bounded per-well history and exact own-key lookup let a user recover a missing
+response without repeating a write. These reads recheck current account authority
+and work without the model. Python supplies parameter definitions and running
+values, so the frontend does not maintain another list of units or bounds.
+The screens distinguish database acceptance, running adoption and restart-only
+parameter changes. The single SQL schema needs no change for these additions.
+
 ## Related
 
 - [Milestone 8B design](../design/twin-core-milestone-8b.md): implementation, operating steps, and verification results.

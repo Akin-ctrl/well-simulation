@@ -5,6 +5,7 @@ import {
   runningControlsSchema,
   parameterValidationSchema,
   parameterRuntimeSchema,
+  parameterCatalogueSchema,
 } from '@well-simulation/dto/res/controls';
 import { config } from './config';
 import {
@@ -69,6 +70,15 @@ export async function parameterIdentity(wellheadId: number) {
   if (!identity.success || identity.data.wellheadId !== wellheadId)
     throw new HTTPException(503, { message: 'Model identity unavailable' });
   return identity.data;
+}
+
+export async function parameterCatalogue(wellheadId: number) {
+  const result = parameterCatalogueSchema.safeParse(
+    await twinRequest(`/wellheads/${wellheadId}/parameters`, undefined, 128_000)
+  );
+  if (!result.success || result.data.wellheadId !== wellheadId)
+    throw new HTTPException(503, { message: 'Parameter definitions unavailable' });
+  return result.data;
 }
 
 /** Ask the authoritative Python resolver to validate the complete parameter set. */

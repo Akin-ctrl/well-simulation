@@ -239,6 +239,33 @@ paths:
         schema:
           type: string
           format: uuid
+  /wellheads/{wellheadId}/parameters:
+    get:
+      tags:
+      - Controls
+      summary: Read canonical parameter definitions and running values.
+      operationId: getParameterCatalogue
+      security:
+      - serviceToken: []
+      parameters:
+      - name: wellheadId
+        in: path
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+      responses:
+        '200':
+          description: Definitions remain available if the process cannot start; runningValue
+            is then null.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ParameterCatalogue'
+        '403':
+          description: Missing or incorrect service token.
+        '404':
+          description: Unknown well.
   /parameter-changes/validate:
     post:
       tags:
@@ -459,6 +486,52 @@ components:
           minLength: 1
           maxLength: 40
       additionalProperties: false
+    ParameterCatalogue:
+      type: object
+      required:
+      - wellheadId
+      - modelVersion
+      - parameters
+      properties:
+        wellheadId:
+          type: integer
+          minimum: 1
+        modelVersion:
+          type: string
+        parameters:
+          type: array
+          minItems: 1
+          maxItems: 200
+          items:
+            type: object
+            required:
+            - key
+            - description
+            - unit
+            - defaultValue
+            - minimum
+            - maximum
+            - requiresRestart
+            - runningValue
+            properties:
+              key:
+                type: string
+              description:
+                type: string
+              unit:
+                type: string
+              defaultValue:
+                type: number
+              minimum:
+                type: number
+              maximum:
+                type: number
+              requiresRestart:
+                type: boolean
+              runningValue:
+                type:
+                - number
+                - 'null'
     ParameterValidation:
       type: object
       required:

@@ -107,6 +107,7 @@
   margin-bottom: 0.4rem;
 }
 .twin-form input,
+.twin-form textarea,
 .twin-form select,
 .twin-filter input,
 .twin-filter select {
@@ -121,6 +122,27 @@
 }
 .twin-field {
   margin-bottom: 1rem;
+}
+.twin-form label.twin-inline {
+  display: flex;
+  min-height: 44px;
+}
+.twin-workspace label.twin-inline {
+  min-height: 44px;
+}
+.twin-form input[type='checkbox'] {
+  width: 20px;
+  min-height: 20px;
+  height: 20px;
+  flex: 0 0 20px;
+}
+.twin-history-item {
+  padding-block: 0.75rem;
+  border-bottom: 1px solid var(--twin-line);
+  overflow-wrap: anywhere;
+}
+#proposal-heading {
+  scroll-margin-block-start: 5rem;
 }
 .twin-form fieldset {
   min-width: 0;

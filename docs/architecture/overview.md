@@ -2,6 +2,11 @@
 
 ## Current System
 
+The [operating workspace](../design/operating-workspace.md) adds separate control
+and parameter screens to the well view. The API keeps current-user authority,
+revision checks and atomic audit records. Python supplies parameter metadata.
+Proposal history supports recovery after a missing write response.
+
 The current system is a simulated industrial monitoring pipeline:
 
 ```text

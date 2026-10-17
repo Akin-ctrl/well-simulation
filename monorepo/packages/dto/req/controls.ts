@@ -40,3 +40,10 @@ export const parameterDraftSchema = z
 export type ControlDraft = z.infer<typeof controlDraftSchema>;
 export type LiveTargets = z.infer<typeof liveTargetsSchema>;
 export type ParameterDraft = z.infer<typeof parameterDraftSchema>;
+
+export const proposalHistoryQuerySchema = z
+  .object({
+    offset: z.coerce.number().int().min(0).max(10000).default(0),
+    idempotencyKey: commandIdSchema.optional(),
+  })
+  .strict();

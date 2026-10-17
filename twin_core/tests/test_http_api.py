@@ -222,7 +222,7 @@ def _post(
         method="POST",
     )
     try:
-        with urlopen(request, timeout=3) as response:  # noqa: S310
+        with urlopen(request, timeout=3) as response:  # noqa: S310 (fixed loopback URL)  # noqa: S310
             return response.status, json.load(response)
     except HTTPError as error:
         return error.code, json.load(error)
@@ -274,6 +274,33 @@ def test_parameter_validation_has_no_write_effect(
         _post(server, "/parameter-changes/validate", {**body, "unit": "bar"})[0] == 400
     )
     assert _post(server, "/parameter-changes/validate", {**body, "value": -1})[0] == 400
+
+
+def test_parameter_catalogue_requires_auth_and_supports_a_stopped_model(
+    projection_server: ProjectionServer, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Definitions come from the resolver and remain readable without a process."""
+    server, _store, runtime = projection_server
+    assert _get(server, "/wellheads/1/parameters")[0] == 403
+    request = Request(
+        f"http://127.0.0.1:{server.server_port}/wellheads/1/parameters",
+        headers={"X-Twin-Internal-Token": "a" * 32},
+    )
+    with urlopen(request, timeout=3) as response:  # noqa: S310 (fixed loopback URL)
+        catalogue = json.load(response)
+    assert catalogue["modelVersion"] == runtime.defaults.version
+    assert len(catalogue["parameters"]) == len(runtime.defaults.parameters)
+    pressure = next(
+        item for item in catalogue["parameters"] if item["key"] == "downstream_pressure"
+    )
+    spec = runtime.defaults.parameters["downstream_pressure"]
+    assert pressure["minimum"] == spec.minimum
+    assert pressure["defaultValue"] == spec.default
+    assert pressure["runningValue"] == spec.default
+    monkeypatch.setattr(runtime.registry, "parameters_for", lambda _well: None)
+    with urlopen(request, timeout=3) as response:  # noqa: S310 (fixed loopback URL)
+        stopped = json.load(response)
+    assert all(item["runningValue"] is None for item in stopped["parameters"])
 
 
 def test_control_hints_reject_payloads_and_require_service_auth(

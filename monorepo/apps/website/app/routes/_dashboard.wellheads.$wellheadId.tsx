@@ -8,11 +8,14 @@ import {
   useLoaderData,
   useRevalidator,
   useParams,
+  useRouteLoaderData,
 } from 'react-router';
 import { ApiError } from '@well-simulation/dto/error';
 import type { WellheadDetailResponse } from '@well-simulation/dto/res/dashboard';
 import type { FleetModelStatus } from '@well-simulation/dto/res/model-status';
-import type { RunningControls } from '@well-simulation/dto/res/controls';
+import type { ControlWorkspace } from '@well-simulation/dto/res/controls';
+import { hasCapability, DEFAULT_ROLE } from '@well-simulation/dto/auth/roles';
+import type { CurrentUserData } from './_dashboard';
 import { client, fetchFn } from '../utils/api';
 import { routes } from '../config/routes';
 import { REFRESH_INTERVALS, useAutoRefresh } from '../hooks/use-auto-refresh';
@@ -23,7 +26,7 @@ export type WellheadContext = {
   unverified?: boolean;
   detail: WellheadDetailResponse;
   fleet: FleetModelStatus | null;
-  controls: { running: RunningControls; pendingCommandId: string | null } | null;
+  controls: ControlWorkspace | null;
 };
 
 /** Optional model reads preserve the historian view; session failures still propagate. */
@@ -86,6 +89,7 @@ function LoadedWorkspace({
   error: ReturnType<typeof errorState> | null;
 }) {
   const overdue = useModelCheckOverdue(data.fleet);
+  const user = useRouteLoaderData<CurrentUserData>('routes/_dashboard')?.user;
   const { wellhead } = data.detail;
   const base = routes.dashboard.wellhead(wellhead.wellheadId);
   const refresh = useRevalidator();
@@ -134,6 +138,12 @@ function LoadedWorkspace({
         <NavLink to={`${base}/forecast`}>Forecast</NavLink>
         <NavLink to={`${base}/scenarios`}>Scenarios</NavLink>
         <NavLink to={`${base}/runs`}>Saved runs</NavLink>
+        {hasCapability(user?.role ?? DEFAULT_ROLE, 'control:issue') && (
+          <NavLink to={`${base}/controls`}>Controls</NavLink>
+        )}
+        {hasCapability(user?.role ?? DEFAULT_ROLE, 'asset:manage') && (
+          <NavLink to={`${base}/parameters`}>Parameters</NavLink>
+        )}
       </nav>
       <Outlet context={{ ...data, unverified: Boolean(error) }} />
     </div>

@@ -372,6 +372,29 @@ class TwinRuntime:
             "restartRequired": True,
         }
 
+    def parameter_catalogue(self, wellhead_id: int) -> dict[str, object] | None:
+        """Expose canonical definitions even when a well cannot start its model."""
+        if self.registry.get(wellhead_id) is None:
+            return None
+        running = self.registry.parameters_for(wellhead_id)
+        return {
+            "wellheadId": wellhead_id,
+            "modelVersion": self.defaults.version,
+            "parameters": [
+                {
+                    "key": spec.key,
+                    "description": spec.description,
+                    "unit": spec.unit,
+                    "defaultValue": spec.default,
+                    "minimum": spec.minimum,
+                    "maximum": spec.maximum,
+                    "requiresRestart": spec.requires_restart,
+                    "runningValue": getattr(running, spec.key) if running else None,
+                }
+                for spec in self.defaults.parameters.values()
+            ],
+        }
+
     def _set_fleet_ok(self, value: bool) -> None:
         """Update database readiness without exposing mutable state."""
         with self._lock:

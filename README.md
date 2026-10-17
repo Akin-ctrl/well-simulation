@@ -77,6 +77,8 @@ Milestones 4 through 8 are implemented: the model feeds Modbus and the historian
 recovers saved state, and runs forecasts and private scenarios. The
 [8B design](docs/design/twin-core-milestone-8b.md) covers the implemented live
 synthetic control lifecycle and its verification.
+The [operating workspace design](docs/design/operating-workspace.md) covers its
+control and parameter screens, including reviewed proposals and outcome recovery.
 The [Milestone 9 design](docs/design/twin-core-milestone-9.md) covers the implemented
 wellhead workspace and its verification. Milestone 10's local delivery checks
 passed with an isolated clean candidate export. Remote CI, publication and
@@ -237,6 +239,18 @@ ordinary test runs write their images under the ignored test-results directory.
 CI installs Chromium and its system dependencies before running this workflow.
 
 ## Where this project actually stands
+
+The operating screens use the same reviewed-command API as Milestone 8B.
+OPERATIONS users see Controls; ADMIN users see Parameters. An administrator
+creates operating accounts through the existing account API. The seeded demo
+reader keeps its current permissions. See the [operating verification](docs/design/operating-workspace.md#verification-on-2026-10-17)
+for the real command, historian and parameter-restart checks.
+
+| Controls | Parameters |
+| --- | --- |
+| ![Reviewed running control command](docs/screenshots/controls.png) | ![Model parameter editor with canonical units and bounds](docs/screenshots/parameters.png) |
+
+[Control proposal on a phone](docs/screenshots/controls-mobile.png)
 
 On 2026-10-13, a clean export of commit `e3d44c7` passed
 `docker compose up -d --build` with a fresh volume. All six images built,

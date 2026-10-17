@@ -63,3 +63,11 @@ places scenario inputs on a separate Scenarios page. Saved results show the
 original baseline and schedule. Editing a new draft does not alter a saved
 result. Live command entry still uses the separate draft and activation API;
 this dashboard does not add live command forms.
+
+## Amendment, 2026-10-17: separate operating views
+
+The owner requested live control and parameter screens after the usability pass.
+Controls now uses the durable proposal and activation API. Parameters uses the
+administrator proposal and publication API. Both require an explicit review step.
+Scenarios still run against isolated state. The [operating design](../design/operating-workspace.md)
+records their layouts, outcome recovery and role restrictions.

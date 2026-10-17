@@ -31,7 +31,7 @@ previously written down.
 | [0004](0004-industrial-interface.md) | Keep Modbus TCP As The Industrial Edge Interface | Implemented |
 | [0005](0005-data-historian.md) | Use PostgreSQL And TimescaleDB As The Historian (amended) | Implemented; engine recovery verified separately |
 | [0006](0006-schema-management.md) | Keep SQL As The Canonical Schema Source (amended) | Implemented; single-file amendment adopted |
-| [0007](0007-control-and-what-if-boundaries.md) | Separate Live Control From What-If Simulation | API and scenario UI implemented; live command forms deferred |
+| [0007](0007-control-and-what-if-boundaries.md) | Separate Live Control From What-If Simulation | Separate scenario, control and parameter screens implemented |
 | [0008](0008-production-deployment-baseline.md) | Use A Containerized Service Baseline | Implemented |
 | [0009](0009-model-fidelity.md) | Start With A Lightweight Deterministic Model | Implemented |
 | [0010](0010-model-runtime.md) | Run The Twin Core As A Separate Python Service | Implemented |

@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
-import { HTTPException } from 'hono/http-exception';
+import { validator } from 'hono/validator';
 import {
   commandIdSchema,
   confirmationSchema,
@@ -8,6 +8,7 @@ import {
   controlDraftSchema,
   parameterDraftSchema,
   wellIdSchema,
+  proposalHistoryQuerySchema,
 } from '@well-simulation/dto/req/controls';
 import { requireCapability, sessionUserId } from '../middleware/authorize';
 import { controlWriteLimit } from '../middleware/rate-limiter';
@@ -19,20 +20,11 @@ import {
   draftCommand,
   draftParameter,
   parameterStatus,
+  proposalHistory,
 } from '../control-service';
 import { notifyTwin, runningControls } from '../twin-control-client';
 
 const uuid = commandIdSchema;
-
-async function requestBody(c: {
-  req: { json: () => Promise<unknown> };
-}): Promise<unknown> {
-  try {
-    return await c.req.json();
-  } catch {
-    throw new HTTPException(400, { message: 'Invalid JSON request' });
-  }
-}
 
 /** Human command routes never accept a service token from the browser. */
 export const controlsRouter = new Hono()
@@ -51,19 +43,56 @@ export const controlsRouter = new Hono()
       return c.json({ data, msg: 'Control state loaded', status: 200 as const });
     }
   )
-  .post('/control-commands', requireCapability('control:issue'), async (c) => {
-    const data = await draftCommand(
-      c,
-      controlDraftSchema.parse(await requestBody(c)),
-      uuid.parse(c.req.header('Idempotency-Key'))
-    );
-    return c.json({ data, msg: 'Control proposal recorded', status: 201 }, 201);
-  })
+  .get(
+    '/wellheads/:wellheadId/control-commands',
+    requireCapability('control:issue'),
+    validator('query', (value) => proposalHistoryQuerySchema.parse(value)),
+    async (c) => {
+      const data = await proposalHistory(
+        c,
+        wellIdSchema.parse(Number(c.req.param('wellheadId'))),
+        'control',
+        c.req.valid('query')
+      );
+      return c.json({ data, msg: 'Your control proposals', status: 200 as const });
+    }
+  )
+  .get(
+    '/wellheads/:wellheadId/parameter-changes',
+    requireCapability('asset:manage'),
+    validator('query', (value) => proposalHistoryQuerySchema.parse(value)),
+    async (c) => {
+      const data = await proposalHistory(
+        c,
+        wellIdSchema.parse(Number(c.req.param('wellheadId'))),
+        'parameter',
+        c.req.valid('query')
+      );
+      return c.json({ data, msg: 'Your parameter proposals', status: 200 as const });
+    }
+  )
+  .post(
+    '/control-commands',
+    requireCapability('control:issue'),
+    validator('json', (value) => controlDraftSchema.parse(value)),
+    async (c) => {
+      const data = await draftCommand(
+        c,
+        c.req.valid('json'),
+        uuid.parse(c.req.header('Idempotency-Key'))
+      );
+      return c.json(
+        { data, msg: 'Control proposal recorded', status: 201 as const },
+        201
+      );
+    }
+  )
   .post(
     '/control-commands/:id/activate',
     requireCapability('control:issue'),
+    validator('json', (value) => controlActivateSchema.parse(value)),
     async (c) => {
-      const input = controlActivateSchema.parse(await requestBody(c));
+      const input = c.req.valid('json');
       const data = await changeCommand(
         c,
         uuid.parse(c.req.param('id')),
@@ -79,7 +108,7 @@ export const controlsRouter = new Hono()
         {
           data: { ...data, notificationPending: !notified },
           msg: 'Control command status',
-          status,
+          status: status as 200 | 202,
         },
         status
       );
@@ -88,24 +117,32 @@ export const controlsRouter = new Hono()
   .post(
     '/control-commands/:id/cancel',
     requireCapability('control:issue'),
+    validator('json', (value) => confirmationSchema.parse(value)),
     async (c) => {
-      confirmationSchema.parse(await requestBody(c));
       const data = await changeCommand(c, uuid.parse(c.req.param('id')), 'cancel');
-      return c.json({ data, msg: 'Control command status', status: 200 });
+      return c.json({ data, msg: 'Control command status', status: 200 as const });
     }
   )
   .get('/control-commands/:id', requireCapability('control:issue'), async (c) => {
     const data = await commandStatus(c, uuid.parse(c.req.param('id')));
-    return c.json({ data, msg: 'Control command status', status: 200 });
+    return c.json({ data, msg: 'Control command status', status: 200 as const });
   })
-  .post('/parameter-changes', requireCapability('asset:manage'), async (c) => {
-    const data = await draftParameter(
-      c,
-      parameterDraftSchema.parse(await requestBody(c)),
-      uuid.parse(c.req.header('Idempotency-Key'))
-    );
-    return c.json({ data, msg: 'Parameter proposal recorded', status: 201 }, 201);
-  })
+  .post(
+    '/parameter-changes',
+    requireCapability('asset:manage'),
+    validator('json', (value) => parameterDraftSchema.parse(value)),
+    async (c) => {
+      const data = await draftParameter(
+        c,
+        c.req.valid('json'),
+        uuid.parse(c.req.header('Idempotency-Key'))
+      );
+      return c.json(
+        { data, msg: 'Parameter proposal recorded', status: 201 as const },
+        201
+      );
+    }
+  )
   .get(
     '/wellheads/:wellheadId/parameters',
     requireCapability('asset:manage'),
@@ -114,14 +151,18 @@ export const controlsRouter = new Hono()
         c,
         wellIdSchema.parse(Number(c.req.param('wellheadId')))
       );
-      return c.json({ data, msg: 'Published and running parameters', status: 200 });
+      return c.json({
+        data,
+        msg: 'Published and running parameters',
+        status: 200 as const,
+      });
     }
   )
   .post(
     '/parameter-changes/:id/publish',
     requireCapability('asset:manage'),
+    validator('json', (value) => confirmationSchema.parse(value)),
     async (c) => {
-      confirmationSchema.parse(await requestBody(c));
       const data = await changeParameter(c, uuid.parse(c.req.param('id')), 'publish');
       const notified =
         data.status === 'published' ? await notifyTwin('/fleet/refresh') : true;
@@ -132,17 +173,17 @@ export const controlsRouter = new Hono()
           notificationPending: !notified,
         },
         msg: 'Parameter proposal status',
-        status: 200,
+        status: 200 as const,
       });
     }
   )
   .post(
     '/parameter-changes/:id/cancel',
     requireCapability('asset:manage'),
+    validator('json', (value) => confirmationSchema.parse(value)),
     async (c) => {
-      confirmationSchema.parse(await requestBody(c));
       const data = await changeParameter(c, uuid.parse(c.req.param('id')), 'cancel');
-      return c.json({ data, msg: 'Parameter proposal status', status: 200 });
+      return c.json({ data, msg: 'Parameter proposal status', status: 200 as const });
     }
   )
   .get('/parameter-changes/:id', requireCapability('asset:manage'), async (c) => {
@@ -151,6 +192,6 @@ export const controlsRouter = new Hono()
     return c.json({
       data: { ...data, running },
       msg: 'Parameter proposal status',
-      status: 200,
+      status: 200 as const,
     });
   });

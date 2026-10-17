@@ -453,6 +453,146 @@ paths:
           type: integer
           minimum: 1
           maximum: 2147483647
+  /twin/wellheads/{wellheadId}/control-commands:
+    get:
+      tags:
+      - Twin
+      summary: Read the current OPERATIONS user's proposals for one well.
+      operationId: listOwnControlProposals
+      security:
+      - cookieAuth: []
+      parameters:
+      - name: wellheadId
+        in: path
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 2147483647
+      - name: offset
+        in: query
+        schema:
+          type: integer
+          minimum: 0
+          maximum: 10000
+          default: 0
+      - name: idempotencyKey
+        in: query
+        description: Optional exact lookup for the current creator after a missing response.
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: At most 20 own proposals, newest first. Does not require the
+            model.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - msg
+                - status
+                properties:
+                  msg:
+                    type: string
+                  status:
+                    const: 200
+                  data:
+                    type: object
+                    required:
+                    - items
+                    - offset
+                    - hasMore
+                    properties:
+                      items:
+                        type: array
+                        maxItems: 20
+                        items:
+                          $ref: '#/components/schemas/ControlProposalSummary'
+                      offset:
+                        type: integer
+                      hasMore:
+                        type: boolean
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '503':
+          description: Database unavailable.
+  /twin/wellheads/{wellheadId}/parameter-changes:
+    get:
+      tags:
+      - Twin
+      summary: Read the current ADMIN user's proposals for one well.
+      operationId: listOwnParameterProposals
+      security:
+      - cookieAuth: []
+      parameters:
+      - name: wellheadId
+        in: path
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 2147483647
+      - name: offset
+        in: query
+        schema:
+          type: integer
+          minimum: 0
+          maximum: 10000
+          default: 0
+      - name: idempotencyKey
+        in: query
+        description: Optional exact lookup for the current creator after a missing response.
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: At most 20 own proposals, newest first. Does not require the
+            model.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - msg
+                - status
+                properties:
+                  msg:
+                    type: string
+                  status:
+                    const: 200
+                  data:
+                    type: object
+                    required:
+                    - items
+                    - offset
+                    - hasMore
+                    properties:
+                      items:
+                        type: array
+                        maxItems: 20
+                        items:
+                          $ref: '#/components/schemas/ParameterChange'
+                      offset:
+                        type: integer
+                      hasMore:
+                        type: boolean
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '503':
+          description: Database unavailable.
   /twin/control-commands:
     post:
       tags:
@@ -816,7 +956,7 @@ paths:
                   status: {const: 200}
                   data:
                     type: object
-                    required: [wellheadId, modelVersion, status, latestOverrides, running]
+                    required: [wellheadId, modelVersion, status, latestOverrides, running, catalogue]
                     properties:
                       wellheadId: {type: integer}
                       modelVersion: {type: string}
@@ -825,6 +965,7 @@ paths:
                         anyOf:
                           - {$ref: '#/components/schemas/RunningControls'}
                           - {type: 'null'}
+                      catalogue: {$ref: '#/components/schemas/ParameterCatalogue'}
                       latestOverrides:
                         type: array
                         items:
@@ -1175,6 +1316,147 @@ components:
                 - 'null'
         notificationPending:
           type: boolean
+    ParameterCatalogue:
+      type: object
+      required:
+      - wellheadId
+      - modelVersion
+      - parameters
+      properties:
+        wellheadId:
+          type: integer
+          minimum: 1
+        modelVersion:
+          type: string
+        parameters:
+          type: array
+          minItems: 1
+          maxItems: 200
+          items:
+            type: object
+            required:
+            - key
+            - description
+            - unit
+            - defaultValue
+            - minimum
+            - maximum
+            - requiresRestart
+            - runningValue
+            properties:
+              key:
+                type: string
+              description:
+                type: string
+              unit:
+                type: string
+              defaultValue:
+                type: number
+              minimum:
+                type: number
+              maximum:
+                type: number
+              requiresRestart:
+                type: boolean
+              runningValue:
+                type:
+                - number
+                - 'null'
+    ControlProposalSummary:
+      type: object
+      required:
+      - commandId
+      - wellheadId
+      - createdBy
+      - idempotencyKey
+      - reason
+      - expectedRevision
+      - modelVersion
+      - chokePositionPercent
+      - masterValveOpen
+      - wingValveOpen
+      - pumpOn
+      - emergencyShutdown
+      - status
+      - createdAt
+      - expiresAt
+      - resultAt
+      - resultRevision
+      - resultReason
+      properties:
+        commandId:
+          type: string
+          format: uuid
+        wellheadId:
+          type: integer
+          minimum: 1
+          maximum: 2147483647
+        createdBy:
+          type: integer
+          minimum: 1
+          maximum: 2147483647
+        idempotencyKey:
+          type: string
+          format: uuid
+        reason:
+          type: string
+          maxLength: 500
+        expectedRevision:
+          type: integer
+          minimum: 0
+          maximum: 2147483646
+        modelVersion:
+          type: string
+        chokePositionPercent:
+          type:
+          - number
+          - 'null'
+          minimum: 0
+          maximum: 100
+        masterValveOpen:
+          type:
+          - boolean
+          - 'null'
+        wingValveOpen:
+          type:
+          - boolean
+          - 'null'
+        pumpOn:
+          type:
+          - boolean
+          - 'null'
+        emergencyShutdown:
+          type:
+          - boolean
+          - 'null'
+        status:
+          type: string
+          enum:
+          - draft
+          - queued
+          - applied
+          - rejected
+          - expired
+          - cancelled
+        createdAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+        resultAt:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        resultRevision:
+          type:
+          - integer
+          - 'null'
+        resultReason:
+          type:
+          - string
+          - 'null'
     ParameterDraftRequest:
       type: object
       required:

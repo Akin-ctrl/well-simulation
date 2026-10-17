@@ -18,6 +18,7 @@ import { ApiError } from '@well-simulation/dto/error';
 import type { Role } from '@well-simulation/dto/auth/roles';
 
 export type DashboardUser = {
+  id: number;
   role: Role | null;
   firstName?: string | null;
   lastName?: string | null;
@@ -118,10 +119,14 @@ export default function DashboardLayout() {
     const view = main?.querySelector('.twin-tabs [aria-current="page"]')?.textContent;
     const heading = main?.querySelector('h1')?.textContent ?? 'Dashboard';
     document.title = `${heading}${view ? ` · ${view}` : ''} | Well Simulation`;
-    const target = new URLSearchParams(location.search).has('run')
+    const search = new URLSearchParams(location.search);
+    const target = search.has('run')
       ? (document.getElementById('projection-title') ?? main)
-      : main;
+      : search.has('proposal')
+        ? (document.getElementById('proposal-heading') ?? main)
+        : main;
     target?.focus({ preventScroll: true });
+    if (search.has('proposal')) target?.scrollIntoView({ block: 'start' });
   }, [location.pathname, location.search]);
 
   return (

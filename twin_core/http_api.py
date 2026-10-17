@@ -31,7 +31,7 @@ from twin_core.runtime import (
 )
 
 WELLHEAD_PATH = re.compile(
-    r"/wellheads/([1-9][0-9]{0,9})/(state|latest-telemetry|controls)"
+    r"/wellheads/([1-9][0-9]{0,9})/(state|latest-telemetry|controls|parameters)"
 )
 FORECAST_PATH = re.compile(r"/wellheads/([1-9][0-9]{0,9})/forecast")
 COMMAND_NOTIFY_PATH = re.compile(
@@ -207,6 +207,14 @@ class TwinRequestHandler(BaseHTTPRequestHandler):
 
     def _wellhead(self, wellhead_id: int, view: str) -> None:
         """Serve one active wellhead view."""
+        if view == "parameters":
+            if self._authorized():
+                catalogue = self.runtime.parameter_catalogue(wellhead_id)
+                self._json(
+                    200 if catalogue else 404,
+                    catalogue or {"error": "wellhead_not_found"},
+                )
+            return
         state = self.runtime.state(wellhead_id)
         if state is None:
             self._json(404, {"error": "wellhead_not_found"})

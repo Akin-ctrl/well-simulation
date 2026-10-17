@@ -21,10 +21,15 @@ import type { ControlDraft, ParameterDraft } from '@well-simulation/dto/req/cont
 import {
   runningControls,
   parameterIdentity,
+  parameterCatalogue,
   validateParameter,
 } from './twin-control-client';
 import { sessionUserId } from './middleware/authorize';
 import { currentRequestId } from './middleware/request-id';
+import {
+  commandSummarySchema,
+  parameterSummarySchema,
+} from '@well-simulation/dto/res/controls';
 
 type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 type Command = typeof controlCommand.$inferSelect;
@@ -365,9 +370,19 @@ export async function controlStatus(wellheadId: number) {
 
 /** Let an administrator obtain revision IDs without hand-entered SQL. */
 export async function parameterStatus(c: Context, wellheadId: number) {
+  await transaction(c, (tx) => currentActor(tx, c, 'asset:manage'));
+  // Network waits must not hold the account lock needed by outcome recovery.
+  const [identity, catalogue, running] = await Promise.all([
+    parameterIdentity(wellheadId),
+    parameterCatalogue(wellheadId),
+    runningControls(wellheadId).catch(() => null),
+  ]);
+  if (identity.modelVersion !== catalogue.modelVersion)
+    throw new HTTPException(503, {
+      message: 'Model version changed; refresh the view',
+    });
   return transaction(c, async (tx) => {
     await currentActor(tx, c, 'asset:manage');
-    const identity = await parameterIdentity(wellheadId);
     const overrides = await tx
       .selectDistinctOn([wellheadModelParameter.parameterKey])
       .from(wellheadModelParameter)
@@ -382,8 +397,49 @@ export async function parameterStatus(c: Context, wellheadId: number) {
         desc(wellheadModelParameter.validFrom),
         desc(wellheadModelParameter.parameterOverrideId)
       );
-    const running = await runningControls(wellheadId).catch(() => null);
-    return { ...identity, latestOverrides: overrides, running };
+    return { ...identity, latestOverrides: overrides, running, catalogue };
+  });
+}
+
+/** Recover a person's proposals without requiring an available model service. */
+export async function proposalHistory(
+  c: Context,
+  wellheadId: number,
+  kind: 'control' | 'parameter',
+  query: { offset: number; idempotencyKey?: string }
+) {
+  return transaction(c, async (tx) => {
+    const actor = await currentActor(
+      tx,
+      c,
+      kind === 'control' ? 'control:issue' : 'asset:manage'
+    );
+    const table = kind === 'control' ? controlCommand : modelParameterChange;
+    const id =
+      kind === 'control' ? controlCommand.commandId : modelParameterChange.changeId;
+    const rows = await tx
+      .select()
+      .from(table)
+      .where(
+        and(
+          eq(table.wellheadId, wellheadId),
+          eq(table.createdBy, actor.id),
+          query.idempotencyKey
+            ? eq(table.idempotencyKey, query.idempotencyKey)
+            : undefined
+        )
+      )
+      .orderBy(desc(table.createdAt), desc(id))
+      .limit(21)
+      .offset(query.offset);
+    const items = rows
+      .slice(0, 20)
+      .map((row) =>
+        kind === 'control'
+          ? commandSummarySchema.parse(row)
+          : parameterSummarySchema.parse(row)
+      );
+    return { items, offset: query.offset, hasMore: rows.length > 20 };
   });
 }
 

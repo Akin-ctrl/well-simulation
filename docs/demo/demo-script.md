@@ -76,6 +76,9 @@ the result before submitting again. The application does not retry the POST.
 - Open the architecture overview for the model, Modbus, ingestion, and historian path.
 - Open the Milestone 9 design for screen logic, failure handling, and verification.
 - Open the API specifications for forecast, scenario, status, and history contracts.
-- Live synthetic control uses the separate Milestone 8B draft and activation API.
+- An OPERATIONS account can open Controls, save a proposal, review it and activate
+  it. Check the command outcome and running revision separately. An ADMIN account
+  uses Parameters to publish an override; existing models need a service restart.
+  The [operating workspace design](../design/operating-workspace.md) records both flows.
   Field calibration, physical control, and alarm acknowledgement remain outside
   this demo's implemented scope.

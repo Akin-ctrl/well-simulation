@@ -74,6 +74,23 @@ describe('durable synthetic control API', () => {
     );
     vi.restoreAllMocks();
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (url) => {
+      if (String(url).endsWith('/parameters'))
+        return Response.json({
+          wellheadId: 1,
+          modelVersion: '0.3.0',
+          parameters: [
+            {
+              key: 'downstream_pressure',
+              description: 'Surface or export pressure',
+              unit: 'psi',
+              defaultValue: 250,
+              minimum: 50,
+              maximum: 1000,
+              requiresRestart: true,
+              runningValue: 250,
+            },
+          ],
+        });
       if (String(url).endsWith('/state'))
         return Response.json({
           wellheadId: 1,
@@ -129,6 +146,140 @@ describe('durable synthetic control API', () => {
     expect(
       (await request('/twin/wellheads/1/controls', { cookie: reader.cookie })).status
     ).toBe(200);
+  });
+
+  it('recovers only the current creator proposals by exact idempotency key without the model', async () => {
+    const key = randomUUID();
+    const created = await draft(operator.cookie, key);
+    const row = await responseData<CommandResult>(created);
+    vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('Model down'));
+    const path = `/twin/wellheads/1/control-commands?idempotencyKey=${key}`;
+    const recovered = await request(path, { cookie: operator.cookie });
+    expect(recovered.status).toBe(200);
+    const data = await responseData<{ items: CommandResult[]; hasMore: boolean }>(
+      recovered
+    );
+    expect(data.items.map((item) => item.commandId)).toEqual([row.commandId]);
+    expect(data.hasMore).toBe(false);
+    expect((await request(path, { cookie: reader.cookie })).status).toBe(403);
+    expect((await request(path, { cookie: administrator.cookie })).status).toBe(403);
+    const another = await signedInAs('OPERATIONS');
+    expect(
+      (
+        await responseData<{ items: unknown[] }>(
+          await request(path, { cookie: another.cookie })
+        )
+      ).items
+    ).toEqual([]);
+    expect(
+      (
+        await request('/twin/wellheads/1/control-commands?offset=-1', {
+          cookie: operator.cookie,
+        })
+      ).status
+    ).toBe(400);
+    expect(
+      (
+        await request('/twin/wellheads/1/control-commands?offset=10001', {
+          cookie: operator.cookie,
+        })
+      ).status
+    ).toBe(400);
+    expect(
+      (
+        await request('/twin/wellheads/1/control-commands?idempotencyKey=no', {
+          cookie: operator.cookie,
+        })
+      ).status
+    ).toBe(400);
+    await withDb((client) =>
+      client.query("UPDATE users SET role='USER' WHERE id=$1", [operator.user.id])
+    );
+    expect((await request(path, { cookie: operator.cookie })).status).toBe(403);
+  });
+
+  it('exposes authoritative parameter metadata only to administrators and rejects malformed metadata', async () => {
+    const path = '/twin/wellheads/1/parameters';
+    expect((await request(path, { cookie: reader.cookie })).status).toBe(403);
+    expect((await request(path, { cookie: operator.cookie })).status).toBe(403);
+    const response = await request(path, { cookie: administrator.cookie });
+    expect(response.status).toBe(200);
+    const data = await responseData<{
+      catalogue: { parameters: { unit: string; minimum: number }[] };
+    }>(response);
+    expect(data.catalogue.parameters[0]).toMatchObject({ unit: 'psi', minimum: 50 });
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      Response.json({ wellheadId: 2, modelVersion: '0.3.0', status: 'running' })
+    );
+    expect((await request(path, { cookie: administrator.cookie })).status).toBe(503);
+  });
+
+  it('keeps proposal recovery available during a slow parameter read and rechecks authority', async () => {
+    let release = () => {};
+    let entered = () => {};
+    const blocked = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const waiting = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const original = vi.mocked(globalThis.fetch).getMockImplementation()!;
+    vi.mocked(globalThis.fetch).mockImplementation(async (url, init) => {
+      if (String(url).endsWith('/parameters')) {
+        entered();
+        await blocked;
+      }
+      return original(url, init);
+    });
+    const pending = request('/twin/wellheads/1/parameters', {
+      cookie: administrator.cookie,
+    });
+    try {
+      await waiting;
+      expect(
+        (
+          await request('/twin/wellheads/1/parameter-changes', {
+            cookie: administrator.cookie,
+          })
+        ).status
+      ).toBe(200);
+      await withDb((client) =>
+        client.query("UPDATE users SET role='USER' WHERE id=$1", [
+          administrator.user.id,
+        ])
+      );
+    } finally {
+      release();
+    }
+    expect((await pending).status).toBe(403);
+    await withDb((client) =>
+      client.query("UPDATE users SET role='ADMIN' WHERE id=$1", [administrator.user.id])
+    );
+  });
+
+  it('bounds proposal pages and preserves their stable ordering', async () => {
+    await withDb((client) =>
+      client.query(
+        `INSERT INTO control_command(command_id, wellhead_id, created_by, idempotency_key, reason, expected_revision, model_version, parameter_fingerprint, pump_on, status, result_at)
+       SELECT gen_random_uuid(),1,$1,gen_random_uuid(),'History check',0,'0.3.0',$2,false,'cancelled',clock_timestamp() FROM generate_series(1,24)`,
+        [operator.user.id, 'a'.repeat(64)]
+      )
+    );
+    const first = await responseData<{ items: CommandResult[]; hasMore: boolean }>(
+      await request('/twin/wellheads/1/control-commands', { cookie: operator.cookie })
+    );
+    const next = await responseData<{ items: CommandResult[]; hasMore: boolean }>(
+      await request('/twin/wellheads/1/control-commands?offset=20', {
+        cookie: operator.cookie,
+      })
+    );
+    expect(first.items).toHaveLength(20);
+    expect(first.hasMore).toBe(true);
+    expect(next.items).toHaveLength(4);
+    expect(next.hasMore).toBe(false);
+    expect(
+      new Set([...first.items, ...next.items].map((item) => item.commandId)).size
+    ).toBe(24);
   });
   it('rejects unknown, null, empty, out-of-range, and mixed shutdown targets', async () => {
     for (const targets of [
@@ -296,6 +447,21 @@ describe('durable synthetic control API', () => {
     });
     expect(proposed.status).toBe(201);
     const id = (await responseData<ParameterResult>(proposed)).changeId;
+    const recovered = await request(
+      `/twin/wellheads/1/parameter-changes?idempotencyKey=${headers['Idempotency-Key']}`,
+      { cookie: administrator.cookie }
+    );
+    expect(recovered.status).toBe(200);
+    expect(
+      (await responseData<{ items: ParameterResult[] }>(recovered)).items[0]?.changeId
+    ).toBe(id);
+    expect(
+      (
+        await request('/twin/wellheads/1/parameter-changes', {
+          cookie: operator.cookie,
+        })
+      ).status
+    ).toBe(403);
     const publish = await request(`/twin/parameter-changes/${id}/publish`, {
       method: 'POST',
       cookie: administrator.cookie,

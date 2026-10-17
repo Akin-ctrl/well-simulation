@@ -15,7 +15,7 @@ import { sql } from 'drizzle-orm';
 import { users } from './user';
 import { wellhead, wellheadModelParameter } from './schema';
 
-/** Typed mirror of migration 0012. SQL owns checks, triggers, and grants. */
+/** Typed mirror of data/sql/schema.sql, which owns checks, triggers and grants. */
 const instant = (name: string) =>
   timestamp(name, { withTimezone: true, mode: 'string' });
 const targets = () => ({

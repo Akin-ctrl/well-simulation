@@ -78,6 +78,16 @@ export default function Guide() {
             <dd>Compare a proposed control schedule against unchanged controls.</dd>
             <dt>Saved runs</dt>
             <dd>Reopen a previous calculation and its original inputs.</dd>
+            <dt>Controls (operators)</dt>
+            <dd>
+              Save a proposal, review it, then activate a change to the running model.
+              Check its status and the running revision.
+            </dd>
+            <dt>Parameters (administrators)</dt>
+            <dd>
+              Inspect model inputs and publish overrides. Existing models adopt them
+              after a service restart.
+            </dd>
             <dt>Alarms</dt>
             <dd>Review active threshold breaches across wells.</dd>
             <dt>Analytics</dt>
