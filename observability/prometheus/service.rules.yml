@@ -1,0 +1,28 @@
+groups:
+  - name: service-health
+    rules:
+      - record: well_sim:service_ready
+        expr: |
+          (well_sim_twin_ready{job="twin-core"} and on(job, instance) (up == 1))
+          or
+          (well_sim_telemetry_ready{job=~"modbus|ingestion"} and on(job, instance) (up == 1))
+          or
+          (
+            well_sim_api_database_ready{job="api"}
+            and on(job, instance) (up == 1)
+            and on(job, instance) (well_sim_api_readiness_checked_timestamp_seconds > 0)
+            and on(job, instance) ((time() - well_sim_api_readiness_checked_timestamp_seconds) >= 0)
+            and on(job, instance) ((time() - well_sim_api_readiness_checked_timestamp_seconds) <= 30)
+          )
+      - record: well_sim:ingestion_commit_age_seconds
+        expr: |
+          (time() - well_sim_ingestion_last_commit_timestamp_seconds{job="ingestion"})
+          and on(job, instance) (well_sim_ingestion_last_commit_timestamp_seconds > 0)
+          and on(job, instance) ((time() - well_sim_ingestion_last_commit_timestamp_seconds) >= 0)
+          and on(job, instance) (up == 1)
+      - record: well_sim:forecast_scheduler_scan_age_seconds
+        expr: |
+          (time() - well_sim_twin_forecast_scheduler_last_scan_timestamp_seconds{job="twin-core"})
+          and on(job, instance) (well_sim_twin_forecast_scheduler_last_scan_timestamp_seconds > 0)
+          and on(job, instance) ((time() - well_sim_twin_forecast_scheduler_last_scan_timestamp_seconds) >= 0)
+          and on(job, instance) (up == 1)

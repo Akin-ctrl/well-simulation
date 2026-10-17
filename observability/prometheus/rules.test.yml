@@ -1,0 +1,199 @@
+rule_files:
+- service.rules.yml
+evaluation_interval: 15s
+tests:
+- name: ready
+  interval: 15s
+  input_series:
+  - series: up{job="api",instance="target"}
+    values: 1+0x4
+  - series: well_sim_api_database_ready{job="api",instance="target"}
+    values: 1+0x4
+  - series: well_sim_api_readiness_checked_timestamp_seconds{job="api",instance="target"}
+    values: 30+0x4
+  promql_expr_test:
+  - expr: well_sim:service_ready
+    eval_time: 60s
+    exp_samples:
+    - labels: well_sim:service_ready{instance="target",job="api"}
+      value: 1
+- name: failed
+  interval: 15s
+  input_series:
+  - series: up{job="api",instance="target"}
+    values: 1+0x4
+  - series: well_sim_api_database_ready{job="api",instance="target"}
+    values: 0+0x4
+  - series: well_sim_api_readiness_checked_timestamp_seconds{job="api",instance="target"}
+    values: 60+0x4
+  promql_expr_test:
+  - expr: well_sim:service_ready
+    eval_time: 60s
+    exp_samples:
+    - labels: well_sim:service_ready{instance="target",job="api"}
+      value: 0
+- name: down
+  interval: 15s
+  input_series:
+  - series: up{job="api",instance="target"}
+    values: 0+0x4
+  - series: well_sim_api_database_ready{job="api",instance="target"}
+    values: 1+0x4
+  - series: well_sim_api_readiness_checked_timestamp_seconds{job="api",instance="target"}
+    values: 60+0x4
+  promql_expr_test:
+  - expr: well_sim:service_ready
+    eval_time: 60s
+    exp_samples: []
+- name: stale
+  interval: 15s
+  input_series:
+  - series: up{job="api",instance="target"}
+    values: 1+0x4
+  - series: well_sim_api_database_ready{job="api",instance="target"}
+    values: 1+0x4
+  - series: well_sim_api_readiness_checked_timestamp_seconds{job="api",instance="target"}
+    values: 29+0x4
+  promql_expr_test:
+  - expr: well_sim:service_ready
+    eval_time: 60s
+    exp_samples: []
+- name: future
+  interval: 15s
+  input_series:
+  - series: up{job="api",instance="target"}
+    values: 1+0x4
+  - series: well_sim_api_database_ready{job="api",instance="target"}
+    values: 1+0x4
+  - series: well_sim_api_readiness_checked_timestamp_seconds{job="api",instance="target"}
+    values: 61+0x4
+  promql_expr_test:
+  - expr: well_sim:service_ready
+    eval_time: 60s
+    exp_samples: []
+- name: unprobed
+  interval: 15s
+  input_series:
+  - series: up{job="api",instance="target"}
+    values: 1+0x4
+  - series: well_sim_api_database_ready{job="api",instance="target"}
+    values: 1+0x4
+  - series: well_sim_api_readiness_checked_timestamp_seconds{job="api",instance="target"}
+    values: 0+0x4
+  promql_expr_test:
+  - expr: well_sim:service_ready
+    eval_time: 60s
+    exp_samples: []
+- name: absent
+  interval: 15s
+  input_series: []
+  promql_expr_test:
+  - expr: well_sim:service_ready
+    eval_time: 60s
+    exp_samples: []
+- name: lost scrape
+  interval: 15s
+  input_series:
+  - series: up{job="api",instance="target"}
+    values: 1 1 1 1 stale
+  - series: well_sim_api_database_ready{job="api",instance="target"}
+    values: 1+0x4
+  - series: well_sim_api_readiness_checked_timestamp_seconds{job="api",instance="target"}
+    values: 60+0x4
+  promql_expr_test:
+  - expr: well_sim:service_ready
+    eval_time: 60s
+    exp_samples: []
+- name: commit age while unready
+  interval: 15s
+  input_series:
+  - series: up{job="ingestion",instance="target"}
+    values: 1+0x4
+  - series: well_sim_telemetry_ready{job="ingestion",instance="target"}
+    values: 0+0x4
+  - series: well_sim_ingestion_last_commit_timestamp_seconds{job="ingestion",instance="target"}
+    values: 20+0x4
+  promql_expr_test:
+  - expr: well_sim:ingestion_commit_age_seconds
+    eval_time: 60s
+    exp_samples:
+    - labels: well_sim:ingestion_commit_age_seconds{instance="target",job="ingestion"}
+      value: 40
+- name: no commit yet
+  interval: 15s
+  input_series:
+  - series: up{job="ingestion",instance="target"}
+    values: 1+0x4
+  - series: well_sim_telemetry_ready{job="ingestion",instance="target"}
+    values: 0+0x4
+  - series: well_sim_ingestion_last_commit_timestamp_seconds{job="ingestion",instance="target"}
+    values: 0+0x4
+  promql_expr_test:
+  - expr: well_sim:ingestion_commit_age_seconds
+    eval_time: 60s
+    exp_samples: []
+- name: future commit
+  interval: 15s
+  input_series:
+  - series: up{job="ingestion",instance="target"}
+    values: 1+0x4
+  - series: well_sim_telemetry_ready{job="ingestion",instance="target"}
+    values: 0+0x4
+  - series: well_sim_ingestion_last_commit_timestamp_seconds{job="ingestion",instance="target"}
+    values: 61+0x4
+  promql_expr_test:
+  - expr: well_sim:ingestion_commit_age_seconds
+    eval_time: 60s
+    exp_samples: []
+- name: stopped ingestion
+  interval: 15s
+  input_series:
+  - series: up{job="ingestion",instance="target"}
+    values: 0+0x4
+  - series: well_sim_telemetry_ready{job="ingestion",instance="target"}
+    values: 0+0x4
+  - series: well_sim_ingestion_last_commit_timestamp_seconds{job="ingestion",instance="target"}
+    values: 20+0x4
+  promql_expr_test:
+  - expr: well_sim:ingestion_commit_age_seconds
+    eval_time: 60s
+    exp_samples: []
+- name: model stopped
+  interval: 15s
+  input_series:
+  - series: up{job="twin-core",instance="target"}
+    values: 1+0x4
+  - series: well_sim_twin_ready{job="twin-core",instance="target"}
+    values: 0+0x4
+  promql_expr_test:
+  - expr: well_sim:service_ready
+    eval_time: 60s
+    exp_samples:
+    - labels: well_sim:service_ready{instance="target",job="twin-core"}
+      value: 0
+- name: model ready
+  interval: 15s
+  input_series:
+  - series: up{job="twin-core",instance="target"}
+    values: 1+0x4
+  - series: well_sim_twin_ready{job="twin-core",instance="target"}
+    values: 1+0x4
+  promql_expr_test:
+  - expr: well_sim:service_ready
+    eval_time: 60s
+    exp_samples:
+    - labels: well_sim:service_ready{instance="target",job="twin-core"}
+      value: 1
+- name: scheduler age
+  interval: 15s
+  input_series:
+  - series: up{job="twin-core",instance="target"}
+    values: 1+0x4
+  - series: well_sim_twin_forecast_scheduler_last_scan_timestamp_seconds{job="twin-core",instance="target"}
+    values: 20+0x4
+  promql_expr_test:
+  - expr: well_sim:forecast_scheduler_scan_age_seconds
+    eval_time: 60s
+    exp_samples:
+    - labels: well_sim:forecast_scheduler_scan_age_seconds{instance="target",job="twin-core"}
+      value: 40

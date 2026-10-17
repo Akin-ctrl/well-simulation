@@ -12,7 +12,13 @@ import { dashboardRouter } from './routers/dashboard';
 import { twinRouter } from './routers/twin';
 import { controlsRouter } from './routers/controls';
 import { errorResponse } from './utils/handler';
-import { httpDuration, httpRequests, registry } from './metrics';
+import {
+  databaseReady,
+  httpDuration,
+  httpRequests,
+  readinessCheckedAt,
+  registry,
+} from './metrics';
 
 const app = new Hono();
 
@@ -73,6 +79,8 @@ app.get('/metrics', async (c) => {
 app.get('/ready', async (c) => {
   try {
     await db.execute(sql`select 1`);
+    databaseReady.set(1);
+    readinessCheckedAt.set(Date.now() / 1000);
     return c.json({
       status: 'ready',
       service: 'api',
@@ -80,6 +88,8 @@ app.get('/ready', async (c) => {
       timestamp: new Date().toISOString(),
     });
   } catch {
+    databaseReady.set(0);
+    readinessCheckedAt.set(Date.now() / 1000);
     return c.json(
       {
         status: 'not_ready',

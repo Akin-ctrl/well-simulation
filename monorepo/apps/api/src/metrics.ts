@@ -1,4 +1,10 @@
-import { Counter, Histogram, Registry, collectDefaultMetrics } from 'prom-client';
+import {
+  Counter,
+  Gauge,
+  Histogram,
+  Registry,
+  collectDefaultMetrics,
+} from 'prom-client';
 
 /**
  * Prometheus metrics for the API, per ADR 0029.
@@ -10,6 +16,18 @@ import { Counter, Histogram, Registry, collectDefaultMetrics } from 'prom-client
 export const registry = new Registry();
 
 collectDefaultMetrics({ register: registry });
+
+export const databaseReady = new Gauge({
+  name: 'well_sim_api_database_ready',
+  help: 'Result of the last completed database readiness probe',
+  registers: [registry],
+});
+
+export const readinessCheckedAt = new Gauge({
+  name: 'well_sim_api_readiness_checked_timestamp_seconds',
+  help: 'UTC epoch time of the last completed readiness probe; zero before a probe',
+  registers: [registry],
+});
 
 export const httpRequests = new Counter({
   name: 'api_http_requests_total',

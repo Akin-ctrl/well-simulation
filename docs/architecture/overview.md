@@ -162,3 +162,14 @@ state and calculates with the same model as manual forecasts. It checks owner
 authority and claim expiry before atomically saving the result and completion.
 The page distinguishes the latest attempt from the latest successful result and
 shows each timestamp. No job writes live controls. See [scheduled forecasts](../design/scheduled-forecasts.md).
+
+## Optional service metrics
+
+The `observability` Compose profile collects the API, model, gateway and ingestion
+metrics every 15 seconds. Prometheus stores up to seven days of metrics, subject
+to a 512MB block retention cap. Grafana provisions the Service health dashboard
+from the repository. Separate rows show endpoint reachability and service
+readiness; absent or stale samples remain unknown. Both host ports bind to
+loopback, and Grafana uses a separate local account. These services cannot write
+to the historian, model controls or alarm lifecycle. See the
+[design](../design/observability.md) and [runbook](../../observability/README.md).

@@ -207,6 +207,7 @@ class TwinRequestHandler(BaseHTTPRequestHandler):
             self._json(200 if ready else 503, payload)
             return
         if parsed.path == "/metrics":
+            self.runtime.readiness()
             self._body(200, self.runtime.metrics.render(), CONTENT_TYPE_LATEST)
             return
 

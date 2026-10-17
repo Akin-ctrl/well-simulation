@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+from collections.abc import Generator
 from contextlib import closing
 from dataclasses import replace
 from pathlib import Path
@@ -36,7 +37,7 @@ __all__ = ["database", "installed", "pytestmark"]
 
 
 @pytest.fixture
-def extension() -> tuple[SqlFile, SchemaContract]:
+def extension() -> Generator[tuple[SqlFile, SchemaContract]]:
     text = SOURCE.sql + (
         "\nCREATE TABLE extension_probe (id INT PRIMARY KEY, value "
         "TEXT);\nCREATE INDEX ix_extension_probe ON extension_probe(value);\n"

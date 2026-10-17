@@ -26,7 +26,7 @@ previously written down.
 | ADR | Decision | Implementation |
 | --- | --- | --- |
 | [0001](0001-project-positioning.md) | Position The Project As A Wellhead Monitoring Simulation Before Digital Twin | Implemented |
-| [0002](0002-lightweight-digital-twin-architecture.md) | Use A Layered Lightweight Digital Twin Architecture | Partial |
+| [0002](0002-lightweight-digital-twin-architecture.md) | Use A Layered Lightweight Digital Twin Architecture | Implemented for the synthetic reference well |
 | [0003](0003-stateful-process-model.md) | Make A Stateful Process Model The Twin Core | Implemented |
 | [0004](0004-industrial-interface.md) | Keep Modbus TCP As The Industrial Edge Interface | Implemented |
 | [0005](0005-data-historian.md) | Use PostgreSQL And TimescaleDB As The Historian (amended) | Implemented; engine recovery verified separately |
@@ -37,7 +37,7 @@ previously written down.
 | [0010](0010-model-runtime.md) | Run The Twin Core As A Separate Python Service | Implemented |
 | [0011](0011-twin-core-communication.md) | Use Internal HTTP Plus Durable Database Persistence | Implemented |
 | [0012](0012-state-storage.md) | Keep Active Twin State In Memory With Durable Snapshots | Implemented |
-| [0013](0013-prediction-strategy.md) | Start With On-Demand Forecasts And Evolve To Hybrid Forecasting | On-demand implemented |
+| [0013](0013-prediction-strategy.md) | Start With On-Demand Forecasts And Evolve To Hybrid Forecasting | On-demand and scheduled forecasts implemented |
 | [0014](0014-scenario-execution.md) | Run What-If Scenarios Against Isolated Cloned State | Implemented |
 | [0015](0015-control-and-safety.md) | Restrict Live Control To Actuator-Like Variables | Implemented |
 | [0016](0016-api-contract.md) | Use REST APIs Documented With OpenAPI | Implemented |
@@ -53,7 +53,7 @@ previously written down.
 | [0026](0026-retention-and-compression.md) | Use Tiered Retention And TimescaleDB Compression | Implemented |
 | [0027](0027-historical-branching.md) | Stage Historical Scenario Branching From Model Snapshots | Implemented |
 | [0028](0028-api-specification-workflow.md) | Use Per-Service OpenAPI Specs Committed To Documentation | Implemented |
-| [0029](0029-metrics-stack.md) | Expose Prometheus-Compatible Metrics With Optional Observability Stack | Partial |
+| [0029](0029-metrics-stack.md) | Expose Prometheus-Compatible Metrics With Optional Observability Stack | Implemented |
 | [0030](0030-portfolio-deployment-scope.md) | Target A Self-Contained Portfolio Deployment | Implemented |
 | [0031](0031-portfolio-demo-narrative.md) | Optimize The Demo For Fast Reviewer Understanding (amended) | Partial; workspace implemented, final portfolio delivery pending |
 | [0032](0032-alarm-center-scope.md) | Implement Active Alarm Inspection Before Alarm Lifecycle Workflows | Implemented |
@@ -64,9 +64,10 @@ previously written down.
 | [0037](0037-session-revocation.md) | Logout Ends Every Session Of The User, On The Server | Implemented |
 | [0038](0038-live-control-command-lifecycle.md) | Apply Live Model Controls Through Durable, Reviewed Commands | Implemented |
 
-Of 38 decisions: 32 implemented, 5 partial, and 1 not started.
-The partial group includes ADR 0007: API and scenario UI separation are complete,
-while live command forms remain deferred.
+Of 38 decisions, 37 have their agreed local implementation and one remains
+partial: ADR 0031 still has external portfolio publication and consent gates.
+Alarm acknowledgement and shelving are newly authorized work beyond the
+inspection scope completed under ADR 0032.
 
 The twin-core process model now feeds the Modbus gateway and historian.
 Durable model state, forecasts, isolated scenarios, live synthetic controls,

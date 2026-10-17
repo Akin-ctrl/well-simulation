@@ -25,6 +25,8 @@ import psycopg2
 import psycopg2.extensions
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
+from telemetry_metrics import TELEMETRY_READY
+
 # Both the gateway and ingestion encode values as two 16-bit words, big-endian
 # bytes with the low word first. This reproduces the layout written before the
 # pymodbus 3.x upgrade, so existing register maps and stored readings stay valid.
@@ -388,6 +390,7 @@ class ServiceEndpointHandler(BaseHTTPRequestHandler):
                 {"status": "ready" if ready else "not_ready", **self.health.detail},
             )
         elif self.path == "/metrics":
+            TELEMETRY_READY.set(int(self.health.alive and self.health.ready))
             body = generate_latest()
             self.send_response(200)
             self.send_header("Content-Type", CONTENT_TYPE_LATEST)

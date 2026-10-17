@@ -2,7 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-05-31
-- Implementation: Partial
+- Implementation: Implemented for the synthetic reference well
 
 ## Context
 
@@ -39,3 +39,11 @@ The goal is to demonstrate industrial digital twin concepts in a production-grad
 - Model fidelity must be documented honestly.
 - The dashboard should show modeled state and predictions separately from raw readings.
 
+
+## Implementation note, 2026-10-17
+
+The dedicated model now feeds Modbus and the historian. The dashboard separates
+measured telemetry views, model state, forecasts, isolated scenarios and live
+model controls. This completes the selected layered architecture for the
+synthetic reference well. Field calibration and physical device control remain
+outside this implementation.

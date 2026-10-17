@@ -292,8 +292,8 @@ The [usability delivery record](docs/design/dashboard-usability.md#delivery-evid
 records the design checks and remaining external delivery items.
 
 It is not production ready. The twin-core model uses synthetic, uncalibrated
-parameters and has no field calibration or physical device control. The API, gateway,
-ingestion, and twin-core services expose metrics, but no metrics collection stack
-is deployed.
-Several accepted ADRs are still unimplemented. The
-[ADR index](docs/adr/README.md) tracks the gap between decisions and code.
+parameters and has no field calibration or physical device control. The optional [service metrics profile](observability/README.md) collects API,
+gateway, ingestion and twin-core metrics in Prometheus and provides a Grafana
+Service health dashboard.
+The [ADR index](docs/adr/README.md) tracks completed local decisions and the
+remaining external portfolio delivery gates.

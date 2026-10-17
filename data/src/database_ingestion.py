@@ -36,6 +36,7 @@ from telemetry_common import (
 )
 from telemetry_metrics import (
     INGESTION_RECONNECTS,
+    LAST_COMMIT_TIMESTAMP,
     METADATA_RELOADS,
     MODBUS_READ_ERRORS,
     POLL_DURATION,
@@ -440,6 +441,7 @@ def ingest_forever(
                         cursor, INSERT_READING_SQL, [r.as_row() for r in readings]
                     )
                     conn.commit()
+                    LAST_COMMIT_TIMESTAMP.set(time.time())
                     last_heartbeat = polled_status.heartbeat
                     READINGS_WRITTEN.inc(len(readings))
                     # Only now is the service demonstrably doing its job.

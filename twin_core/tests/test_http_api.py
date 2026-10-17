@@ -525,3 +525,16 @@ def test_snapshot_finder_authentication_bounds_and_exact_selection(
         "snapshotId": 9007199254740993,
     }
     assert _post(server, "/scenarios", request_body)[0] == 400
+
+
+def test_metrics_refresh_model_readiness_without_another_probe(
+    projection_server: ProjectionServer,
+) -> None:
+    http_server, _store, runtime = projection_server
+    # Deliberately stale gauge: the handler must replace it with current readiness.
+    runtime.metrics.ready.set(1)
+    runtime._last_tick_monotonic = None
+    with urlopen(
+        f"http://127.0.0.1:{http_server.server_port}/metrics", timeout=2
+    ) as response:
+        assert b"well_sim_twin_ready 0.0" in response.read()

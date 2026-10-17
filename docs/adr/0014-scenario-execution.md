@@ -2,7 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-05-31
-- Implementation: Implemented for current-state scenarios
+- Implementation: Current and verified historical snapshot scenarios implemented
 
 ## Context
 

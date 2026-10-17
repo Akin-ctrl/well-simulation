@@ -2,7 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-05-31
-- Implementation: API and scenario UI boundaries implemented; live command forms deferred
+- Implementation: Separate scenario, live control and parameter screens implemented
 
 ## Context
 

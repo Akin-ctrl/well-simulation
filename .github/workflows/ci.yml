@@ -179,6 +179,11 @@ jobs:
       - name: Build all service images
         run: docker compose build
 
+      - name: Validate optional metrics configuration and rules
+        run: |
+          docker compose --profile observability run --rm --no-deps --entrypoint /bin/promtool prometheus check config /etc/prometheus/prometheus.yml
+          docker compose --profile observability run --rm --no-deps --workdir /etc/prometheus --entrypoint /bin/promtool prometheus test rules rules.test.yml
+
       - name: Verify dashboard proxy recovery
         run: python3 scripts/verify_proxy_recovery.py
 
