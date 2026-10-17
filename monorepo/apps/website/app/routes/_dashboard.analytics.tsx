@@ -1,174 +1,118 @@
-import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts';
 import { useLoaderData } from 'react-router';
-import type {
-  AlarmCount,
-  DashboardAnalyticsResponse,
-} from '@well-simulation/dto/res/dashboard';
-import { Title } from '../domains/dashboard/components/misc';
+import type { DashboardAnalyticsResponse } from '@well-simulation/dto/res/dashboard';
 import { TrendChart } from '../domains/dashboard/components/trend-chart';
+import { PageHelp } from '../domains/dashboard/components/page-help';
+import {
+  ReadStatus,
+  readDashboardView,
+} from '../domains/dashboard/components/read-status';
+import { ReadFailure } from '../domains/twin/read-failure';
+import { useRetainedRead } from '../hooks/use-retained-read';
 import { client, fetchFn } from '../utils/api';
 import { REFRESH_INTERVALS, useAutoRefresh } from '../hooks/use-auto-refresh';
 
-type AlarmSegment = {
-  color: string;
-  name: string;
-  amount: number;
-};
-
-const SEVERITY_COLORS: Record<string, string> = {
-  critical: '#DC2626',
-  high: '#F97316',
-  warning: '#F59E0B',
-  medium: '#EAB308',
-  low: '#01C0F6',
-};
-
 export async function clientLoader() {
-  const response = await fetchFn<DashboardAnalyticsResponse>(
-    client.dashboard.analytics.$get()
+  return readDashboardView(
+    async () =>
+      (await fetchFn<DashboardAnalyticsResponse>(client.dashboard.analytics.$get()))
+        .data
   );
-  return response.data;
 }
 
-function formatNumber(value: number | null | undefined) {
-  if (value === null || value === undefined) {
-    return '—';
-  }
-
-  return new Intl.NumberFormat('en', {
-    maximumFractionDigits: 1,
-  }).format(value);
-}
-
-function alarmSegments(counts: AlarmCount[]): AlarmSegment[] {
-  const totals = new Map<string, number>();
-
-  for (const count of counts) {
-    const severity = count.severityLevel?.toLowerCase() ?? 'unknown';
-    totals.set(severity, (totals.get(severity) ?? 0) + (count.alarmsTriggered ?? 0));
-  }
-
-  if (!totals.size) {
-    return [{ color: '#D1D5DB', name: 'No alarms', amount: 1 }];
-  }
-
-  return [...totals.entries()].map(([severity, total]) => ({
-    color: SEVERITY_COLORS[severity] ?? '#6B7280',
-    name: severity,
-    amount: total,
-  }));
-}
-
-function totalAlarms(segments: AlarmSegment[]) {
-  if (segments.length === 1 && segments[0]?.name === 'No alarms') {
-    return 0;
-  }
-
-  return segments.reduce((total, segment) => total + segment.amount, 0);
-}
-
-function Analytics() {
-  const data = useLoaderData() as DashboardAnalyticsResponse;
+/** Fleet averages and alarm counts retain their own meaning and timestamps. */
+export default function Analytics() {
+  const incoming = useLoaderData<typeof clientLoader>();
+  const retained = useRetainedRead(incoming.value, 'analytics');
   useAutoRefresh(REFRESH_INTERVALS.analytics);
-  const alarmData = alarmSegments(data.alarmCounts);
-  const alarmTotal = totalAlarms(alarmData);
-
+  if (!retained) return incoming.error ? <ReadFailure error={incoming.error} /> : null;
+  const data = retained.data;
+  const totals = new Map<string, number>();
+  for (const count of data.alarmCounts) {
+    const severity = count.severityLevel ?? 'Unknown';
+    totals.set(severity, (totals.get(severity) ?? 0) + count.alarmsTriggered);
+  }
   return (
-    <div className='space-y-5'>
-      <div>
-        <Title>Analytics</Title>
-        <p className='text-fg-muted'>
-          Two-minute aggregate trends from TimescaleDB continuous aggregates.
+    <div className='twin-workspace twin-stack'>
+      {incoming.error && <ReadFailure error={incoming.error} retained />}
+      <header>
+        <h1>Analytics</h1>
+        <p className='twin-muted'>
+          Compare recent trends across the fleet. Open a well for its individual
+          history.
         </p>
-      </div>
-
-      <div className='grid grid-cols-1 gap-4 xl:grid-cols-5'>
-        <div className='card xl:col-span-2'>
-          <div className='mb-4'>
-            <h2 className='font-semibold'>Pressure Trends</h2>
-            <p className='text-sm text-fgColor-muted'>
-              Tubing, casing, and annulus pressure averages across wells.
-            </p>
-          </div>
-          <TrendChart
-            points={data.pressureTrend}
-            metricCodes={['tubing_pressure', 'casing_pressure', 'annulus_pressure']}
-            emptyMessage='No aggregate metric data available yet.'
-          />
+      </header>
+      <ReadStatus
+        checkedAt={retained.checkedAt}
+        intervalMs={REFRESH_INTERVALS.analytics}
+      />
+      <PageHelp title='What these charts show'>
+        <p>
+          Each point averages available readings across wells over two minutes. A fleet
+          average can hide a change at one well.
+        </p>
+        <p>
+          Check each chart’s timestamps. A line gap means missing data. Temperature and
+          flow use separate axes because their units differ.
+        </p>
+        <p>
+          Alarm counts include events triggered in the last 24 hours, including events
+          that have cleared. Alarms shows only the active events.
+        </p>
+      </PageHelp>
+      <section className='twin-panel'>
+        <div className='twin-panel-heading'>
+          <h2>Alarms triggered in the last 24 hours</h2>
         </div>
-
-        <div className='card xl:col-span-2'>
-          <div className='mb-4'>
-            <h2 className='font-semibold'>Temperature / Flow</h2>
-            <p className='text-sm text-fgColor-muted'>
-              Two-minute averages across wells. Each unit has its own axis.
-            </p>
-          </div>
-          <TrendChart
-            points={data.temperatureFlowTrend}
-            metricCodes={['wellhead_temperature', 'flow_rate']}
-            emptyMessage='No aggregate metric data available yet.'
-          />
+        <div className='twin-panel-body'>
+          {totals.size ? (
+            <dl className='twin-grid'>
+              {[...totals].map(([severity, count]) => (
+                <div key={severity}>
+                  <dt className='twin-muted'>{severity}</dt>
+                  <dd className='twin-number'>{count}</dd>
+                </div>
+              ))}
+            </dl>
+          ) : (
+            <p className='twin-muted'>No alarm events in this period.</p>
+          )}
         </div>
-
-        <div className='card'>
-          <div className='mb-4'>
-            <h2 className='font-semibold'>Alarm Severity</h2>
-            <p className='text-sm text-fgColor-muted'>
-              Alarms triggered in the last 24 hours, by severity.
-            </p>
-          </div>
-          <div className='relative h-56'>
-            <ResponsiveContainer>
-              <PieChart width={100} height={100}>
-                <Pie
-                  data={alarmData}
-                  dataKey='amount'
-                  outerRadius={80}
-                  innerRadius={65}
-                  paddingAngle={5}
-                  cornerRadius={5}
-                >
-                  {alarmData.map((segment) => (
-                    <Cell
-                      key={segment.name}
-                      fill={segment.color}
-                      strokeLinejoin='round'
-                      strokeLinecap='round'
-                    />
-                  ))}
-                </Pie>
-                <Tooltip
-                  formatter={(value: number, name: string) => [
-                    formatNumber(value),
-                    name,
-                  ]}
-                />
-              </PieChart>
-            </ResponsiveContainer>
-            <div className='absolute left-0 top-0 flex h-full w-full flex-col items-center justify-center'>
-              <p className='text-fgColor-muted'>Total</p>
-              <p className='text-title-medium'>{formatNumber(alarmTotal)}</p>
+      </section>
+      <div className='twin-grid'>
+        {[
+          {
+            title: 'Pressure trends',
+            points: data.pressureTrend,
+            codes: ['tubing_pressure', 'casing_pressure', 'annulus_pressure'],
+          },
+          {
+            title: 'Temperature and flow',
+            points: data.temperatureFlowTrend,
+            codes: ['wellhead_temperature', 'flow_rate'],
+          },
+          {
+            title: 'Water cut and gas–oil ratio',
+            points: data.waterCutGorTrend,
+            codes: ['water_cut', 'gas_oil_ratio'],
+          },
+        ].map((chart) => (
+          <section className='twin-panel' key={chart.title}>
+            <div className='twin-panel-heading'>
+              <div>
+                <h2>{chart.title}</h2>
+                <p className='twin-muted'>Two-minute averages across wells.</p>
+              </div>
             </div>
-          </div>
-        </div>
-
-        <div className='card xl:col-span-3'>
-          <div className='mb-4'>
-            <h2 className='font-semibold'>Water Cut / Gas-Oil Ratio</h2>
-            <p className='text-sm text-fgColor-muted'>
-              Two-minute averages across wells. Each unit has its own axis.
-            </p>
-          </div>
-          <TrendChart
-            points={data.waterCutGorTrend}
-            metricCodes={['water_cut', 'gas_oil_ratio']}
-            emptyMessage='No aggregate metric data available yet.'
-          />
-        </div>
+            <div className='twin-panel-body'>
+              <TrendChart
+                points={chart.points}
+                metricCodes={chart.codes}
+                emptyMessage='No readings in this period yet.'
+              />
+            </div>
+          </section>
+        ))}
       </div>
     </div>
   );
 }
-
-export default Analytics;

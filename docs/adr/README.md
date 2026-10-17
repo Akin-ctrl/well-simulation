@@ -31,7 +31,7 @@ previously written down.
 | [0004](0004-industrial-interface.md) | Keep Modbus TCP As The Industrial Edge Interface | Implemented |
 | [0005](0005-data-historian.md) | Use PostgreSQL And TimescaleDB As The Historian (amended) | Implemented; engine recovery verified separately |
 | [0006](0006-schema-management.md) | Keep SQL As The Canonical Schema Source (amended) | Implemented; single-file amendment adopted |
-| [0007](0007-control-and-what-if-boundaries.md) | Separate Live Control From What-If Simulation | API implemented; UI deferred |
+| [0007](0007-control-and-what-if-boundaries.md) | Separate Live Control From What-If Simulation | API and scenario UI implemented; live command forms deferred |
 | [0008](0008-production-deployment-baseline.md) | Use A Containerized Service Baseline | Implemented |
 | [0009](0009-model-fidelity.md) | Start With A Lightweight Deterministic Model | Implemented |
 | [0010](0010-model-runtime.md) | Run The Twin Core As A Separate Python Service | Implemented |
@@ -41,7 +41,7 @@ previously written down.
 | [0014](0014-scenario-execution.md) | Run What-If Scenarios Against Isolated Cloned State | Implemented |
 | [0015](0015-control-and-safety.md) | Restrict Live Control To Actuator-Like Variables | Implemented |
 | [0016](0016-api-contract.md) | Use REST APIs Documented With OpenAPI | Implemented |
-| [0017](0017-observability-baseline.md) | Use Structured Logs, Health Checks, And Metrics As The Observability Baseline | Implemented |
+| [0017](0017-observability-baseline.md) | Use Structured Logs, Health Checks, And Metrics As The Observability Baseline (amended) | Implemented; dashboard readiness includes its API path |
 | [0018](0018-deployment-target.md) | Use Docker Compose As The First Production-Grade Deployment Target | Implemented |
 | [0019](0019-model-equations.md) | Use A Reduced-Order Mechanistic Wellhead Model | Implemented |
 | [0020](0020-model-tick-semantics.md) | Use Fixed Timestep Model Updates | Implemented |
@@ -55,7 +55,7 @@ previously written down.
 | [0028](0028-api-specification-workflow.md) | Use Per-Service OpenAPI Specs Committed To Documentation | Implemented |
 | [0029](0029-metrics-stack.md) | Expose Prometheus-Compatible Metrics With Optional Observability Stack | Partial |
 | [0030](0030-portfolio-deployment-scope.md) | Target A Self-Contained Portfolio Deployment | Implemented |
-| [0031](0031-portfolio-demo-narrative.md) | Optimize The Demo For Fast Reviewer Understanding | Partial |
+| [0031](0031-portfolio-demo-narrative.md) | Optimize The Demo For Fast Reviewer Understanding (amended) | Partial; workspace implemented, final portfolio delivery pending |
 | [0032](0032-alarm-center-scope.md) | Implement Active Alarm Inspection Before Alarm Lifecycle Workflows | Implemented |
 | [0033](0033-role-model-and-access-control.md) | Separate Operating Authority From Administrative Authority | Implemented |
 | [0034](0034-audit-trail-scope.md) | Record An Audit Trail For Actors, Not For Auditors | Implemented |
@@ -65,8 +65,8 @@ previously written down.
 | [0038](0038-live-control-command-lifecycle.md) | Apply Live Model Controls Through Durable, Reviewed Commands | Implemented |
 
 Of 38 decisions: 32 implemented, 5 partial, and 1 not started.
-The partial group includes ADR 0007: the API separation is complete, while
-its dashboard presentation is deferred.
+The partial group includes ADR 0007: API and scenario UI separation are complete,
+while live command forms remain deferred.
 
 The twin-core process model now feeds the Modbus gateway and historian.
 Durable model state, forecasts, isolated scenarios, live synthetic controls,

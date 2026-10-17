@@ -1,7 +1,6 @@
 import {
   AlertTriangleIcon,
   ChartBarIcon,
-  CogIcon,
   HelpCircleIcon,
   LayoutDashboardIcon,
 } from 'lucide-react';
@@ -16,15 +15,15 @@ import { routes } from '~/config/routes';
 
 export type MenuItem = {
   name: string;
-  href?: string;
+  href: string;
   icon?: React.ReactNode;
   disabled?: boolean;
   new?: boolean;
   dropdownItems?: MenuItem[];
 };
 
-// this controle the sidebar menu items. positioning matters here and rearranging them means rearranging the sidebar menu items.
-export const menuItems = [
+// Desktop and compact navigation share this order.
+export const menuItems: MenuItem[] = [
   {
     name: 'Overview',
     href: routes.dashboard.overview,
@@ -41,16 +40,8 @@ export const menuItems = [
     href: routes.dashboard.analytics,
   },
   {
-    name: 'Settings',
-    href: routes.dashboard.settings,
-    icon: <CogIcon />,
-    disabled: true,
-  },
-
-  {
-    name: 'Help',
+    name: 'Guide',
     href: routes.help,
     icon: <HelpCircleIcon />,
-    disabled: true,
   },
 ];

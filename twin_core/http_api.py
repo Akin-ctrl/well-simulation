@@ -189,6 +189,11 @@ class TwinRequestHandler(BaseHTTPRequestHandler):
             self._body(200, self.runtime.metrics.render(), CONTENT_TYPE_LATEST)
             return
 
+        if parsed.path == "/model-status":
+            if self._authorized():
+                self._json(200, self.runtime.status_snapshot())
+            return
+
         if parsed.path == "/model-snapshot":
             self._model_snapshot()
             return

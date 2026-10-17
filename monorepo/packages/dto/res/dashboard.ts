@@ -111,6 +111,7 @@ export type DashboardOverviewResponse = {
   summary: DashboardSummary;
   latestReadings: LatestReading[];
   activeAlarms: ActiveAlarm[];
+  wellheads: Array<WellheadAsset & { activeAlarmCount: number }>;
 };
 
 export type TrendPoint = {
@@ -151,6 +152,7 @@ export type WellheadAsset = {
 export type WellheadDetailResponse = {
   wellhead: WellheadAsset;
   latestReadingAt: string | null;
+  latestReadingAgeSeconds: number | null;
   latestReadings: LatestReading[];
   activeAlarms: ActiveAlarm[];
   pressureTrend: TrendPoint[];

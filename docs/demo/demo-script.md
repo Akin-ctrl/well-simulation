@@ -1,91 +1,81 @@
 # Demo Script
 
-This script describes the intended portfolio-review flow.
-
 ## Goal
 
-Show that the project is an industrial wellhead monitoring simulation evolving into a lightweight digital twin foundation.
+Show a reviewer how one synthetic well moves from live monitoring to a saved
+what-if comparison. The short route is Overview, Monitoring, Scenarios, then
+Saved runs. Allow roughly five minutes after the stack is ready.
 
-## Flow
+## Start and sign in
 
-1. Start the local stack:
+Follow the root README to create the local environment, then run:
 
-   ```bash
-   docker compose up --build
-   ```
+```bash
+docker compose up -d --build --wait
+```
 
-2. Open the dashboard:
+Open <http://localhost:8090> and sign in as demo@example.com with the documented
+local password, demo-operator-2026. This USER account can save model analyses
+but cannot change installed controls.
 
-   ```text
-   http://localhost:8090
-   ```
+The Guide in the main navigation explains each view and includes a first-run
+walkthrough. Contextual help beside the forms explains their inputs.
 
-3. Confirm live telemetry:
+## Walk through one well
 
-   - wellhead pressure
-   - flow rate
-   - temperature
-   - water cut
-   - valve/pump status
+1. In Overview, find WH-001. Read pressure, flow, water cut, model status, and
+   conditions. The Needs attention filter includes signals outside those three
+   headline readings. A configured well remains visible when it has no data.
+2. Open the well's Monitoring view. Check readings, then expand Model
+   diagnostics to compare sample time with process time. The scheduler tick appears
+   separately because a ticking service does not prove a successful calculation.
+3. Read Installed controls. Note the choke opening and revision before running
+   the scenario. This panel has no live command buttons.
+4. Open Scenarios. Name the run Choke comparison, choose a five-minute duration
+   and a 60-second chart interval, and set the first change to minute zero. Select Choke
+   opening and enter 50 percent. If the current choke is already 50 percent,
+   choose a different target so the comparison shows a change.
+5. Select Run scenario. The model runs from a copy of current state and saves
+   its result. Read the named saved result and its generation time on the right.
+6. Compare Flow rate and Tubing pressure using the signal selector. The dashed
+   line holds the copied controls unchanged; the purple line follows the proposed
+   schedule. Each chart uses the signal's canonical unit. The difference is
+   scenario minus baseline at the same final sample.
+7. Expand Original run inputs and the plotted-value table. Changing the form's
+   draft does not change these saved inputs. Confidence reasons explain the
+   model's limits. The heuristic score is not a probability. Threshold results
+   describe returned samples and can miss events between them.
+8. Open Saved runs and reopen the named result. Refreshing that result's URL
+   reads saved points without running another scenario. Other authorized
+   dashboard readers can also read it.
+9. Return to Monitoring and confirm the installed controls and revision are
+   unchanged. The synthetic process continues evolving while analysis runs.
 
-4. Inspect the current implemented dashboard:
+The Forecast view follows the same pattern with no control schedule. It holds
+the copied controls constant. Both forms accept five to 120 minutes. Longer
+runs reduce the model's heuristic confidence.
 
-   - fleet overview
-   - analytics charts
-   - per-wellhead detail page
-   - Alarm Center and active alarms on affected wellheads
+## Explain the limits
 
-5. Inspect active alarms:
+All 18 signals come from a synthetic model. Pressure, flow, and temperature
+respond together; simpler diagnostic equations estimate gas, sand, corrosion,
+annulus pressure, and vibration. No field measurements calibrated these
+equations. Current trend buckets and alarm thresholds suit a short demo.
 
-   - high pressure
-   - high temperature
-   - high water cut
-   - high vibration or degradation indicators
+The Alarm Center and monitoring charts remain available from the navigation.
+The present operating point may have no active alarms. Do not claim alarms
+exist when the page reports none. Projected threshold results do not create
+live alarm events.
 
-6. Explain what is simulated:
+A saved result may expire under retention while its history entry remains.
+A timeout can leave the submission outcome unknown. Use Saved runs to look for
+the result before submitting again. The application does not retry the POST.
 
-   ```text
-   All 18 signals come from a synthetic process model. Pressure, flow, and
-   temperature respond together; diagnostic equations estimate gas, sand,
-   corrosion, annulus pressure, and vibration. No field data calibrated these
-   equations. Two-minute and five-minute chart buckets and alarm thresholds
-   are chosen for a short demo.
-   ```
+## Technical follow-up
 
-7. Use the authenticated API to run a private what-if scenario:
-
-   ```text
-   POST /api/twin/scenarios
-   Choose an active well, a 300-second horizon, and a control schedule that
-   closes its choke to 50 percent at minute zero. Use the request shape in
-   docs/openapi/public-api.yaml. The response includes the saved run ID and
-   baseline values for comparison. The dashboard has no scenario form yet.
-   ```
-
-8. Inspect the scenario response:
-
-   - Compare flow and pressure with the baseline, which holds current controls.
-   - Read the heuristic confidence score and its reasons. It is not a measured probability.
-   - Inspect projected threshold crossings. These do not create live alarms.
-   - Confirm the running well's controls are unchanged by the scenario.
-
-9. Inspect the data layer:
-
-   - raw readings in TimescaleDB
-   - alarm events
-   - model state snapshots and restart recovery events
-   - saved forecast and scenario runs and their points
-
-10. Inspect architecture decisions:
-
-   ```text
-   docs/adr/
-   ```
-
-## Current Status
-
-The overview, analytics, per-wellhead detail pages, Alarm Center, live telemetry,
-and active alarm data are implemented. The backend also implements stateful
-synthetic wells, snapshots, saved forecasts, and isolated scenarios. Live
-synthetic controls use the Milestone 8B draft and activation API. Forecast and scenario
-dashboard features remain to be built in Milestone 9.
+- Open the architecture overview for the model, Modbus, ingestion, and historian path.
+- Open the Milestone 9 design for screen logic, failure handling, and verification.
+- Open the API specifications for forecast, scenario, status, and history contracts.
+- Live synthetic control uses the separate Milestone 8B draft and activation API.
+  Field calibration, physical control, and alarm acknowledgement remain outside
+  this demo's implemented scope.

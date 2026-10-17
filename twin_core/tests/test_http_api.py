@@ -381,3 +381,52 @@ def test_projection_failure_returns_503_without_partial_fake_save(
     assert status == 503
     assert body["error"] == "projection_dependency_unavailable"
     assert not store.saved
+
+
+def test_model_status_requires_token_and_includes_initializing_wells(
+    projection_server: ProjectionServer,
+) -> None:
+    server, _, runtime = projection_server
+    assert _get(server, "/model-status")[0] == 403
+    runtime.registry.replace_wellheads([1, 2])
+    request = Request(
+        f"http://127.0.0.1:{server.server_port}/model-status",
+        headers={"X-Twin-Internal-Token": "a" * 32},
+    )
+    with urlopen(request, timeout=2) as response:  # noqa: S310
+        body = json.load(response)
+    assert body["available"] is True
+    assert len(body["wellheads"]) == 2
+    assert body["wellheads"][0]["current"] is True
+    assert body["wellheads"][1]["simulatedAt"] is None
+    assert body["wellheads"][1]["current"] is False
+    assert "process" not in body["wellheads"][0]
+
+
+def test_model_status_does_not_call_a_fresh_tick_fresh_output(
+    projection_server: ProjectionServer, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from datetime import timedelta
+
+    import twin_core.state as state_module
+
+    _, _, runtime = projection_server
+    previous = runtime.state(1)
+    assert previous is not None and previous.process is not None
+    later = previous.process.simulated_at + timedelta(seconds=100)
+
+    def failed_step(*_args: object) -> None:
+        """Leave the last good process state behind a newly recorded tick."""
+        raise ArithmeticError("test model failure")
+
+    monkeypatch.setattr(state_module, "step_model", failed_step)
+    monkeypatch.setattr(runtime, "_wall", lambda: later)
+    runtime.registry.tick(later)
+    payload = runtime.status_snapshot()
+    wells = payload["wellheads"]
+    assert isinstance(wells, list)
+    assert wells[0]["lastTickAt"] == later.isoformat()
+    assert wells[0]["simulatedAt"] == previous.process.simulated_at.isoformat()
+    assert wells[0]["processAgeSeconds"] == 100
+    assert wells[0]["current"] is False
+    assert wells[0]["reason"] == "model_step_failed"

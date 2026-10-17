@@ -3,6 +3,18 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { deleteTestUsers, request, signedInAs, withDb } from './helpers/api';
 
+import type {
+  ProjectionDetail,
+  RunHistory,
+} from '@well-simulation/dto/res/projection-detail';
+import type { FleetModelStatus } from '@well-simulation/dto/res/model-status';
+import type { DashboardOverviewResponse } from '@well-simulation/dto/res/dashboard';
+
+/** Read the standard test envelope; each test asserts the fields it exercises. */
+async function responseData<T>(response: Response): Promise<T> {
+  return ((await response.json()) as { data: T }).data;
+}
+
 const runId = randomUUID();
 const scenarioId = randomUUID();
 const baseAt = new Date().toISOString();
@@ -147,7 +159,8 @@ describe('Milestone 8 projection API', () => {
           control_values, scheduled_controls, alarm_rules,
           confidence_score, confidence_reasons)
          VALUES ($1, $2, 1, $3, 'Close choke', '1.0.0', 'fingerprint', $2,
-                 300, 300, '{}', '{}', '{}', '[]', '[]', 0.5, '["Synthetic model"]')`,
+                 300, 300, '{}', '{}', '{"choke_position_percent":100}',
+                 '[{"offset_seconds":0,"change":{"choke_position_percent":80,"pump_on":null}}]', '[]', 0.5, '["Synthetic model"]')`,
         [scenarioId, baseAt, actor]
       );
       await client.query(
@@ -176,5 +189,153 @@ describe('Milestone 8 projection API', () => {
     expect(body.data.kind).toBe('scenario');
     expect(body.data.points[0]?.values.flow_rate).toBe(0);
     expect(body.data.points[0]?.baselineValues.flow_rate).toBe(100);
+  });
+  it('returns the saved schedule and canonical units without point queries in history', async () => {
+    const saved = await request(`/twin/scenarios/${scenarioId}`, { cookie });
+    const result = await responseData<ProjectionDetail>(saved);
+    expect(result.baselineControls).toEqual({ choke_position_percent: 100 });
+    expect(result.scheduledControls).toEqual([
+      { offsetMinutes: 0, input: { chokePositionPercent: 80 } },
+    ]);
+    expect(result.signals).toContainEqual(
+      expect.objectContaining({ code: 'flow_rate', canonicalUnit: 'bbl/day' })
+    );
+    const history = await request('/twin/wellheads/1/runs?kind=scenario&limit=1', {
+      cookie,
+    });
+    expect(history.status).toBe(200);
+    const page = await responseData<RunHistory>(history);
+    expect(page.items[0]?.runId).toBe(scenarioId);
+    expect(page.items[0]).not.toHaveProperty('points');
+    expect(page.hasMore).toBe(false);
+    expect(
+      (await request('/twin/wellheads/1/runs?kind=scenario&offset=1', { cookie }))
+        .status
+    ).toBe(200);
+    const otherWell = await request('/twin/wellheads/2/runs?kind=scenario', { cookie });
+    expect((await responseData<RunHistory>(otherWell)).items).toEqual([]);
+  });
+
+  it('bounds history, validates the well, and requires authentication', async () => {
+    expect((await request('/twin/wellheads/1/runs')).status).toBe(401);
+    for (const query of [
+      'limit=51',
+      'offset=-1',
+      'offset=10001',
+      'kind=invalid',
+      'unexpected=1',
+    ]) {
+      expect(
+        (await request(`/twin/wellheads/1/runs?${query}`, { cookie })).status
+      ).toBe(400);
+    }
+    expect((await request('/twin/wellheads/2147483647/runs', { cookie })).status).toBe(
+      404
+    );
+  });
+
+  it('keeps model lifecycle reads available during partial startup and strips extra fields', async () => {
+    const status = {
+      wellheadId: 1,
+      modelVersion: '0.3.0',
+      status: 'degraded',
+      reason: 'model_step_failed',
+      lastTickAt: baseAt,
+      simulatedAt: baseAt,
+      processAgeSeconds: 100,
+      current: false,
+      skippedTicks: 0,
+      restoredFrom: null,
+      lastRecoveryEvent: null,
+      internalSecret: 'must-not-pass',
+    };
+    const call = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(
+        new Response(
+          JSON.stringify({ checkedAt: baseAt, available: true, wellheads: [status] })
+        )
+      );
+    try {
+      expect((await request('/twin/status')).status).toBe(401);
+      const response = await request('/twin/status', { cookie });
+      expect(response.status).toBe(200);
+      const data = await responseData<FleetModelStatus>(response);
+      expect(data.wellheads[0]?.current).toBe(false);
+      expect(data.wellheads[0]).not.toHaveProperty('internalSecret');
+      expect(String(call.mock.calls[0]?.[0])).toContain('/model-status');
+    } finally {
+      call.mockRestore();
+    }
+  });
+
+  it('reports an unavailable model without failing the optional status panel', async () => {
+    const call = vi
+      .spyOn(globalThis, 'fetch')
+      .mockRejectedValue(new Error('unreachable'));
+    try {
+      const response = await request('/twin/status', { cookie });
+      expect(response.status).toBe(200);
+      expect(await responseData<FleetModelStatus>(response)).toMatchObject({
+        available: false,
+        wellheads: [],
+      });
+    } finally {
+      call.mockRestore();
+    }
+  });
+
+  it('paginates metadata even when a run has no retained points', async () => {
+    const secondId = randomUUID();
+    await withDb((client) =>
+      client.query(
+        `INSERT INTO scenario_run
+      SELECT $1, created_at + interval '1 second', wellhead_id, requested_by_user_id,
+      name, model_version, parameter_fingerprint, base_simulated_at, horizon_seconds,
+      step_seconds, base_state, parameter_values, control_values, scheduled_controls,
+      alarm_rules, confidence_score, confidence_reasons FROM scenario_run WHERE run_id=$2`,
+        [secondId, scenarioId]
+      )
+    );
+    try {
+      const first = await responseData<RunHistory>(
+        await request('/twin/wellheads/1/runs?kind=scenario&limit=1', { cookie })
+      );
+      expect(first.items.map((item: { runId: string }) => item.runId)).toEqual([
+        secondId,
+      ]);
+      expect(first.hasMore).toBe(true);
+      const second = await responseData<RunHistory>(
+        await request('/twin/wellheads/1/runs?kind=scenario&limit=1&offset=1', {
+          cookie,
+        })
+      );
+      expect(second.items.map((item: { runId: string }) => item.runId)).toEqual([
+        scenarioId,
+      ]);
+      expect(second.hasMore).toBe(false);
+      expect((await request(`/twin/scenarios/${secondId}`, { cookie })).status).toBe(
+        410
+      );
+    } finally {
+      await withDb((client) =>
+        client.query('DELETE FROM scenario_run WHERE run_id=$1', [secondId])
+      );
+    }
+  });
+
+  it('includes configured wells without readings in the fleet overview', async () => {
+    const expected = await withDb((client) =>
+      client.query('SELECT wellhead_id FROM wellhead')
+    );
+    const response = await request('/dashboard/overview', { cookie });
+    expect(response.status).toBe(200);
+    const body = await responseData<DashboardOverviewResponse>(response);
+    expect(body.wellheads).toHaveLength(expected.rows.length);
+    expect(
+      body.wellheads.every((asset: { activeAlarmCount: number }) =>
+        Number.isInteger(asset.activeAlarmCount)
+      )
+    ).toBe(true);
   });
 });

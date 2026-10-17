@@ -81,9 +81,9 @@ export default function App() {
  */
 export function HydrateFallback() {
   return (
-    <div className='flex min-h-screen items-center justify-center text-sm text-fgColor-muted'>
-      Loading the dashboard
-    </div>
+    <main className='flex min-h-screen items-center justify-center text-sm text-fgColor-muted'>
+      <h1 role='status'>Loading the dashboard</h1>
+    </main>
   );
 }
 
@@ -98,8 +98,8 @@ export function ErrorBoundary() {
   const status = isRouteErrorResponse(error) ? error.status : undefined;
 
   return (
-    <div className='flex min-h-dvh flex-col items-center justify-center gap-3 p-8 text-center'>
-      <p className='text-lg font-semibold'>The dashboard could not load.</p>
+    <main className='flex min-h-dvh flex-col items-center justify-center gap-3 p-8 text-center'>
+      <h1 className='text-lg font-semibold'>The dashboard could not load.</h1>
       {status && (
         <p className='text-sm text-fgColor-muted'>
           The server answered with status {status}.
@@ -108,6 +108,6 @@ export function ErrorBoundary() {
       <a href='/' className='text-blue-600 hover:underline'>
         Reload the dashboard
       </a>
-    </div>
+    </main>
   );
 }

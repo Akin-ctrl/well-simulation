@@ -55,6 +55,19 @@ paths:
             text/plain:
               schema:
                 type: string
+  /model-status:
+    get:
+      summary: Read lifecycle and process freshness even during partial startup.
+      operationId: getModelStatus
+      security: [{serviceToken: []}]
+      responses:
+        "200":
+          description: A registry snapshot with freshness computed by the model clock.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/FleetModelStatus"}
+        "403":
+          description: Internal service token missing or invalid.
   /model-snapshot:
     get:
       tags: [Telemetry]
@@ -326,6 +339,37 @@ components:
           schema:
             $ref: "#/components/schemas/ErrorResponse"
   schemas:
+    FleetModelStatus:
+      type: object
+      required: [checkedAt, available, wellheads]
+      properties:
+        checkedAt: {type: string, format: date-time}
+        available: {type: boolean}
+        wellheads:
+          type: array
+          maxItems: 1000
+          items:
+            type: object
+            required: [wellheadId, modelVersion, status, reason, lastTickAt,
+              simulatedAt, processAgeSeconds, current, skippedTicks, restoredFrom,
+              lastRecoveryEvent]
+            properties:
+              wellheadId: {type: integer, minimum: 1}
+              modelVersion: {type: string}
+              status: {type: string}
+              reason: {type: string}
+              lastTickAt: {type: [string, "null"], format: date-time}
+              simulatedAt: {type: [string, "null"], format: date-time}
+              processAgeSeconds: {type: [number, "null"]}
+              current: {type: boolean}
+              skippedTicks: {type: integer, minimum: 0}
+              restoredFrom: {type: [string, "null"], format: date-time}
+              lastRecoveryEvent:
+                type: [object, "null"]
+                required: [type, time]
+                properties:
+                  type: {type: string}
+                  time: {type: string, format: date-time}
     RunningControls:
       type: object
       required:

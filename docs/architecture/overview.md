@@ -33,10 +33,20 @@ describes snapshots, parameter overrides, and restart recovery. The
 [Milestone 8 design](../design/twin-core-milestone-8.md) describes saved forecasts
 and isolated scenarios. The [8B design](../design/twin-core-milestone-8b.md)
 describes live synthetic controls and parameter publication.
+The [Milestone 9 design](../design/twin-core-milestone-9.md) connects those services
+to the browser workspace.
+The [usability design](../design/dashboard-usability.md) records the Guide,
+contextual explanations and consistent page states. Saved results retain
+their original inputs independently of the current draft.
 
 ## Current Dashboard Layer
 
-The dashboard currently exposes the monitoring foundation:
+The browser reaches the API through the dashboard's nginx proxy. It refreshes
+the API address using Docker DNS, so container replacement needs no proxy reload.
+Dashboard readiness checks both the page and /api/ready, including the API's
+database dependency. Telemetry freshness remains a separate data-level check.
+
+The dashboard exposes monitoring and model analysis:
 
 - fleet-level overview for all simulated wellheads
 - latest recorded telemetry snapshots, which may be partial after a read failure
@@ -44,6 +54,22 @@ The dashboard currently exposes the monitoring foundation:
 - analytics charts for pressure, temperature, flow, water cut, and GOR
 - per-wellhead detail pages with current readings, alarms, and trends
 - an Alarm Center with severity, threshold, age, and links to wellheads
+- per-well model status, successful process time, recovery details, and installed controls
+- explicit forecast and scenario submissions with saved baseline comparisons
+- canonical signal units, heuristic confidence reasons, and sampled threshold results
+- bounded saved-run history and direct result URLs
+
+React Router loaders read data and form actions create projections. Status polls
+preserve draft inputs and do not repeat model submissions or reload saved points.
+The internal model-status read is protected by the service token. The public API
+returns only the status fields the dashboard needs, without model state or secrets.
+If this optional read fails, the historian view remains available.
+
+The browser shows installed controls as read-only values. Scenario forms use
+copies of the model. Live control commands remain in the separate Milestone 8B
+API. Saved results include their original inputs so edits to a new draft cannot
+change the meaning of an older chart. These additions use existing tables in
+data/sql/schema.sql and require no schema conversion.
 
 Ingestion rejects a failed or mixed-time Modbus poll before inserting a batch.
 The API can still show partial or stale latest views during source failure,
@@ -75,8 +101,9 @@ Asset metadata
 - **Forecast and scenario API**: copies current model state, advances the same
   one-second model privately, and saves complete runs. It never applies a live
   control command. See [Milestone 8](../design/twin-core-milestone-8.md).
-- **Dashboard**: shows live state, historical trends, and alarms. Forecast and
-  scenario views belong to Milestone 9.
+- **Dashboard**: shows current state, historical trends, alarms, model status,
+  saved forecasts, and scenario comparisons. It keeps installed controls and
+  scenario inputs in separate views.
 - **Live control API**: saves an operator draft and explicit activation. Twin-core
   checks current authority and applies the durable targets before a model tick.
   Active control rows take precedence over older snapshots during recovery.

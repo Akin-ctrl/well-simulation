@@ -195,12 +195,7 @@ services:
     ports:
       - "8090:80"
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/"]
-      interval: 15s
-      timeout: 3s
-      retries: 3
-      start_period: 10s
+    # The image checks both the static page and /api/ready through nginx.
     networks:
       - wellnet
 

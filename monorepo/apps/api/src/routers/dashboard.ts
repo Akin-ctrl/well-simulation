@@ -354,9 +354,25 @@ export const dashboardRouter = new Hono()
           latestReadingTimestamp(),
         ]);
 
-      const [readings, alarms] = await Promise.all([
+      const [readings, alarms, assets] = await Promise.all([
         latestSnapshotReadings(latestAt),
         activeAlarms(),
+        db
+          .select({
+            wellheadId: wellhead.wellheadId,
+            wellheadName: wellhead.name,
+            activeAlarmCount: sql<number>`(select count(*)::int from v_active_alarms where wellhead_id = ${wellhead.wellheadId})`,
+            wellheadType: wellhead.type,
+            status: wellhead.status,
+            locationId: location.locationId,
+            locationName: location.name,
+            fieldId: field.fieldId,
+            fieldName: field.name,
+          })
+          .from(wellhead)
+          .innerJoin(location, eq(wellhead.locationId, location.locationId))
+          .innerJoin(field, eq(location.fieldId, field.fieldId))
+          .orderBy(wellhead.wellheadId),
       ]);
 
       const overview: DashboardOverviewResponse = {
@@ -369,6 +385,7 @@ export const dashboardRouter = new Hono()
         },
         latestReadings: readings,
         activeAlarms: alarms,
+        wellheads: assets,
       };
 
       return overview;
@@ -415,6 +432,7 @@ export const dashboardRouter = new Hono()
       const detail: WellheadDetailResponse = {
         wellhead: asset,
         latestReadingAt: latestAt,
+        latestReadingAgeSeconds: ageInSeconds(latestAt),
         latestReadings: readings,
         activeAlarms: alarms,
         pressureTrend: pressure,

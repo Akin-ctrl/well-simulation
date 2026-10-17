@@ -1,3 +1,4 @@
+import { useId, useState } from 'react';
 import {
   Legend,
   Line,
@@ -40,12 +41,12 @@ const METRIC_LABELS: Record<string, string> = {
 
 const METRIC_COLORS: Record<string, string> = {
   tubing_pressure: '#553AFE',
-  casing_pressure: '#01C0F6',
-  annulus_pressure: '#10B981',
-  wellhead_temperature: '#F97316',
+  casing_pressure: '#036887',
+  annulus_pressure: '#17613c',
+  wellhead_temperature: '#9a4700',
   flow_rate: '#553AFE',
-  water_cut: '#01C0F6',
-  gas_oil_ratio: '#10B981',
+  water_cut: '#036887',
+  gas_oil_ratio: '#17613c',
 };
 
 /** One bucket time, with each metric's average or null when it is missing. */
@@ -122,7 +123,10 @@ export function TrendChart({
   metricCodes: string[];
   emptyMessage: string;
 }) {
+  const descriptionId = useId();
+  const [page, setPage] = useState(0);
   const rows = trendRows(points, metricCodes);
+  const currentPage = Math.min(page, Math.max(0, Math.ceil(rows.length / 50) - 1));
   if (!rows.length) {
     return (
       <div className='flex h-64 items-center justify-center text-sm text-fgColor-muted'>
@@ -143,60 +147,130 @@ export function TrendChart({
   };
 
   return (
-    <ResponsiveContainer width='100%' height={280}>
-      <LineChart data={rows}>
-        <XAxis
-          dataKey='time'
-          type='number'
-          scale='time'
-          domain={['dataMin', 'dataMax']}
-          tickFormatter={formatTime}
-          stroke='#636c76'
-          tickLine={false}
-          axisLine={false}
-          minTickGap={40}
-          // Keep the first and last time labels clear of the Y axis numbers.
-          tickMargin={8}
-          padding={{ left: 16, right: 16 }}
-        />
-        {axisUnits.slice(0, 2).map((unit, index) => (
-          <YAxis
-            key={unit || 'none'}
-            yAxisId={index === 0 ? 'left' : 'right'}
-            orientation={index === 0 ? 'left' : 'right'}
-            stroke='#636c76'
-            axisLine={false}
-            tickLine={false}
-            tickFormatter={formatNumber}
-            label={{
-              value: unit,
-              angle: index === 0 ? -90 : 90,
-              position: index === 0 ? 'insideLeft' : 'insideRight',
-              fill: '#636c76',
-            }}
-          />
-        ))}
-        <Tooltip
-          labelFormatter={(time) => formatTime(Number(time))}
-          formatter={(value, name) => [
-            typeof value === 'number' ? formatNumber(value) : 'missing',
-            labelFor(String(name)),
-          ]}
-        />
-        <Legend formatter={(name) => labelFor(String(name))} />
-        {metricCodes.map((code) => (
-          <Line
-            key={code}
-            yAxisId={axisFor(code)}
-            type='monotone'
-            dataKey={code}
-            stroke={METRIC_COLORS[code] ?? '#553AFE'}
-            strokeWidth={2}
-            dot={false}
-            connectNulls={false}
-          />
-        ))}
-      </LineChart>
-    </ResponsiveContainer>
+    <div className='twin-workspace twin-chart'>
+      <figure aria-labelledby={descriptionId}>
+        <figcaption id={descriptionId} className='twin-chart-caption'>
+          {metricCodes.map(labelFor).join('; ')}. Times in{' '}
+          {Intl.DateTimeFormat().resolvedOptions().timeZone}. Missing samples break the
+          lines. The table below includes the plotted values and gap markers.
+        </figcaption>
+        <ResponsiveContainer width='100%' height={280}>
+          <LineChart data={rows} accessibilityLayer>
+            <XAxis
+              dataKey='time'
+              type='number'
+              scale='time'
+              domain={['dataMin', 'dataMax']}
+              tickFormatter={formatTime}
+              stroke='#636c76'
+              tickLine={false}
+              axisLine={false}
+              minTickGap={40}
+              // Keep the first and last time labels clear of the Y axis numbers.
+              tickMargin={8}
+              padding={{ left: 16, right: 16 }}
+            />
+            {axisUnits.slice(0, 2).map((unit, index) => (
+              <YAxis
+                key={unit || 'none'}
+                yAxisId={index === 0 ? 'left' : 'right'}
+                orientation={index === 0 ? 'left' : 'right'}
+                stroke='#636c76'
+                axisLine={false}
+                tickLine={false}
+                tickFormatter={formatNumber}
+                label={{
+                  value: unit,
+                  angle: index === 0 ? -90 : 90,
+                  position: index === 0 ? 'insideLeft' : 'insideRight',
+                  fill: '#636c76',
+                }}
+              />
+            ))}
+            <Tooltip
+              labelFormatter={(time) => formatTime(Number(time))}
+              formatter={(value, name) => [
+                typeof value === 'number' ? formatNumber(value) : 'missing',
+                labelFor(String(name)),
+              ]}
+            />
+            <Legend formatter={(name) => labelFor(String(name))} />
+            {metricCodes.map((code, index) => (
+              <Line
+                key={code}
+                yAxisId={axisFor(code)}
+                type='linear'
+                dataKey={code}
+                stroke={METRIC_COLORS[code] ?? '#553AFE'}
+                strokeWidth={2}
+                strokeDasharray={['', '7 4', '2 4'][index % 3]}
+                isAnimationActive={false}
+                dot={false}
+                connectNulls={false}
+              />
+            ))}
+          </LineChart>
+        </ResponsiveContainer>
+      </figure>
+      <details className='mt-4'>
+        <summary className='cursor-pointer text-sm font-semibold'>
+          View history values as a table
+        </summary>
+        <div
+          className='twin-scroll'
+          role='region'
+          tabIndex={0}
+          aria-label={`${metricCodes.map((code) => METRIC_LABELS[code] ?? code).join(', ')} history values`}
+        >
+          <table className='twin-table'>
+            <caption className='sr-only'>
+              Historian samples and missing-bucket markers. Times in{' '}
+              {Intl.DateTimeFormat().resolvedOptions().timeZone}.
+            </caption>
+            <thead>
+              <tr>
+                <th scope='col'>Time</th>
+                {metricCodes.map((code) => (
+                  <th scope='col' key={code}>
+                    {labelFor(code)}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.slice(currentPage * 50, (currentPage + 1) * 50).map((row) => (
+                <tr key={row.time}>
+                  <td>{formatTime(row.time)}</td>
+                  {metricCodes.map((code) => (
+                    <td key={code}>
+                      {row[code] == null ? 'Unavailable' : formatNumber(row[code])}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className='twin-inline mt-3'>
+          <button
+            className='twin-button'
+            disabled={currentPage === 0}
+            onClick={() => setPage(currentPage - 1)}
+          >
+            Previous history values
+          </button>
+          <span role='status' className='twin-muted'>
+            Page {currentPage + 1} of {Math.ceil(rows.length / 50)}
+          </span>
+          <button
+            className='twin-button'
+            disabled={(currentPage + 1) * 50 >= rows.length}
+            onClick={() => setPage(currentPage + 1)}
+          >
+            Next history values
+          </button>
+        </div>
+      </details>
+    </div>
   );
 }

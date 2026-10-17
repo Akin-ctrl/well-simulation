@@ -1,194 +1,45 @@
-import React, { Fragment } from 'react';
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from '@well-simulation/ui/collapsible';
-import { ScrollArea } from '@well-simulation/ui/scroll-area';
-import { ArrowUpRightIcon, ChevronDownIcon } from 'lucide-react';
-import { Link, useLocation } from 'react-router';
+import { NavLink } from 'react-router';
+import { menuItems } from '../components/menu-items';
 
-import { cn } from '@well-simulation/utils/cn';
-import { menuItems, type MenuItem } from '../components/menu-items';
-
+/** The configured menu is flat; every icon retains its name when collapsed. */
 export function SidebarMenu({ expanded }: { expanded: boolean }) {
-  const [openCollapsible, setOpenCollapsible] = React.useState<number | null>(null);
-
-  const firstSlice = React.useMemo(() => menuItems.slice(0, 8), []);
-  const secondSlice = React.useMemo(() => menuItems.slice(8, 11), []);
-  const thirdSlice = React.useMemo(() => menuItems.slice(11), []);
-
-  const handleToggle = (index: number) => {
-    setOpenCollapsible((prev) => (prev === index ? null : index));
-  };
-
   return (
-    <ScrollArea className='[&>div>div]:h-full'>
-      <div className={cn('flex h-full flex-col gap-4', expanded ? '' : '')}>
-        {RenderLinks(firstSlice, openCollapsible, handleToggle, expanded)}
-        {RenderLinks(secondSlice, openCollapsible, handleToggle, expanded)}
-        <div className='mt-auto space-y-3'>
-          {RenderLinks(thirdSlice, openCollapsible, handleToggle, expanded)}
-        </div>
-      </div>
-    </ScrollArea>
-  );
-}
-
-function RenderLinks(
-  menuItems: MenuItem[],
-  openCollapsible: number | null,
-  handleToggle: (index: number) => void,
-  expanded: boolean
-) {
-  const location = useLocation();
-
-  return menuItems.map((item, index) => {
-    const isActive = location.pathname === item.href;
-    const isDropdownOpen = openCollapsible === index;
-
-    if (!item.dropdownItems && !item.href) {
-      return null;
-    }
-
-    return (
-      <Fragment key={index}>
-        {item?.dropdownItems ? (
-          <Collapsible open={isDropdownOpen} onOpenChange={() => handleToggle(index)}>
-            <div
-              className={cn(
-                'card flex items-center gap-3 mx-3 p-3!',
-                expanded ? '' : ''
-              )}
-            >
-              <CollapsibleTrigger
-                disabled={item.disabled}
-                className={cn(
-                  'btn control-transparent text-fgColor-white p-0 [&>svg]:size-4',
-                  isDropdownOpen ? 'bg-control-transparent-bgColor-selected' : ''
-                )}
-              >
-                {item.icon}
-              </CollapsibleTrigger>
-
-              {expanded && (
-                <CollapsibleTrigger
-                  disabled={item?.disabled}
-                  className={cn(
-                    'button button-md control-transparent w-full justify-start pr-1 [&>svg]:data-[state=closed]:rotate-0 [&>svg]:data-[state=open]:rotate-90 items-center flex font-semibold',
-                    isDropdownOpen
-                      ? 'bg-control-transparent-bgColor-selected'
-                      : 'text-fgColor-muted'
-                  )}
-                >
-                  {item.name}
-                  <ChevronDownIcon
-                    className='ml-auto size-4.5'
-                    style={{
-                      transition: 'transform 150ms',
-                    }}
-                  />
-                </CollapsibleTrigger>
-              )}
-            </div>
-
-            <CollapsibleContent className='grid h-full gap-1 py-2'>
-              {item?.dropdownItems?.map((dropdownItem, idx) => {
-                const dropdownHref = dropdownItem.href;
-                if (!dropdownHref) {
-                  return null;
-                }
-                const isChildActive = location.pathname.includes(dropdownHref);
-
-                return (
-                  <Link
-                    prefetch='viewport'
-                    key={idx}
-                    to={dropdownHref}
-                    state={{
-                      prevLink: dropdownHref,
-                    }}
-                    target={dropdownItem?.new ? '_blank' : '_self'}
-                    className={cn(
-                      'text-body-small! rounded-8px! button button-md control-transparent ml-24 mr-1 flex items-center justify-start',
-                      isChildActive
-                        ? 'bg-control-transparent-bgColor-selected font-semibold'
-                        : 'text-fgColor-muted hover:text-fgColor-default transition-colors',
-                      dropdownItem?.disabled
-                        ? 'text-fgColor-disabled pointer-events-none'
-                        : ''
-                    )}
-                  >
-                    {dropdownItem.name}
-                    {dropdownItem?.new ? (
-                      <ArrowUpRightIcon className='ml-auto size-4' />
-                    ) : null}
-                  </Link>
-                );
-              })}
-            </CollapsibleContent>
-          </Collapsible>
-        ) : item.disabled ? (
-          <div
-            aria-disabled='true'
-            className={cn(
-              'card flex items-center gap-3 mx-3 p-3! cursor-not-allowed opacity-50',
-              expanded ? '' : ''
-            )}
+    <nav
+      id='desktop-navigation'
+      aria-label='Main navigation'
+      className='grid gap-2 px-3'
+    >
+      {menuItems.map((item) =>
+        item.disabled ? (
+          <span
+            key={item.name}
+            className='flex min-h-11 items-center gap-3 px-2 text-slate-600'
+            title={`${item.name} unavailable`}
           >
-            <span
-              className={cn(
-                'button control-transparent button-md text-fgColor-white aspect-square w-auto p-0 [&>svg]:size-4'
-              )}
-            >
+            <span aria-hidden='true' className='[&>svg]:size-5'>
               {item.icon}
             </span>
-
-            {expanded && (
-              <div
-                className={cn(
-                  'button button-md w-full justify-start [&>svg]:data-[state=closed]:rotate-0 [&>svg]:data-[state=open]:rotate-90',
-                  'text-fgColor-muted'
-                )}
-              >
-                {item.name}
-              </div>
-            )}
-          </div>
+            <span className={expanded ? 'text-sm' : 'sr-only'}>
+              {item.name} (unavailable)
+            </span>
+          </span>
         ) : (
-          <Link
-            to={item.href ?? '#'}
-            prefetch='viewport'
-            className={cn('card flex items-center gap-3 mx-3 p-3!', expanded ? '' : '')}
-            state={{
-              prevLink: location.pathname,
-            }}
+          <NavLink
+            key={item.name}
+            to={item.href}
+            end
+            aria-label={item.name}
+            className={({ isActive }) =>
+              `flex min-h-11 items-center gap-3 rounded-md px-2 text-sm ${isActive ? 'bg-blue-50 text-blue-900 font-semibold' : 'text-slate-700 hover:bg-slate-100'}`
+            }
           >
-            <span
-              className={cn(
-                'button control-transparent button-md text-fgColor-white hover:bg-neutral-200 aspect-square w-auto p-0 [&>svg]:size-4',
-                isActive ? 'bg-control-transparent-bgColor-selected' : ''
-              )}
-            >
+            <span aria-hidden='true' className='[&>svg]:size-5'>
               {item.icon}
             </span>
-
-            {expanded && (
-              <div
-                className={cn(
-                  'button button-md w-full justify-start [&>svg]:data-[state=closed]:rotate-0 [&>svg]:data-[state=open]:rotate-90',
-                  isActive
-                    ? 'bg-control-transparent-bgColor-selected font-semibold'
-                    : 'text-fgColor-muted'
-                )}
-              >
-                {item.name}
-                {item?.new ? <ArrowUpRightIcon className='ml-auto size-4' /> : null}
-              </div>
-            )}
-          </Link>
-        )}
-      </Fragment>
-    );
-  });
+            {expanded && <span>{item.name}</span>}
+          </NavLink>
+        )
+      )}
+    </nav>
+  );
 }

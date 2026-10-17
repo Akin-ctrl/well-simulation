@@ -7,9 +7,17 @@ import {
   parameterRuntimeSchema,
 } from '@well-simulation/dto/res/controls';
 import { config } from './config';
+import {
+  fleetModelStatusSchema,
+  type FleetModelStatus,
+} from '@well-simulation/dto/res/model-status';
 
 /** Bounded service calls carry only server-owned credentials. */
-async function twinRequest(path: string, body?: object): Promise<unknown> {
+async function twinRequest(
+  path: string,
+  body?: object,
+  maxBytes = 16_384
+): Promise<unknown> {
   try {
     const response = await fetch(`${config.twinCoreUrl}${path}`, {
       method: body ? 'POST' : 'GET',
@@ -26,7 +34,7 @@ async function twinRequest(path: string, body?: object): Promise<unknown> {
       throw new HTTPException(404, { message: 'Well not found' });
     if (!response.ok) throw new Error('Twin not ready');
     const text = await response.text();
-    if (text.length > 16_384) throw new Error('Twin response too large');
+    if (text.length > maxBytes) throw new Error('Twin response too large');
     return JSON.parse(text) as unknown;
   } catch (error) {
     if (error instanceof HTTPException) throw error;
@@ -78,4 +86,22 @@ export async function validateParameter(input: ParameterDraft) {
   if (!result.success || result.data.modelVersion !== input.modelVersion)
     throw new HTTPException(503, { message: 'Parameter validation unavailable' });
   return result.data;
+}
+
+/** An optional model failure must not hide available historian data. */
+export async function modelStatus(): Promise<FleetModelStatus> {
+  try {
+    return fleetModelStatusSchema.parse(
+      await twinRequest('/model-status', undefined, 512_000)
+    );
+  } catch {
+    console.warn(
+      JSON.stringify({
+        level: 'warn',
+        service: 'api',
+        event: 'model_status_unavailable',
+      })
+    );
+    return { checkedAt: new Date().toISOString(), available: false, wellheads: [] };
+  }
 }

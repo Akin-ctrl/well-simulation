@@ -66,8 +66,8 @@ TimescaleDB updates. It is not the long-term target.
 12. Only after the rehearsal passes, stop application writers, take a final
     copy of the cleanly stopped original cluster, and repeat the verified steps.
     Preserve the original volume and restart the services against the new one.
-13. Reload the dashboard proxy after the API starts, then verify through its
-    public /api path. Verify fresh service connections, readiness, current
+13. Verify through the dashboard's public /api path after the API starts.
+    Older dashboard images need the reload described below. Verify readiness, current
     telemetry, persisted controls, and database permissions. Record actual results.
 
 data/upgrade/Dockerfile builds the temporary pg_upgrade tool image. It keeps the
@@ -121,23 +121,23 @@ Keep the old copy until verification and retention decisions are complete.
 
 ### Restoring the browser-to-API path
 
-The current nginx configuration resolves the API service name when nginx loads.
-Stopping and starting application containers can change the API address while
-the dashboard container stays up. Its static-page health check does not catch
-the resulting 502 responses from /api.
+The original dashboard image resolved the API service name only when nginx
+loaded. Changing the API address could leave the proxy returning 502 while
+its static-page health check stayed healthy.
 
-After the API is ready, reload the existing proxy configuration:
+The [ADR 0017 amendment](../adr/0017-observability-baseline.md) adds automatic
+DNS refresh and checks both the page and /api/ready. Rebuild and recreate the
+dashboard to use that fix. For an older dashboard image, the recovery step is:
 
 ```sh
 docker compose exec -T dashboard nginx -t
 docker compose exec -T dashboard nginx -s reload
 ```
 
-Require the validation command to succeed before reloading. Check /api/health
+Require the validation command to succeed before reloading. Check /api/ready
 through the dashboard port, then sign in and load current readings in a browser.
 A direct API health check or HTTP 200 from the dashboard's static page alone
-does not establish that this path works. Automatic name refresh remains a
-separate operational hardening item.
+does not establish that this path works.
 
 ### Restoring a logical backup completely
 
@@ -329,8 +329,8 @@ Browser fault injection reached the shipped root error page. The initial reload
 checks failed because the proxy retained the API's old address and returned 502.
 Disabling the test browser's cache did not fix this. Proxy error logs and the
 current container addresses established the cause. Reloading nginx restored the
-route. The runbook above now requires this step and checks through the proxy;
-automatic recovery after address changes remains an open hardening finding.
+route. Automatic recovery after address changes remained open at that delivery.
+The later ADR 0017 amendment records the dynamic proxy and readiness fix.
 After the reload, /api/health returned HTTP 200 and the browser error-page
 reload returned to login successfully. The injected component error and the
 unauthenticated 401 responses were expected parts of that browser check.

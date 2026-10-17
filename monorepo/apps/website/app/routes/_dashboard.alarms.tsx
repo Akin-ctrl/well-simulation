@@ -1,3 +1,10 @@
+import { PageHelp } from '../domains/dashboard/components/page-help';
+import {
+  readDashboardView,
+  ReadStatus,
+} from '../domains/dashboard/components/read-status';
+import { useRetainedRead } from '../hooks/use-retained-read';
+import { ReadFailure } from '../domains/twin/read-failure';
 import { AlertTriangleIcon } from 'lucide-react';
 import { Link, useLoaderData } from 'react-router';
 import type { ActiveAlarmsResponse } from '@well-simulation/dto/res/dashboard';
@@ -23,10 +30,11 @@ import { REFRESH_INTERVALS, useAutoRefresh } from '../hooks/use-auto-refresh';
  */
 
 export async function clientLoader() {
-  const response = await fetchFn<ActiveAlarmsResponse>(
-    client.dashboard['active-alarms'].$get()
+  return readDashboardView(
+    async () =>
+      (await fetchFn<ActiveAlarmsResponse>(client.dashboard['active-alarms'].$get()))
+        .data
   );
-  return response.data;
 }
 
 /** How long an alarm has been open, which is what makes it urgent or not. */
@@ -44,9 +52,9 @@ function age(triggeredAt: string | Date | null | undefined): string {
 }
 
 function severityClass(severity: string | null | undefined): string {
-  if (severity === 'CRITICAL') return 'bg-red-100 text-red-700';
-  if (severity === 'WARNING') return 'bg-amber-100 text-amber-700';
-  return 'bg-neutral-100 text-fgColor-muted';
+  if (severity === 'CRITICAL') return 'twin-error';
+  if (severity === 'WARNING') return 'twin-attention';
+  return 'twin-badge';
 }
 
 function formatValue(value: number | null | undefined): string {
@@ -55,27 +63,44 @@ function formatValue(value: number | null | undefined): string {
 }
 
 function AlarmCenter() {
-  const { totals, alarms } = useLoaderData() as ActiveAlarmsResponse;
+  const incoming = useLoaderData<typeof clientLoader>();
+  const retained = useRetainedRead(incoming.value, 'alarms');
   useAutoRefresh(REFRESH_INTERVALS.alarms);
+  if (!retained) return incoming.error ? <ReadFailure error={incoming.error} /> : null;
+  const { totals, alarms } = retained.data;
 
   return (
-    <div className='space-y-5'>
+    <div className='twin-workspace twin-stack'>
+      {incoming.error && <ReadFailure error={incoming.error} retained />}
       <div>
-        <h1 className='text-lg font-semibold'>Alarm Center</h1>
+        <h1>Alarm Center</h1>
         <p className='text-sm text-fgColor-muted'>
-          Alarms currently open, most severe first. An alarm opens after three
-          consecutive breaching readings and clears after three consecutive normal ones,
-          so a single stray value does not raise one.
+          Check the most severe alarms first, then open the affected well for current
+          readings.
         </p>
       </div>
 
+      <ReadStatus
+        checkedAt={retained.checkedAt}
+        intervalMs={REFRESH_INTERVALS.alarms}
+      />
+      <PageHelp title='How alarms open and clear'>
+        <p>
+          An alarm opens after three consecutive readings cross a threshold. Three
+          consecutive normal readings clear it.
+        </p>
+        <p>
+          Value when triggered shows the reading that opened the alarm. Open the well to
+          check its latest readings and their age.
+        </p>
+      </PageHelp>
       <div className='grid gap-4 md:grid-cols-3'>
         {[
           { label: 'Critical', value: totals.critical },
           { label: 'Warning', value: totals.warning },
           { label: 'Wellheads affected', value: totals.affectedWellheads },
         ].map((tile) => (
-          <div key={tile.label} className='card py-3! px-5! rounded-lg'>
+          <div key={tile.label} className='twin-panel twin-panel-body'>
             <p className='text-sm text-fgColor-muted'>{tile.label}</p>
             <span className='text-xl font-semibold'>{tile.value}</span>
           </div>
@@ -90,20 +115,35 @@ function AlarmCenter() {
       )}
 
       {totals.total === 0 ? (
-        <div className='card p-6! text-sm text-fgColor-muted'>
-          No active alarms. None of the configured alarm rules is currently triggered.
-        </div>
+        <div className='twin-panel twin-empty'>No active alarms right now.</div>
       ) : (
-        <div className='card overflow-x-auto'>
-          <table className='w-full text-sm'>
+        <div
+          className='twin-panel twin-scroll'
+          role='region'
+          aria-label='Active alarms'
+          tabIndex={0}
+        >
+          <table className='twin-table'>
             <thead className='text-left text-fgColor-muted'>
               <tr className='border-b border-b-neutral-200'>
-                <th className='pb-2 font-medium'>Severity</th>
-                <th className='pb-2 font-medium'>Wellhead</th>
-                <th className='pb-2 font-medium'>Parameter</th>
-                <th className='pb-2 font-medium'>Value</th>
-                <th className='pb-2 font-medium'>Threshold</th>
-                <th className='pb-2 font-medium'>Open for</th>
+                <th scope='col' className='pb-2 font-medium'>
+                  Severity
+                </th>
+                <th scope='col' className='pb-2 font-medium'>
+                  Wellhead
+                </th>
+                <th scope='col' className='pb-2 font-medium'>
+                  Parameter
+                </th>
+                <th scope='col' className='pb-2 font-medium'>
+                  Value when triggered
+                </th>
+                <th scope='col' className='pb-2 font-medium'>
+                  Threshold
+                </th>
+                <th scope='col' className='pb-2 font-medium'>
+                  Open for
+                </th>
               </tr>
             </thead>
             <tbody>

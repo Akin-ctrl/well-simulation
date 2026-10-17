@@ -23,8 +23,8 @@ calibration or physical control connection.
 - Durable model snapshots and recorded restart recovery
 - Saved on-demand forecasts and isolated what-if scenarios through the API
 - Durable live synthetic control commands and reviewed parameter publication
-- A React dashboard with an overview, analytics, per-wellhead detail pages, and
-  an Alarm Center
+- A React dashboard with fleet monitoring, analytics, an Alarm Center, model
+  status, forecast and scenario forms, comparison charts, and saved-run history
 
 The Alarm Center shows active alarms and their thresholds. It does not offer
 acknowledge or shelve actions because the data model cannot store those states.
@@ -41,6 +41,9 @@ acknowledge or shelve actions because the data model cannot store those states.
 - `design/twin-core-milestone-7.md`: twin persistence and restore
 - `design/twin-core-milestone-8.md`: forecasts, scenarios, and saved results
 - `design/twin-core-milestone-8b.md`: live model controls, authorization, and recovery
+- `design/twin-core-milestone-9.md`: the wellhead workspace and browser verification
+- `design/milestone-9/visual-specification.md`: shared visual rules, state matrix, and mockup gallery
+- `design/milestone-9/accessibility-verification.md`: completed checks and accessibility limits
 - `design/consolidated-schema.md`: single schema source and checked adoption of existing data
 - `design/database-engine-upgrade.md`: engine conversion, backup restoration, and recorded acceptance
 - `design/reference-well-physics.md`: phase and diagnostic equations
@@ -58,6 +61,10 @@ local roadmaps are optional working notes and are absent from a clean checkout.
 - Update the OpenAPI spec with every public API change.
 - Keep model assumptions visible wherever synthetic readings appear.
 - Keep the demo honest. Show what works, then say what is planned.
+- Complete relevant screen mockups, loading and failure states, shared visual
+  rules, and responsive behaviour before new UI implementation. Follow the
+  [design completion gate](design/twin-core-milestone-9.md#design-completion-gate).
+  Validate accessibility during implementation and record the checks actually run.
 
 ## How we write docs here
 
@@ -70,3 +77,6 @@ local roadmaps are optional working notes and are absent from a clean checkout.
   the project's coding standards: short sentences, everyday words, active
   voice, and no em dashes. `scripts/check_prose.py` enforces the checkable
   parts.
+
+The [dashboard usability design](design/dashboard-usability.md) records the
+revised workflow, design checks and delivery sequence.

@@ -25,8 +25,8 @@ implemented decisions and the work still needed for a field-calibrated twin.
 - TimescaleDB/PostgreSQL historian for time-series readings.
 - PostgreSQL alarm rules and alarm event generation.
 - TypeScript API with OpenAPI documentation.
-- React dashboard with overview, analytics, per-wellhead detail views, and an
-  Alarm Center.
+- React dashboard with a fleet overview, analytics, an Alarm Center, and per-well
+  monitoring, forecasts, scenario comparisons, and saved-run history.
 - Health, readiness, and metrics endpoints for the API, telemetry services,
   and the new twin-core service boundary.
 - A twin-core service with one-second process steps, deterministic per-well
@@ -39,13 +39,17 @@ implemented decisions and the work still needed for a field-calibrated twin.
 
 ## Current Dashboard Scope
 
-The dashboard currently focuses on credible monitoring rather than pretending to be a finished digital twin:
+The dashboard connects monitoring with the existing model analysis:
 
 - Fleet overview for all simulated wellheads.
 - Current readings grouped by wellhead and parameter.
 - Pressure, temperature, flow, water cut, and GOR trend views.
 - Per-wellhead detail pages with active alarms and parameter history.
 - An Alarm Center with severity, threshold, age, and links to wellheads.
+- Model status, successful process time, recovery details, and installed controls.
+- Forecast and scenario forms with shared input validation.
+- Saved comparison charts, original inputs, confidence reasons, and value tables.
+- Per-well history with direct links that reopen results without running the model.
 
 The Alarm Center has no acknowledge or shelve buttons because the backend cannot
 store those states yet.
@@ -73,9 +77,18 @@ Milestones 4 through 8 are implemented: the model feeds Modbus and the historian
 recovers saved state, and runs forecasts and private scenarios. The
 [8B design](docs/design/twin-core-milestone-8b.md) covers the implemented live
 synthetic control lifecycle and its verification.
-Milestone 9 is the next feature discussion: model status, forecast results,
-scenario inputs, and comparison charts in the dashboard. These screens are
-not implemented yet.
+The [Milestone 9 design](docs/design/twin-core-milestone-9.md) covers the implemented
+wellhead workspace and its verification. Milestone 10's local delivery checks
+passed with an isolated clean candidate export. Remote CI, publication and
+licence contributor consent remain open.
+The login page now uses an original text layout without the old photograph. The owner has deferred the physical host sleep/wake test.
+Milestone 9 now includes the complete [mockup gallery](docs/design/milestone-9/mockups/index.html),
+[shared visual specification](docs/design/milestone-9/visual-specification.md),
+and implemented accessibility improvements. The
+[verification record](docs/design/milestone-9/accessibility-verification.md)
+describes the Chromium and Orca checks and the combinations not tested.
+The [usability design](docs/design/dashboard-usability.md) records the revised
+page structure, optional Guide, two design checks and the next delivery sequence.
 The published [ADR index](docs/adr/README.md) records decision status; local
 roadmaps are working notes, not dependencies for understanding the project.
 
@@ -112,10 +125,9 @@ account:
 | --- | --- | --- |
 | `demo@example.com` | `USER` | `demo-operator-2026` |
 
-This account can view the dashboard and run what-if scenarios through the API.
-The dashboard has no scenario form yet.
-The password is in the repository on purpose. It only gives read access to
-made-up telemetry on a local stack.
+This account can view the dashboard and save forecasts and what-if scenarios
+through its forms or the API. It cannot change the running well's controls.
+The password is in the repository on purpose for the local synthetic demo.
 
 You cannot sign yourself up. Only an `ADMIN` can create a user, as set out in
 [ADR 0033](docs/adr/0033-role-model-and-access-control.md). The migrator creates
@@ -166,6 +178,7 @@ commands queued by those sessions from applying.
 - `docs/design/twin-core-milestone-7.md`: twin persistence design and verification
 - `docs/design/twin-core-milestone-8.md`: forecasts, scenarios, and saved results
 - `docs/design/twin-core-milestone-8b.md`: live control lifecycle and operating steps
+- `docs/design/twin-core-milestone-9.md`: dashboard layout, interactions, and verification
 - `docs/design/reference-well-physics.md`: the phase and diagnostic equations
 - `docs/roadmap.md`: the local feature plan (ignored by Git)
 - `docs/remediation-roadmap.md`: the local repair record (ignored by Git)
@@ -192,13 +205,36 @@ Raw readings are kept for 7 days and alarm events for 90.
 
 ## Screenshots
 
-Captured on 2026-10-13 from the running local stack after continuous telemetry
-collection. The current synthetic operating point has no active alarms.
+Captured on 2026-10-17 from the running Milestone 9 dashboard. Forecast and
+scenario images show actual saved model results. The synthetic operating point
+shown in the monitoring views has no active alarms.
 
 - [Fleet overview](docs/screenshots/overview.png)
 - [Analytics with continuous trends](docs/screenshots/analytics.png)
 - [Wellhead detail](docs/screenshots/wellhead-detail.png)
 - [Alarm Center](docs/screenshots/alarm-center.png)
+- [Saved forecast](docs/screenshots/forecast.png)
+- [Scenario comparison](docs/screenshots/scenario.png)
+- [Saved-run history](docs/screenshots/saved-runs.png)
+- [Scenario on a phone-sized viewport](docs/screenshots/scenario-mobile.png)
+
+## Browser verification
+
+Start a healthy local stack, then run from the monorepo:
+
+```bash
+cd monorepo
+pnpm install --frozen-lockfile
+pnpm --filter @well-simulation/website exec playwright install chromium
+pnpm --filter @well-simulation/website test:browser
+```
+
+The test signs in with the demo account and saves isolated model runs. It checks
+that the installed controls and revision do not change. It also checks mobile
+layouts, keyboard focus, saved links, stale data, and failed requests. Set
+UPDATE_SCREENSHOTS=1 when intentionally refreshing the committed screenshots;
+ordinary test runs write their images under the ignored test-results directory.
+CI installs Chromium and its system dependencies before running this workflow.
 
 ## Where this project actually stands
 
@@ -217,6 +253,26 @@ restart preserved its controls. Parameter publication adopted a new parameter
 set after restart. The four existing dashboard pages passed browser checks.
 See the [8B verification record](docs/design/twin-core-milestone-8b.md#verification-on-2026-10-13).
 The API contract is written down under `docs/openapi`.
+
+On 2026-10-16, the Milestone 9 workspace passed its local API, HTTP, unit, and
+browser checks. Real forecasts and scenarios were saved and reopened, while
+installed controls and revision stayed unchanged. Desktop and mobile layouts,
+keyboard focus, stale data, and failure recovery passed. All six services
+reported healthy. See the [Milestone 9 verification record](docs/design/twin-core-milestone-9.md#verification-on-2026-10-16).
+The completed design pass also passed 37 shared-contract/frontend tests, all
+three browser workflows, automated accessibility scans, and an Orca speech-output
+check. The mockups passed 96 screen/state/viewport combinations. See the
+[accessibility verification record](docs/design/milestone-9/accessibility-verification.md)
+for the exact scope and limitations.
+
+On 2026-10-17, the usability update passed five browser workflows, 37 shared
+contract/frontend tests, 95 API integration tests and 14 model HTTP tests.
+An isolated export of the complete candidate built all six service images and
+started with fresh storage using the example configuration. Schema setup exited
+0 and all six running services became healthy. A browser read all 12 wells,
+saved and reopened a scenario, and confirmed unchanged installed controls.
+The [usability delivery record](docs/design/dashboard-usability.md#delivery-evidence-2026-10-17)
+records the design checks and remaining external delivery items.
 
 It is not production ready. The twin-core model uses synthetic, uncalibrated
 parameters and has no field calibration or physical device control. The API, gateway,

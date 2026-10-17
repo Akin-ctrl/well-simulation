@@ -515,6 +515,35 @@ class TwinRuntime:
             )
             self._projection_slots.release()
 
+    def status_snapshot(self) -> dict[str, object]:
+        """Expose lifecycle even when some wells have no valid process state."""
+        now = self._wall()
+        with self._lock:
+            holding = self._holding
+        items = []
+        for state in self.registry.snapshot():
+            item = state.to_payload()
+            item.pop("process")
+            age = (
+                (now - state.process.simulated_at).total_seconds()
+                if state.process
+                else None
+            )
+            item.update(
+                {
+                    "simulatedAt": state.process.simulated_at.isoformat()
+                    if state.process
+                    else None,
+                    "processAgeSeconds": age,
+                    "current": state.status == "running"
+                    and not holding
+                    and age is not None
+                    and abs(age) <= MAX_READY_TICK_AGE_SECONDS,
+                }
+            )
+            items.append(item)
+        return {"checkedAt": now.isoformat(), "available": True, "wellheads": items}
+
     def model_snapshot(self) -> dict[str, object] | None:
         """Return a complete running fleet from one registry read."""
         ready, _ = self.readiness()

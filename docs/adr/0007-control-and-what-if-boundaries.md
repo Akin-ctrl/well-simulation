@@ -2,7 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-05-31
-- Implementation: API boundaries implemented; dashboard controls remain deferred
+- Implementation: API and scenario UI boundaries implemented; live command forms deferred
 
 ## Context
 
@@ -55,3 +55,11 @@ confirmed command at a model tick and restores its durable controls after a
 restart. An integration test runs a scenario after a live change and confirms
 that the active controls and revision remain unchanged. Dashboard controls
 remain outside this milestone.
+
+## Implementation on 2026-10-16: Dashboard analysis
+
+Milestone 9 presents installed controls as read-only values in Monitoring and
+places scenario inputs on a separate Scenarios page. Saved results show the
+original baseline and schedule. Editing a new draft does not alter a saved
+result. Live command entry still uses the separate draft and activation API;
+this dashboard does not add live command forms.

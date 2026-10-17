@@ -48,7 +48,7 @@ export const controlsRouter = new Hono()
       const data = await controlStatus(
         wellIdSchema.parse(Number(c.req.param('wellheadId')))
       );
-      return c.json({ data, msg: 'Control state loaded', status: 200 });
+      return c.json({ data, msg: 'Control state loaded', status: 200 as const });
     }
   )
   .post('/control-commands', requireCapability('control:issue'), async (c) => {

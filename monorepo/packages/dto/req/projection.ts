@@ -1,5 +1,7 @@
 import z from 'zod';
 
+export const MAX_SCENARIO_STEPS = 16;
+
 /** One bounded request uses the model's fixed one-second internal step. */
 const windowFields = {
   horizonSeconds: z.number().int().min(300).max(7200).default(1800),
@@ -41,7 +43,7 @@ export const scenarioRequestSchema = z
           .strict()
       )
       .min(1)
-      .max(16),
+      .max(MAX_SCENARIO_STEPS),
   })
   .strict()
   .refine((value) => value.horizonSeconds % value.stepSeconds === 0, {

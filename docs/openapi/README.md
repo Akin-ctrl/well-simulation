@@ -5,8 +5,10 @@ This directory contains committed API specifications for the wellhead monitoring
 ## Specifications
 
 - `public-api.yaml`: dashboard-facing TypeScript/Hono API implemented by `monorepo/apps/api`.
+  Includes model status, per-well saved-run history, and original inputs and
+  canonical signal metadata on saved forecast and scenario reads.
 - `twin-core-internal-api.yaml`: implemented internal reads and operational
-  endpoints, forecasts, scenarios, installed controls, command wake-up hints,
+  endpoints, protected model status, forecasts, scenarios, installed controls, command wake-up hints,
   and parameter validation for the Python twin-core service. Live targets are
   stored through the public command lifecycle; internal HTTP never applies
   a control payload directly.

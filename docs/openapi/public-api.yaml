@@ -257,6 +257,71 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "500":
           $ref: "#/components/responses/ServerError"
+  /twin/status:
+    get:
+      tags: [Twin]
+      summary: Read lifecycle and successful process freshness, including partial startup.
+      operationId: getTwinModelStatus
+      security: [{cookieAuth: []}]
+      responses:
+        "200":
+          description: Model state, or available false if its optional read failed.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, msg, status]
+                properties:
+                  msg: {type: string}
+                  status: {type: integer, const: 200}
+                  data: {$ref: "#/components/schemas/FleetModelStatus"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+  /twin/wellheads/{wellheadId}/runs:
+    get:
+      tags: [Twin]
+      summary: List saved run summaries for one well, newest first.
+      description: Shared with authorized dashboard readers. Metadata can outlive retained points.
+      operationId: listTwinRuns
+      security: [{cookieAuth: []}]
+      parameters:
+        - name: wellheadId
+          in: path
+          required: true
+          schema: {type: integer, minimum: 1}
+        - name: kind
+          in: query
+          schema: {type: string, enum: [forecast, scenario], default: scenario}
+        - name: limit
+          in: query
+          schema: {type: integer, minimum: 1, maximum: 50, default: 20}
+        - name: offset
+          in: query
+          schema: {type: integer, minimum: 0, maximum: 10000, default: 0}
+      responses:
+        "200":
+          description: Bounded summary page with hasMore for pagination.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, msg, status]
+                properties:
+                  msg: {type: string}
+                  status: {type: integer, const: 200}
+                  data:
+                    type: object
+                    required: [items, hasMore]
+                    properties:
+                      hasMore: {type: boolean}
+                      items:
+                        type: array
+                        maxItems: 50
+                        items: {$ref: "#/components/schemas/RunSummary"}
+        "400": {$ref: "#/components/responses/ValidationError"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
   /twin/wellheads/{wellheadId}/forecast:
     post:
       tags: [Twin]
@@ -324,7 +389,7 @@ paths:
           description: Complete forecast with sampled points.
           content:
             application/json:
-              schema: {$ref: "#/components/schemas/ProjectionEnvelope"}
+              schema: {$ref: "#/components/schemas/SavedProjectionEnvelope"}
         "400": {$ref: "#/components/responses/ValidationError"}
         "404": {$ref: "#/components/responses/NotFound"}
         "410": {$ref: "#/components/responses/Gone"}
@@ -345,7 +410,7 @@ paths:
           description: Complete scenario with sampled points.
           content:
             application/json:
-              schema: {$ref: "#/components/schemas/ProjectionEnvelope"}
+              schema: {$ref: "#/components/schemas/SavedProjectionEnvelope"}
         "400": {$ref: "#/components/responses/ValidationError"}
         "404": {$ref: "#/components/responses/NotFound"}
         "410": {$ref: "#/components/responses/Gone"}
@@ -1377,6 +1442,78 @@ components:
                   pumpOn: {type: boolean}
                   emergencyShutdown: {type: boolean}
       description: Control offsets must increase and stay inside the horizon.
+    FleetModelStatus:
+      type: object
+      required: [checkedAt, available, wellheads]
+      properties:
+        checkedAt: {type: string, format: date-time}
+        available: {type: boolean}
+        wellheads:
+          type: array
+          maxItems: 1000
+          items:
+            type: object
+            required: [wellheadId, modelVersion, status, reason, lastTickAt,
+              simulatedAt, processAgeSeconds, current, skippedTicks, restoredFrom,
+              lastRecoveryEvent]
+            properties:
+              wellheadId: {type: integer, minimum: 1}
+              modelVersion: {type: string}
+              status: {type: string}
+              reason: {type: string}
+              lastTickAt: {type: [string, "null"], format: date-time}
+              simulatedAt: {type: [string, "null"], format: date-time}
+              processAgeSeconds: {type: [number, "null"]}
+              current: {type: boolean}
+              skippedTicks: {type: integer, minimum: 0}
+              restoredFrom: {type: [string, "null"], format: date-time}
+              lastRecoveryEvent:
+                type: [object, "null"]
+                required: [type, time]
+                properties:
+                  type: {type: string}
+                  time: {type: string, format: date-time}
+    RunSummary:
+      type: object
+      required: [runId, kind, wellheadId, name, createdAt, baseSimulatedAt,
+        modelVersion, horizonSeconds, stepSeconds, confidenceScore]
+      properties:
+        runId: {type: string, format: uuid}
+        kind: {type: string, enum: [forecast, scenario]}
+        wellheadId: {type: integer, minimum: 1}
+        name: {type: [string, "null"]}
+        createdAt: {type: string, format: date-time}
+        baseSimulatedAt: {type: string, format: date-time}
+        modelVersion: {type: string}
+        horizonSeconds: {type: integer}
+        stepSeconds: {type: integer}
+        confidenceScore: {type: number, minimum: 0, maximum: 1}
+    SavedProjectionEnvelope:
+      allOf:
+        - {$ref: "#/components/schemas/ProjectionEnvelope"}
+        - type: object
+          properties:
+            data:
+              type: object
+              required: [baselineControls, scheduledControls, signals]
+              properties:
+                baselineControls:
+                  type: object
+                  description: Original model control values, using persisted field names.
+                  additionalProperties: {type: [number, boolean]}
+                scheduledControls:
+                  type: array
+                  items: {$ref: "#/components/schemas/ScenarioRequest/properties/controls/items"}
+                signals:
+                  type: array
+                  items:
+                    type: object
+                    required: [code, displayName, canonicalUnit, dataType]
+                    properties:
+                      code: {type: string}
+                      displayName: {type: string}
+                      canonicalUnit: {type: [string, "null"]}
+                      dataType: {type: string}
     ProjectionEnvelope:
       type: object
       required: [msg, data, status]
@@ -1574,8 +1711,17 @@ components:
           $ref: "#/components/schemas/DashboardOverviewData"
     DashboardOverviewData:
       type: object
-      required: [summary, latestReadings, activeAlarms]
+      required: [summary, latestReadings, activeAlarms, wellheads]
       properties:
+        wellheads:
+          type: array
+          items:
+            allOf:
+              - {$ref: "#/components/schemas/WellheadAsset"}
+              - type: object
+                required: [activeAlarmCount]
+                properties:
+                  activeAlarmCount: {type: integer, minimum: 0}
         summary:
           $ref: "#/components/schemas/DashboardSummary"
         latestReadings:
@@ -1686,6 +1832,7 @@ components:
           type: object
           required:
             - wellhead
+            - latestReadingAgeSeconds
             - latestReadingAt
             - latestReadings
             - activeAlarms
@@ -1695,6 +1842,7 @@ components:
           properties:
             wellhead:
               $ref: "#/components/schemas/WellheadAsset"
+            latestReadingAgeSeconds: {type: [number, "null"], minimum: 0}
             latestReadingAt:
               type: [string, "null"]
               format: date-time
@@ -1746,7 +1894,7 @@ components:
           type: string
     DashboardSummary:
       type: object
-      required: [totalWellheads, parametersTracked, activeAlarms, latestReadingAt]
+      required: [totalWellheads, parametersTracked, activeAlarms, latestReadingAt, latestReadingAgeSeconds]
       properties:
         totalWellheads:
           type: integer
@@ -1754,6 +1902,7 @@ components:
           type: integer
         activeAlarms:
           type: integer
+        latestReadingAgeSeconds: {type: [number, "null"], minimum: 0}
         latestReadingAt:
           type: [string, "null"]
           format: date-time

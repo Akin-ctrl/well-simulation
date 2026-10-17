@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { validator } from 'hono/validator';
 import { HTTPException } from 'hono/http-exception';
 import { bodyLimit } from 'hono/body-limit';
 import { asc, db, eq } from '@well-simulation/db/query';
@@ -22,6 +23,9 @@ import { config } from '../config';
 import { requireCapability, sessionUserId } from '../middleware/authorize';
 import { responseHandler } from '../utils/handler';
 
+import { projectionDetail, runHistory } from '../projection-details';
+import { modelStatus } from '../twin-control-client';
+
 const MAX_TWIN_RESPONSE_BYTES = 5_000_000;
 const TWIN_TIMEOUT_MS = 12_000;
 const RUN_ID_PATTERN =
@@ -40,16 +44,6 @@ function runId(raw: string | undefined): string {
     throw new HTTPException(400, { message: 'Invalid run id' });
   }
   return raw;
-}
-
-async function requestBody(c: {
-  req: { json: () => Promise<unknown> };
-}): Promise<unknown> {
-  try {
-    return await c.req.json();
-  } catch {
-    throw new HTTPException(400, { message: 'Invalid JSON request' });
-  }
 }
 
 /** The browser never receives the service token or calls twin-core directly. */
@@ -130,7 +124,7 @@ function baseResponse(run: {
   };
 }
 
-async function savedForecast(runId: string): Promise<ProjectionResponse> {
+async function savedForecast(runId: string) {
   const [run] = await db
     .select()
     .from(predictionRun)
@@ -144,21 +138,24 @@ async function savedForecast(runId: string): Promise<ProjectionResponse> {
     .orderBy(asc(predictionPoint.forecastAt));
   if (rows.length !== run.horizonSeconds / run.stepSeconds)
     throw new HTTPException(410, { message: 'Forecast points have expired' });
-  return projectionResponseSchema.parse({
-    ...baseResponse(run),
-    kind: 'forecast',
-    name: null,
-    points: rows.map((point) => ({
-      elapsedSeconds: point.elapsedSeconds,
-      timestamp: point.forecastAt,
-      values: point.values,
-      alarmRisk: point.alarmRisk,
-      triggeredRuleIds: point.triggeredRuleIds,
-    })),
-  });
+  return projectionDetail(
+    projectionResponseSchema.parse({
+      ...baseResponse(run),
+      kind: 'forecast',
+      name: null,
+      points: rows.map((point) => ({
+        elapsedSeconds: point.elapsedSeconds,
+        timestamp: point.forecastAt,
+        values: point.values,
+        alarmRisk: point.alarmRisk,
+        triggeredRuleIds: point.triggeredRuleIds,
+      })),
+    }),
+    run
+  );
 }
 
-async function savedScenario(runId: string): Promise<ProjectionResponse> {
+async function savedScenario(runId: string) {
   const [run] = await db
     .select()
     .from(scenarioRun)
@@ -172,84 +169,105 @@ async function savedScenario(runId: string): Promise<ProjectionResponse> {
     .orderBy(asc(scenarioPoint.forecastAt));
   if (rows.length !== run.horizonSeconds / run.stepSeconds)
     throw new HTTPException(410, { message: 'Scenario points have expired' });
-  return projectionResponseSchema.parse({
-    ...baseResponse(run),
-    kind: 'scenario',
-    name: run.name,
-    points: rows.map((point) => ({
-      elapsedSeconds: point.elapsedSeconds,
-      timestamp: point.forecastAt,
-      values: point.values,
-      alarmRisk: point.alarmRisk,
-      triggeredRuleIds: point.triggeredRuleIds,
-      baselineValues: point.baselineValues,
-      baselineAlarmRisk: point.baselineAlarmRisk,
-    })),
-  });
+  return projectionDetail(
+    projectionResponseSchema.parse({
+      ...baseResponse(run),
+      kind: 'scenario',
+      name: run.name,
+      points: rows.map((point) => ({
+        elapsedSeconds: point.elapsedSeconds,
+        timestamp: point.forecastAt,
+        values: point.values,
+        alarmRisk: point.alarmRisk,
+        triggeredRuleIds: point.triggeredRuleIds,
+        baselineValues: point.baselineValues,
+        baselineAlarmRisk: point.baselineAlarmRisk,
+      })),
+    }),
+    run
+  );
 }
 
 /** Public analysis routes. They cannot apply a live actuator command. */
 export const twinRouter = new Hono()
   .use('*', bodyLimit({ maxSize: 4096 }))
+  .get('/status', requireCapability('dashboard:read'), responseHandler(modelStatus))
+  .get(
+    '/wellheads/:wellheadId/runs',
+    requireCapability('dashboard:read'),
+    validator('query', (value) => value),
+    (c) =>
+      responseHandler(() =>
+        runHistory(positiveWellheadId(c.req.param('wellheadId')), c.req.query())
+      )(c)
+  )
   .post(
     '/wellheads/:wellheadId/forecast',
     requireCapability('scenario:run'),
-    responseHandler(async (c) => {
-      const actor = sessionUserId(c);
-      const wellheadId = positiveWellheadId(c.req.param('wellheadId'));
-      const input = forecastRequestSchema.parse(await requestBody(c));
-      try {
-        const result = await runTwin(`/wellheads/${wellheadId}/forecast`, actor, input);
-        await recordAuditEvent(c, {
-          action: 'twin.forecast',
-          outcome: 'success',
-          actorUserId: actor,
-          subjectType: 'prediction_run',
-          subjectId: result.runId,
-          detail: { wellheadId, horizonSeconds: input.horizonSeconds },
-        });
-        return result;
-      } catch (error) {
-        await recordAuditEvent(c, {
-          action: 'twin.forecast',
-          outcome: 'failure',
-          actorUserId: actor,
-          detail: { wellheadId },
-        });
-        throw error;
-      }
-    }, 'Forecast generated')
+    validator('json', (value) => forecastRequestSchema.parse(value)),
+    (c) =>
+      responseHandler(async () => {
+        const actor = sessionUserId(c);
+        const wellheadId = positiveWellheadId(c.req.param('wellheadId'));
+        const input = c.req.valid('json');
+        try {
+          const result = await runTwin(
+            `/wellheads/${wellheadId}/forecast`,
+            actor,
+            input
+          );
+          await recordAuditEvent(c, {
+            action: 'twin.forecast',
+            outcome: 'success',
+            actorUserId: actor,
+            subjectType: 'prediction_run',
+            subjectId: result.runId,
+            detail: { wellheadId, horizonSeconds: input.horizonSeconds },
+          });
+          return result;
+        } catch (error) {
+          await recordAuditEvent(c, {
+            action: 'twin.forecast',
+            outcome: 'failure',
+            actorUserId: actor,
+            detail: { wellheadId },
+          });
+          throw error;
+        }
+      }, 'Forecast generated')(c)
   )
   .post(
     '/scenarios',
     requireCapability('scenario:run'),
-    responseHandler(async (c) => {
-      const actor = sessionUserId(c);
-      const input = scenarioRequestSchema.parse(await requestBody(c));
-      try {
-        const result = await runTwin('/scenarios', actor, input);
-        await recordAuditEvent(c, {
-          action: 'twin.scenario',
-          outcome: 'success',
-          actorUserId: actor,
-          subjectType: 'scenario_run',
-          subjectId: result.runId,
-          detail: {
-            wellheadId: input.wellheadId,
-            horizonSeconds: input.horizonSeconds,
-          },
-        });
-        return result;
-      } catch (error) {
-        await recordAuditEvent(c, {
-          action: 'twin.scenario',
-          outcome: 'failure',
-          actorUserId: actor,
-          detail: { wellheadId: input.wellheadId },
-        });
-        throw error;
-      }
-    }, 'Scenario generated')
+    validator('json', (value) => scenarioRequestSchema.parse(value)),
+    (c) =>
+      responseHandler(async () => {
+        const actor = sessionUserId(c);
+        const input = c.req.valid('json');
+        try {
+          const result = await runTwin('/scenarios', actor, input);
+          await recordAuditEvent(c, {
+            action: 'twin.scenario',
+            outcome: 'success',
+            actorUserId: actor,
+            subjectType: 'scenario_run',
+            subjectId: result.runId,
+            detail: {
+              wellheadId: input.wellheadId,
+              horizonSeconds: input.horizonSeconds,
+            },
+          });
+          return result;
+        } catch (error) {
+          await recordAuditEvent(c, {
+            action: 'twin.scenario',
+            outcome: 'failure',
+            actorUserId: actor,
+            detail: { wellheadId: input.wellheadId },
+          });
+          throw error;
+        }
+      }, 'Scenario generated')(c)
   )
   .get(
     '/forecasts/:runId',
