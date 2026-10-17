@@ -892,3 +892,42 @@ CREATE TABLE forecast_job (
 CREATE UNIQUE INDEX ix_forecast_job_running ON forecast_job(schedule_id) WHERE status = 'running';
 CREATE INDEX ix_forecast_job_recent ON forecast_job(wellhead_id, started_at DESC);
 CREATE INDEX ix_forecast_job_expiry ON forecast_job(lease_expires_at) WHERE status = 'running';
+
+-- Operator actions are independent of the retained alarm condition events.
+CREATE TABLE alarm_action (
+    action_id UUID PRIMARY KEY,
+    actor_user_id INT NOT NULL,
+    actor_name VARCHAR(256) NOT NULL,
+    actor_role TEXT NOT NULL CHECK (actor_role = 'OPERATIONS'),
+    request_key UUID NOT NULL,
+    input_hash VARCHAR(64) NOT NULL CHECK (input_hash ~ '^[0-9a-f]{64}$'),
+    action TEXT NOT NULL CHECK (action IN ('acknowledge', 'shelve', 'unshelve')),
+    wellhead_id INT NOT NULL,
+    alarm_rule_id INT NOT NULL,
+    occurred_at TIMESTAMPTZ NOT NULL CHECK (isfinite(occurred_at)),
+    input JSONB NOT NULL CHECK (jsonb_typeof(input) = 'object'),
+    result JSONB NOT NULL CHECK (jsonb_typeof(result) = 'object'),
+    UNIQUE (actor_user_id, request_key)
+);
+CREATE INDEX ix_alarm_action_target ON alarm_action(wellhead_id, alarm_rule_id, occurred_at DESC, action_id DESC);
+
+CREATE TABLE alarm_acknowledgement (
+    event_id BIGINT NOT NULL CHECK (event_id > 0),
+    triggered_at TIMESTAMPTZ NOT NULL CHECK (isfinite(triggered_at)),
+    acknowledged_at TIMESTAMPTZ NOT NULL CHECK (isfinite(acknowledged_at)),
+    action_id UUID NOT NULL UNIQUE REFERENCES alarm_action(action_id),
+    PRIMARY KEY (event_id, triggered_at)
+);
+
+CREATE TABLE alarm_shelf (
+    wellhead_id INT NOT NULL REFERENCES wellhead(wellhead_id) ON DELETE CASCADE,
+    alarm_rule_id INT NOT NULL REFERENCES alarmrule(alarm_rule_id) ON DELETE CASCADE,
+    revision INT NOT NULL CHECK (revision > 0),
+    shelved_until TIMESTAMPTZ,
+    updated_at TIMESTAMPTZ NOT NULL CHECK (isfinite(updated_at)),
+    action_id UUID NOT NULL REFERENCES alarm_action(action_id),
+    PRIMARY KEY (wellhead_id, alarm_rule_id),
+    CHECK (shelved_until IS NULL OR (isfinite(shelved_until) AND
+        shelved_until >= updated_at + INTERVAL '5 minutes' AND shelved_until <= updated_at + INTERVAL '8 hours'))
+);
+CREATE INDEX ix_alarm_shelf_deadline ON alarm_shelf(shelved_until) WHERE shelved_until IS NOT NULL;

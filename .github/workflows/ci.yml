@@ -152,6 +152,7 @@ jobs:
         run: >-
           python -m pytest data/tests/test_schema_database.py
           data/tests/test_schema_extension_database.py data/tests/test_forecast_database.py
+          data/tests/test_schema_normalize_database.py
         env:
           SCHEMA_DATABASE_TEST: '1'
 

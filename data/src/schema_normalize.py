@@ -20,6 +20,28 @@ ARRAY_CASTS = (
 )
 VARCHAR_VALUE = re.compile("(" + LITERAL + r")::character varying")
 
+# BETWEEN expands after parsing into a nested AND. pg_dump emits that expanded
+# expression; parsing it during restore flattens the AND. Limit equivalence to
+# the verified integer bounds/modulo shape used by forecast durations.
+BOUNDED_MINUTES = re.compile(
+    r"CHECK \(\(\(\((?P<column>interval_seconds|horizon_seconds) >= "
+    r"(?P<lower>-?[0-9]+)\) AND \((?P=column) <= (?P<upper>-?[0-9]+)\)\)"
+    r" AND \(\((?P=column) % (?P<divisor>[0-9]+)\) = "
+    r"(?P<remainder>-?[0-9]+)\)\)\)"
+)
+
+
+def normalize_bounded_minutes(definition: str) -> str:
+    """Flatten only the verified whole-expression AND; retain every comparison."""
+    match = BOUNDED_MINUTES.fullmatch(definition)
+    if match is None:
+        return definition
+    column, lower, upper, divisor, remainder = match.groups()
+    return (
+        f"CHECK ((({column} >= {lower}) AND ({column} <= {upper}) "
+        f"AND (({column} % {divisor}) = {remainder})))"
+    )
+
 
 def _array_match(definition: str, index: int) -> re.Match[str] | None:
     """Recognize either supported array cast at the current SQL position."""
@@ -60,5 +82,7 @@ def comparison_rows(section: str, rows: list[str]) -> list[str]:
     for row in rows:
         values = json.loads(row)
         values[position] = normalize_text_arrays(values[position])
+        if section == "constraints":
+            values[position] = normalize_bounded_minutes(values[position])
         result.append(json.dumps(values, sort_keys=True))
     return sorted(result)

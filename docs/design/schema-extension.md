@@ -103,3 +103,19 @@ removed; the private backup remains outside the repository.
 The isolated and main installations both accepted the verified extension while
 retaining their existing volumes. The updated installer image also passed a
 normal isolated startup check and provisioned the intended service grants.
+
+## Restore comparison follow-up, 2026-10-17
+
+The alarm extension restore rehearsal found that PostgreSQL flattens the nested
+AND produced by forecast duration `BETWEEN` checks when it parses a dump. The
+catalog comparison now recognizes only that verified whole-expression shape,
+retaining every bound and divisibility operand. Other structural differences
+still stop installation. The [alarm verification record](alarm-lifecycle.md)
+describes the finding, narrow comparison rule and regression checks. Keep using
+the exact previous SQL and contract; do not edit the old schema to match a dump.
+
+Use serial `pg_restore` for the full TimescaleDB archive. Parallel restore can
+load extension catalog rows before their dependencies. The disposable rehearsal
+reproduced this failure, and the [official procedure](https://github.com/timescale/Tiger-Data-Docs/blob/main/src/content/docs/deploy/self-hosted/backup-and-restore/logical-backup.mdx)
+explicitly excludes `-j`. Keep `timescaledb_pre_restore()` and
+`timescaledb_post_restore()` around the restore as documented.

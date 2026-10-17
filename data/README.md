@@ -197,3 +197,16 @@ SQL and contract, then applies only new ordinary tables and their indexes from
 the current canonical SQL. It verifies and audits the new identity in the same
 transaction. Keep temporary copies of the installed SQL and contract, take a
 private backup, and verify a restored copy first. See the [extension workflow](../docs/design/schema-extension.md) and [command example](../docs/design/consolidated-schema.md#adding-new-ordinary-tables).
+
+### Alarm lifecycle records
+
+`alarm_action` stores immutable reviewed input and its result.
+`alarm_acknowledgement` identifies one event by its bigint ID and exact trigger
+time. `alarm_shelf` stores the current well/rule revision and deadline. All three
+come from the single canonical SQL file. The API can insert receipts and
+acknowledgements but cannot change or delete existing ones. Its shelf UPDATE
+grant names only the revision, deadline, updated time and receipt columns.
+
+Operator actions never update `alarmevent`. Its 90-day retention remains in
+place, while action receipts and acknowledgement metadata remain durable. See
+the [alarm design](../docs/design/alarm-lifecycle.md) for expiry and audit behavior.

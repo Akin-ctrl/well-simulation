@@ -6,7 +6,8 @@ info:
   description: |
     This contract documents the public API exposed by the TypeScript/Hono service.
     It covers monitoring, authentication, saved projections, synthetic control
-    commands, and parameter proposals. Controls require current OPERATIONS
+    commands, parameter proposals and alarm operator actions. Controls and alarm
+    actions require current OPERATIONS
     authority; parameter publication requires ADMIN. No route controls field hardware.
 servers:
   - url: /api
@@ -18,7 +19,277 @@ tags:
   - name: Auth
   - name: Dashboard
   - name: Twin
+  - name: Alarms
 paths:
+  /alarms:
+    get:
+      tags:
+      - Alarms
+      operationId: listAlarmLifecycle
+      summary: Read retained events and independent condition, acknowledgement and shelf
+        states.
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: Current alarm state or the committed action receipt.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - msg
+                - status
+                properties:
+                  data:
+                    $ref: '#/components/schemas/AlarmList'
+                  msg:
+                    type: string
+                  status:
+                    type: integer
+                    const: 200
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/ServerError'
+      parameters:
+      - name: view
+        in: query
+        schema:
+          type: string
+          enum:
+          - attention
+          - active
+          - history
+          default: attention
+      - name: wellheadId
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 2147483647
+      - name: cursor
+        in: query
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 600
+  /alarms/shelves:
+    get:
+      tags:
+      - Alarms
+      operationId: listAlarmShelves
+      summary: Read current shelves, including those with no active event.
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: Current alarm state or the committed action receipt.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - msg
+                - status
+                properties:
+                  data:
+                    $ref: '#/components/schemas/AlarmShelfList'
+                  msg:
+                    type: string
+                  status:
+                    type: integer
+                    const: 200
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/ServerError'
+      parameters:
+      - name: wellheadId
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 2147483647
+      - name: cursor
+        in: query
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 600
+  /alarms/events/{eventId}:
+    get:
+      tags:
+      - Alarms
+      operationId: readAlarmEvent
+      summary: Read an exact retained event and the latest 20 actions for its well and
+        rule.
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: Current alarm state or the committed action receipt.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - msg
+                - status
+                properties:
+                  data:
+                    $ref: '#/components/schemas/AlarmDetail'
+                  msg:
+                    type: string
+                  status:
+                    type: integer
+                    const: 200
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/ServerError'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      parameters:
+      - name: eventId
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: ^[1-9][0-9]{0,18}$
+          description: Positive PostgreSQL bigint decimal string, at most 9223372036854775807.
+            Never convert to a JavaScript number.
+      - name: triggeredAt
+        in: query
+        required: true
+        schema:
+          type: string
+          format: date-time
+          description: UTC timestamp; preserve all six fractional digits for event identity.
+  /alarms/actions/{requestKey}:
+    get:
+      tags:
+      - Alarms
+      operationId: readOwnAlarmReceipt
+      summary: Find the signed-in actor’s committed result after a missing reply.
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: Current alarm state or the committed action receipt.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - msg
+                - status
+                properties:
+                  data:
+                    $ref: '#/components/schemas/AlarmReceipt'
+                  msg:
+                    type: string
+                  status:
+                    type: integer
+                    const: 200
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/ServerError'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      parameters:
+      - name: requestKey
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+  /alarms/actions:
+    post:
+      tags:
+      - Alarms
+      operationId: applyAlarmAction
+      summary: OPERATIONS acknowledges one event, shelves a rule, or ends a shelf.
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: Current alarm state or the committed action receipt.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - msg
+                - status
+                properties:
+                  data:
+                    $ref: '#/components/schemas/AlarmReceipt'
+                  msg:
+                    type: string
+                  status:
+                    type: integer
+                    const: 200
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/ServerError'
+        '404':
+          description: Event is no longer retained, or target does not exist.
+        '409':
+          description: Acknowledgement, shelf revision or request key conflicts. Read
+            and review the current state.
+        '413':
+          description: Body exceeds 4096 bytes.
+        '429':
+          description: Write budget exhausted.
+        '503':
+          description: Outcome unknown. Check the request key before retrying.
+      description: Requires current OPERATIONS authority, explicit confirmation and
+        a reason. The shared control write budget permits ten writes per user per minute.
+        Maximum body size is 4096 bytes. Receipt, lifecycle state and audit commit together.
+        Repeating the same key and input returns the original receipt. A shelf expires
+        by database time and never changes condition truth. On an uncertain outcome,
+        look up the same request key before retrying the exact input.
+      parameters:
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AlarmActionInput'
   /twin/wellheads/{wellheadId}/forecast-schedule:
     parameters:
       - name: wellheadId
@@ -1138,6 +1409,433 @@ components:
           schema:
             $ref: "#/components/schemas/ErrorResponse"
   schemas:
+    AlarmTarget:
+      type: object
+      required:
+      - wellheadId
+      - wellheadName
+      - locationName
+      - ruleId
+      - parameterName
+      - unit
+      - operator
+      - threshold
+      - severity
+      - triggerAfter
+      - clearAfter
+      properties:
+        wellheadId:
+          type: integer
+          minimum: 1
+          maximum: 2147483647
+        wellheadName:
+          type: string
+        locationName:
+          type: string
+        ruleId:
+          type: integer
+          minimum: 1
+          maximum: 2147483647
+        parameterName:
+          type: string
+        unit:
+          oneOf:
+          - type: string
+          - type: 'null'
+        operator:
+          type: string
+        threshold:
+          type: number
+        severity:
+          type: string
+        triggerAfter:
+          type: integer
+          minimum: 1
+          maximum: 2147483647
+        clearAfter:
+          type: integer
+          minimum: 1
+          maximum: 2147483647
+    AlarmShelfState:
+      type: object
+      required:
+      - revision
+      - until
+      - active
+      - updatedAt
+      - actorName
+      - reason
+      properties:
+        revision:
+          type: integer
+          minimum: 1
+          maximum: 2147483647
+        until:
+          oneOf:
+          - type: string
+            format: date-time
+            description: UTC timestamp; preserve all six fractional digits for event identity.
+          - type: 'null'
+        active:
+          type: boolean
+        updatedAt:
+          type: string
+          format: date-time
+          description: UTC timestamp; preserve all six fractional digits for event identity.
+        actorName:
+          type: string
+        reason:
+          type: string
+    AlarmReceipt:
+      type: object
+      required:
+      - actionId
+      - action
+      - occurredAt
+      - actorUserId
+      - actorName
+      - reason
+      - target
+      - eventId
+      - triggeredAt
+      - revision
+      - shelvedUntil
+      properties:
+        actionId:
+          type: string
+          format: uuid
+        action:
+          type: string
+          enum:
+          - acknowledge
+          - shelve
+          - unshelve
+        occurredAt:
+          type: string
+          format: date-time
+          description: UTC timestamp; preserve all six fractional digits for event identity.
+        actorUserId:
+          type: integer
+          minimum: 1
+          maximum: 2147483647
+        actorName:
+          type: string
+        reason:
+          type: string
+        target:
+          $ref: '#/components/schemas/AlarmTarget'
+        eventId:
+          oneOf:
+          - type: string
+            pattern: ^[1-9][0-9]{0,18}$
+            description: Positive PostgreSQL bigint decimal string, at most 9223372036854775807.
+              Never convert to a JavaScript number.
+          - type: 'null'
+        triggeredAt:
+          oneOf:
+          - type: string
+            format: date-time
+            description: UTC timestamp; preserve all six fractional digits for event identity.
+          - type: 'null'
+        revision:
+          oneOf:
+          - type: integer
+            minimum: 1
+            maximum: 2147483647
+          - type: 'null'
+        shelvedUntil:
+          oneOf:
+          - type: string
+            format: date-time
+            description: UTC timestamp; preserve all six fractional digits for event identity.
+          - type: 'null'
+    AlarmLifecycleEvent:
+      type: object
+      required:
+      - eventId
+      - triggeredAt
+      - clearedAt
+      - severity
+      - triggeredValue
+      - target
+      - acknowledgement
+      - shelf
+      properties:
+        eventId:
+          type: string
+          pattern: ^[1-9][0-9]{0,18}$
+          description: Positive PostgreSQL bigint decimal string, at most 9223372036854775807.
+            Never convert to a JavaScript number.
+        triggeredAt:
+          type: string
+          format: date-time
+          description: UTC timestamp; preserve all six fractional digits for event identity.
+        clearedAt:
+          oneOf:
+          - type: string
+            format: date-time
+            description: UTC timestamp; preserve all six fractional digits for event identity.
+          - type: 'null'
+        severity:
+          type: string
+        triggeredValue:
+          type: number
+        target:
+          $ref: '#/components/schemas/AlarmTarget'
+        acknowledgement:
+          oneOf:
+          - type: object
+            required:
+            - at
+            - actorName
+            - reason
+            properties:
+              at:
+                type: string
+                format: date-time
+                description: UTC timestamp; preserve all six fractional digits for event
+                  identity.
+              actorName:
+                type: string
+              reason:
+                type: string
+          - type: 'null'
+        shelf:
+          oneOf:
+          - $ref: '#/components/schemas/AlarmShelfState'
+          - type: 'null'
+    AlarmSummary:
+      type: object
+      required:
+      - active
+      - critical
+      - attention
+      - shelves
+      - retained
+      properties:
+        active:
+          type: integer
+          minimum: 0
+        critical:
+          type: integer
+          minimum: 0
+        attention:
+          type: integer
+          minimum: 0
+        shelves:
+          type: integer
+          minimum: 0
+        retained:
+          type: integer
+          minimum: 0
+    AlarmList:
+      type: object
+      required:
+      - wells
+      - summary
+      - observedAt
+      - nextCursor
+      - items
+      properties:
+        wells:
+          type: array
+          items:
+            type: object
+            required:
+            - wellheadId
+            - wellheadName
+            properties:
+              wellheadId:
+                type: integer
+                minimum: 1
+                maximum: 2147483647
+              wellheadName:
+                type: string
+        summary:
+          $ref: '#/components/schemas/AlarmSummary'
+        observedAt:
+          type: string
+          format: date-time
+          description: UTC timestamp; preserve all six fractional digits for event identity.
+        nextCursor:
+          oneOf:
+          - type: string
+          - type: 'null'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AlarmLifecycleEvent'
+          maxItems: 50
+    AlarmShelfList:
+      type: object
+      required:
+      - wells
+      - summary
+      - observedAt
+      - nextCursor
+      - items
+      - total
+      properties:
+        wells:
+          type: array
+          items:
+            type: object
+            required:
+            - wellheadId
+            - wellheadName
+            properties:
+              wellheadId:
+                type: integer
+                minimum: 1
+                maximum: 2147483647
+              wellheadName:
+                type: string
+        summary:
+          $ref: '#/components/schemas/AlarmSummary'
+        observedAt:
+          type: string
+          format: date-time
+          description: UTC timestamp; preserve all six fractional digits for event identity.
+        nextCursor:
+          oneOf:
+          - type: string
+          - type: 'null'
+        items:
+          type: array
+          items:
+            type: object
+            required:
+            - target
+            - state
+            properties:
+              target:
+                $ref: '#/components/schemas/AlarmTarget'
+              state:
+                $ref: '#/components/schemas/AlarmShelfState'
+          maxItems: 50
+        total:
+          type: integer
+          minimum: 0
+    AlarmDetail:
+      type: object
+      required:
+      - observedAt
+      - event
+      - actions
+      properties:
+        observedAt:
+          type: string
+          format: date-time
+          description: UTC timestamp; preserve all six fractional digits for event identity.
+        event:
+          $ref: '#/components/schemas/AlarmLifecycleEvent'
+        actions:
+          type: array
+          items:
+            $ref: '#/components/schemas/AlarmReceipt'
+          maxItems: 20
+    AlarmActionInput:
+      oneOf:
+      - type: object
+        required:
+        - action
+        - eventId
+        - triggeredAt
+        - reason
+        - confirmed
+        properties:
+          action:
+            type: string
+            const: acknowledge
+          eventId:
+            type: string
+            pattern: ^[1-9][0-9]{0,18}$
+            description: Positive PostgreSQL bigint decimal string, at most 9223372036854775807.
+              Never convert to a JavaScript number.
+          triggeredAt:
+            type: string
+            format: date-time
+            description: UTC timestamp; preserve all six fractional digits for event identity.
+          reason:
+            type: string
+            minLength: 1
+            maxLength: 500
+            description: Trimmed operator reason.
+          confirmed:
+            type: boolean
+            const: true
+        additionalProperties: false
+      - type: object
+        required:
+        - action
+        - wellheadId
+        - ruleId
+        - expectedRevision
+        - durationMinutes
+        - reason
+        - confirmed
+        properties:
+          action:
+            type: string
+            const: shelve
+          wellheadId:
+            type: integer
+            minimum: 1
+            maximum: 2147483647
+          ruleId:
+            type: integer
+            minimum: 1
+            maximum: 2147483647
+          expectedRevision:
+            type: integer
+            minimum: 0
+            maximum: 2147483646
+          durationMinutes:
+            type: integer
+            minimum: 5
+            maximum: 480
+          reason:
+            type: string
+            minLength: 1
+            maxLength: 500
+            description: Trimmed operator reason.
+          confirmed:
+            type: boolean
+            const: true
+        additionalProperties: false
+      - type: object
+        required:
+        - action
+        - wellheadId
+        - ruleId
+        - expectedRevision
+        - reason
+        - confirmed
+        properties:
+          action:
+            type: string
+            const: unshelve
+          wellheadId:
+            type: integer
+            minimum: 1
+            maximum: 2147483647
+          ruleId:
+            type: integer
+            minimum: 1
+            maximum: 2147483647
+          expectedRevision:
+            type: integer
+            minimum: 0
+            maximum: 2147483646
+          reason:
+            type: string
+            minLength: 1
+            maxLength: 500
+            description: Trimmed operator reason.
+          confirmed:
+            type: boolean
+            const: true
+        additionalProperties: false
     LiveControlTargets:
       type: object
       required: []

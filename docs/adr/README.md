@@ -63,11 +63,10 @@ previously written down.
 | [0036](0036-model-telemetry-through-modbus.md) | Send Model Telemetry Through The Existing Modbus Path | Implemented |
 | [0037](0037-session-revocation.md) | Logout Ends Every Session Of The User, On The Server | Implemented |
 | [0038](0038-live-control-command-lifecycle.md) | Apply Live Model Controls Through Durable, Reviewed Commands | Implemented |
+| [0039](0039-alarm-operator-actions.md) | Record Acknowledgement and Timed Shelving Separately From Alarm Conditions | Implemented |
 
-Of 38 decisions, 37 have their agreed local implementation and one remains
-partial: ADR 0031 still has external portfolio publication and consent gates.
-Alarm acknowledgement and shelving are newly authorized work beyond the
-inspection scope completed under ADR 0032.
+Of 39 decisions, 38 have their agreed local implementation. ADR 0031 retains
+external portfolio publication and contributor-consent gates.
 
 The twin-core process model now feeds the Modbus gateway and historian.
 Durable model state, forecasts, isolated scenarios, live synthetic controls,

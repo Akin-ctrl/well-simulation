@@ -80,8 +80,7 @@ the result before submitting again. The application does not retry the POST.
   it. Check the command outcome and running revision separately. An ADMIN account
   uses Parameters to publish an override; existing models need a service restart.
   The [operating workspace design](../design/operating-workspace.md) records both flows.
-  Field calibration, physical control, and alarm acknowledgement remain outside
-  this demo's implemented scope.
+  Field calibration and physical control remain outside this demo’s implemented scope.
 
 ## Compare an earlier state
 
@@ -91,3 +90,18 @@ choose a control change, and run it. Check Starting state in the result, then
 reload the link to confirm that it reopens the same saved branch. The model uses
 alarm rules active at execution. Older branches can lose chart points sooner
 because retention follows simulated dates.
+
+## Inspect and acknowledge an alarm
+
+Open Alarm Center and choose a well. Needs acknowledgement can include an event
+whose condition already returned to normal. All active counts every open
+condition, including acknowledged and shelved ones. Expand the help section
+for those distinctions and the event details for its exact identity.
+
+With an OPERATIONS account, select Review action, read the target and effect,
+enter a reason and confirm. Acknowledgement records recognition; normal readings
+clear the condition. Shelve rule sets a temporary deadline for that well and
+rule, including later events before the deadline. Shelved rules shows the reason
+and deadline even when no event is active. End shelf now returns unacknowledged
+events to the attention view. If a reply is lost, use Check result before any
+explicit retry. Do not create an alarm just to populate the presentation.

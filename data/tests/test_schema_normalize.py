@@ -47,3 +47,45 @@ def test_changed_values_still_compare_differently() -> None:
 def test_duplicate_catalog_entries_are_not_hidden_by_comparison() -> None:
     row = json.dumps(["parameterreading", "policy_compression"])
     assert differences({"jobs": [row]}, {"jobs": [row, row]})
+
+
+@pytest.mark.parametrize("column", ["interval_seconds", "horizon_seconds"])
+def test_bounded_minutes_restore_preserves_all_comparisons(column: str) -> None:
+    from schema_normalize import normalize_bounded_minutes
+
+    fresh = (
+        f"CHECK (((({column} >= 300) AND ({column} <= 1800)) "
+        f"AND (({column} % 60) = 0)))"
+    )
+    restored = (
+        f"CHECK ((({column} >= 300) AND ({column} <= 1800) AND (({column} % 60) = 0)))"
+    )
+    assert normalize_bounded_minutes(fresh) == restored
+    assert normalize_bounded_minutes(restored) == restored
+
+    def row(definition: str, valid: bool = True) -> str:
+        return json.dumps(["forecast_schedule", "bounds", definition, valid])
+
+    expected = {"constraints": [row(fresh)]}
+    assert not differences(expected, {"constraints": [row(restored)]})
+    assert differences(expected, {"constraints": [row(restored, False)]})
+    for before, after in [
+        ("300", "301"),
+        ("1800", "1860"),
+        ("60", "30"),
+        ("= 0", "= 1"),
+        (">=", ">"),
+        ("AND", "OR"),
+        (column, "another_column"),
+    ]:
+        assert differences(
+            expected, {"constraints": [row(restored.replace(before, after))]}
+        )
+    for other in [
+        "'" + fresh + "'",
+        "/* " + fresh + " */",
+        fresh + " NOT VALID",
+        fresh.replace("AND", "OR"),
+        fresh.replace("300", "some_function()"),
+    ]:
+        assert normalize_bounded_minutes(other) == other

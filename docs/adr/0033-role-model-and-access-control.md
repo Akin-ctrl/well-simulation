@@ -137,3 +137,11 @@ to revisit.
   subset rather than granted globally.
 - A regulatory obligation requiring formal approval workflows, where issuing a control
   command needs a second actor rather than a single role check.
+
+## Implementation update, 2026-10-17
+
+OPERATIONS now has both reviewed live synthetic control screens and alarm
+acknowledgement/shelving. ADMIN retains parameter publication and user creation,
+without operating authority. Each accepted alarm write rechecks the current
+account inside its transaction, including session revocation, and records an
+atomic action receipt and audit event. See [ADR 0039](0039-alarm-operator-actions.md).

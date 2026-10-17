@@ -203,3 +203,12 @@ in the same transaction as the command result. The command retains its human
 activation identity. This costs a database dependency for new control changes,
 but allows every accepted change to be traced after a restart. See
 [ADR 0038](0038-live-control-command-lifecycle.md).
+
+## Amendment, 2026-10-17: alarm actions require atomic audit
+
+Acknowledgement, shelving and early unshelving follow the same atomic-write rule
+as live controls. The receipt, lifecycle state and audit event commit together.
+The shared ten-per-user-per-minute command budget bounds these writes. A replay
+returns the existing receipt without adding another audit event. General audit
+retention remains 90 days; alarm action receipts remain durable alongside their
+current-state references. See [ADR 0039](0039-alarm-operator-actions.md).

@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Alarm lifecycle design</title>
+    <link
+      rel="stylesheet"
+      href="../../../monorepo/apps/website/app/styles/tokens.css"
+    />
+    <link rel="stylesheet" href="../milestone-9/mockups/mockups.css" />
+    <style>
+      html {
+        color-scheme: light;
+      }
+      [hidden] {
+        display: none !important;
+      }
+      .content {
+        max-width: 1160px;
+        margin: auto;
+        padding: 24px;
+      }
+      .tiles,
+      .facts {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 16px;
+      }
+      .panel {
+        padding: 20px;
+        margin-block: 16px;
+        min-width: 0;
+      }
+      .tabs {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-block: 20px;
+      }
+      p,
+      dd {
+        overflow-wrap: anywhere;
+      }
+      dl {
+        margin: 12px 0;
+      }
+      dd {
+        margin: 4px 0;
+      }
+      .badge {
+        display: inline-block;
+        padding: 4px 10px;
+        border-radius: 20px;
+        background: #fef3c7;
+        color: #713f12;
+      }
+      .error {
+        background: #fef2f2;
+        color: #991b1b;
+      }
+      .muted {
+        color: var(--twin-muted);
+      }
+      label {
+        display: block;
+        margin-block: 12px;
+      }
+      textarea {
+        font: inherit;
+        width: 100%;
+        min-height: 80px;
+      }
+      input[type="number"] {
+        width: 100%;
+      }
+      input[type="checkbox"] {
+        min-height: 20px;
+        width: 20px;
+      }
+      fieldset {
+        border: 0;
+        padding: 0;
+        min-width: 0;
+      }
+      .tiles strong {
+        display: block;
+        font-size: 24px;
+      }
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+      }
+      @media (max-width: 700px) {
+        .tiles,
+        .facts {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+        .content {
+          padding: 16px;
+        }
+      }
+    </style>
+    <script src="screens.js" defer></script>
+  </head>
+  <body>
+    <header class="review">
+      <strong>Alarm lifecycle design</strong><label for="role">Role</label
+      ><select id="role">
+        <option>reader</option>
+        <option>operator</option></select
+      ><label for="state">State</label
+      ><select id="state">
+        <option>normal</option>
+        <option>returned</option>
+        <option>acknowledged</option>
+        <option>shelved</option>
+        <option>shelved_clear</option>
+        <option>expired</option>
+        <option>pending</option>
+        <option>conflict</option>
+        <option>uncertain</option>
+        <option>loading</option>
+        <option>empty</option>
+        <option>stale</option>
+        <option>error</option>
+        <option>permission</option></select
+      ><span>Illustrative data</span>
+    </header>
+    <main class="content" id="workspace"></main>
+  </body>
+</html>

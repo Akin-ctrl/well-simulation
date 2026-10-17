@@ -145,3 +145,13 @@ installations take a private backup and verify a restored copy before extending.
 This mode refuses changes to existing tables or functions; those changes need a
 separate reviewed design. Previous files remain temporary release references,
 not maintained alternate schemas. See the [extension design](../design/schema-extension.md).
+
+## Restore comparison update, 2026-10-17
+
+A full backup rehearsal exposed a PostgreSQL parser difference in four scheduled
+forecast duration checks. Restoring the dump flattens the nested AND produced
+by BETWEEN, while retaining the same bounds and divisibility test. The schema
+comparison recognizes only that exact verified expression shape. It still checks
+constraint names, validation flags and every operand, and rejects other changes.
+The canonical SQL, its checksum and the exact previous-source requirement remain
+in force. See the [extension follow-up](../design/schema-extension.md#restore-comparison-follow-up-2026-10-17).

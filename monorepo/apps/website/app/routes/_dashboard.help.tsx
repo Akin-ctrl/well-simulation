@@ -102,7 +102,10 @@ export default function Guide() {
               after a service restart.
             </dd>
             <dt>Alarms</dt>
-            <dd>Review active threshold breaches across wells.</dd>
+            <dd>
+              Inspect conditions, acknowledgements and temporary shelves across wells.
+              Operators can review an action and record why they took it.
+            </dd>
             <dt>Analytics</dt>
             <dd>Compare fleet averages. An average can hide a change at one well.</dd>
           </dl>
@@ -142,6 +145,16 @@ export default function Guide() {
             <dd>
               A model quality indicator based on fixed rules. It is not the probability
               that a forecast will come true.
+            </dd>
+            <dt>Acknowledgement</dt>
+            <dd>
+              An operator’s record that they have seen one alarm event. Normal readings
+              clear the condition; acknowledgement does not clear it.
+            </dd>
+            <dt>Shelf</dt>
+            <dd>
+              A temporary pause in requests to acknowledge one well’s rule. The rule
+              still counts in active totals, and Shelved rules shows its deadline.
             </dd>
           </dl>
         </section>

@@ -45,15 +45,17 @@ The dashboard connects monitoring with the existing model analysis:
 - Current readings grouped by wellhead and parameter.
 - Pressure, temperature, flow, water cut, and GOR trend views.
 - Per-wellhead detail pages with active alarms and parameter history.
-- An Alarm Center with severity, threshold, age, and links to wellheads.
+- An Alarm Center with condition, acknowledgement, timed shelves and action history.
 - Model status, successful process time, recovery details, and installed controls.
 - Forecast and scenario forms with shared input validation.
 - Saved comparison charts, original inputs, confidence reasons, and value tables.
 - Per-well history with direct links that reopen results without running the model.
 - Historical scenarios from exact compatible model snapshots, with saved origin metadata.
 
-The Alarm Center has no acknowledge or shelve buttons because the backend cannot
-store those states yet.
+OPERATIONS can acknowledge an exact event, shelve a well’s rule for 5–480 minutes,
+or end a shelf early. Each action records a reason and an audited receipt. Active
+counts still include acknowledged and shelved conditions. See the
+[alarm workflow](docs/design/alarm-lifecycle.md).
 
 ## Target Direction
 
@@ -164,8 +166,9 @@ users.
 Dashboard access, forecasts, scenarios, and administrator user creation are
 implemented. OPERATIONS users can issue live synthetic controls through the
 draft and activation API. ADMIN users can publish model parameter overrides
-that require a twin-core restart. Alarm acknowledgement and other metadata
-editing remain planned. Logout revokes all existing sessions and prevents
+that require a twin-core restart. OPERATIONS can acknowledge events and manage
+timed shelves in the Alarm Center. General alarm-rule and asset editing remain
+outside the implemented administration screens. Logout revokes all existing sessions and prevents
 commands queued by those sessions from applying.
 
 ## Documentation

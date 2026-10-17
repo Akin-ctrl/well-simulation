@@ -85,3 +85,5 @@ The [operating workspace design](design/operating-workspace.md) covers the
 control and parameter screens, role boundaries and uncertain-response recovery.
 
 - [Historical scenario design and verification](design/historical-scenarios.md)
+
+- [Alarm operator actions](design/alarm-lifecycle.md): exact event acknowledgement, timed shelving, reviews and receipts.

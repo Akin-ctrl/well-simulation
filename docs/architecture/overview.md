@@ -58,7 +58,7 @@ The dashboard exposes monitoring and model analysis:
 - active alarms from database alarm evaluation
 - analytics charts for pressure, temperature, flow, water cut, and GOR
 - per-wellhead detail pages with current readings, alarms, and trends
-- an Alarm Center with severity, threshold, age, and links to wellheads
+- an Alarm Center with separate condition, acknowledgement and timed-shelf state
 - per-well model status, successful process time, recovery details, and installed controls
 - explicit forecast and scenario submissions with saved baseline comparisons
 - canonical signal units, heuristic confidence reasons, and sampled threshold results
@@ -173,3 +173,18 @@ readiness; absent or stale samples remain unknown. Both host ports bind to
 loopback, and Grafana uses a separate local account. These services cannot write
 to the historian, model controls or alarm lifecycle. See the
 [design](../design/observability.md) and [runbook](../../observability/README.md).
+
+## Alarm operator actions
+
+The SQL evaluator owns condition truth in `alarmevent`. The API stores an exact
+event acknowledgement or a well/rule shelf in separate ordinary tables. One
+transaction rechecks OPERATIONS authority, records the action receipt, changes
+lifecycle state and writes the audit event. A unique actor/request key makes
+explicit retries return the same result. Shelf revisions reject competing edits.
+
+The Alarm Center separates Needs acknowledgement, All active, Shelved rules and
+retained History. Active totals include acknowledged and shelved conditions. A
+shelf expires by database time and still applies if the condition clears and
+retriggers before its deadline. Event IDs stay decimal strings; exact UTC
+timestamps retain their microseconds. The application role cannot alter alarm
+events or existing receipts. See the [alarm design](../design/alarm-lifecycle.md).

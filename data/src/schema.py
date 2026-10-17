@@ -345,6 +345,19 @@ def provision_api_role(
                 sql.Identifier(user)
             )
         )
+    with conn.cursor() as cursor:
+        cursor.execute(
+            sql.SQL(
+                "GRANT SELECT, INSERT ON alarm_action, "
+                "alarm_acknowledgement, alarm_shelf TO {}"
+            ).format(sql.Identifier(user))
+        )
+        cursor.execute(
+            sql.SQL(
+                "GRANT UPDATE (revision, shelved_until, updated_at, action_id) "
+                "ON alarm_shelf TO {}"
+            ).format(sql.Identifier(user))
+        )
     conn.commit()
     logger.info("API database role is ready", extra={"role": user})
 

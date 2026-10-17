@@ -73,7 +73,7 @@ test('login, guide and fleet pages support learning, recovery and narrow screens
     page.getByText('The model represents a synthetic reference well.', { exact: false })
   ).toBeVisible();
   for (const [path, heading, endpoint] of [
-    ['/alarms', 'Alarm Center', '**/api/dashboard/active-alarms'],
+    ['/alarms', 'Alarm Center', '**/api/alarms?*'],
     ['/analytics', 'Analytics', '**/api/dashboard/analytics'],
   ]) {
     await page.goto(path!);
