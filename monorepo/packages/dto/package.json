@@ -9,7 +9,7 @@
     "lint": "eslint ."
   },
   "author": "Osayame Emmanuel",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "dependencies": {
     "zod": "^4.1.12"
   },

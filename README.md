@@ -317,3 +317,8 @@ gateway, ingestion and twin-core metrics in Prometheus and provides a Grafana
 Service health dashboard.
 The [ADR index](docs/adr/README.md) tracks completed local decisions and the
 remaining external portfolio delivery gates.
+
+## Licence
+
+Licensed under the [Apache License 2.0](LICENSE). Copyright notices are in
+[NOTICE](NOTICE).
