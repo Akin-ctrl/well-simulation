@@ -1,13 +1,68 @@
 # Wellhead Monitoring Simulation
 
-A simulation of an industrial wellhead monitoring system. It makes up wellhead
-telemetry, serves it over a Modbus TCP gateway, stores the readings in
-PostgreSQL and TimescaleDB, checks them against alarm rules, and shows the
-result on a React dashboard.
+Run a local simulation of oil wells. Watch their readings, compare forecasts
+and what-if scenarios, and try operating controls from a web dashboard.
 
-The Modbus gateway now serves all 18 seeded signals from the uncalibrated,
-stateful reference-well model in twin-core. Ingestion stores those readings in
-TimescaleDB with the model tick time and source label.
+A process model generates 18 signals per well. The services send those readings
+through Modbus TCP, store their history in PostgreSQL and TimescaleDB, and check
+for alarm conditions. All readings and controls belong to the simulation.
+
+## Quick Start
+
+Install and start Docker with the Compose plugin. Use a terminal on Linux,
+macOS, or Windows with WSL. You do not need Python, Node or a separate database
+installation.
+
+From the project directory, run:
+
+```bash
+./simulator
+```
+
+The first start downloads and builds the services, so it can take a few minutes.
+The launcher creates local passwords and tokens, saves them in `.env`, and waits
+for the services to become healthy. Later starts reuse that configuration.
+
+Open [http://localhost:8090](http://localhost:8090) and sign in:
+
+| Account            | Password             |
+| ------------------ | -------------------- |
+| `demo@example.com` | `demo-operator-2026` |
+
+Open a well to explore readings, run a forecast or compare a scenario. Turn on
+the Guide for explanations of each page. The demo account can save analyses;
+it cannot change the running simulation's controls or manage accounts.
+
+### Stop and resume
+
+Stop the simulator and keep your saved work:
+
+```bash
+./simulator stop
+```
+
+Run `./simulator` again to resume.
+
+### Start fresh
+
+**Reset deletes this stack's readings, saved runs, accounts and settings.** It
+keeps `.env` and starts a fresh simulation with the demo account:
+
+```bash
+./simulator reset --yes
+```
+
+### If startup fails
+
+Make sure Docker is running. Check that another application is not using ports
+8090, 5434 or 5020. Read the service logs with:
+
+```bash
+./simulator logs
+```
+
+Fix the reported problem and run `./simulator` again. Use reset when you want to
+throw away the saved simulation and start over.
 
 ## Why This Exists
 
@@ -63,117 +118,34 @@ or end a shelf early. Each action records a reason and an audited receipt. Activ
 counts still include acknowledged and shelved conditions. See the
 [alarm workflow](docs/design/alarm-lifecycle.md).
 
-## Model boundary and further work
+## Project status
 
-The synthetic model already supports state, control inputs and isolated
-predictions. Field use would require measured well data, calibration and
-independent validation. Measured-versus-model comparison, divergence detection
-and a physical control connection remain outside the implemented scope.
+The application supports well monitoring, saved-state recovery, forecasts,
+historical scenarios, scheduled forecasts, reviewed synthetic controls and alarm
+management.
 
-The [readiness record](docs/architecture/production-readiness.md) separates local
-verification from open delivery items and requirements for another deployment.
+The model uses a synthetic reference well and has not been calibrated against
+field measurements. The project supports local demonstration and development.
+Physical equipment control requires separate engineering and validation.
 
-## What happens next
-
-An audit of this project found problems in the pipeline, the schema, access
-control, and the documentation. Repair phases 0 to 9 are complete as of
-2026-10-13. Phase 9 reconciled the documentation and verified a fresh installation.
-The local `docs/roadmap.md` records feature work, and the local
-`docs/remediation-roadmap.md` records the repair. Both are ignored by Git.
-The committed design documents and ADRs record the implemented decisions.
-The approved usability, operating-screen, historical-scenario, scheduled-forecast,
-metrics and alarm work is committed through `82c9baf` and verified locally.
-
-Milestones 4 through 8 are implemented: the model feeds Modbus and the historian,
-recovers saved state, and runs forecasts and private scenarios. The
-[8B design](docs/design/twin-core-milestone-8b.md) covers the implemented live
-synthetic control lifecycle and its verification.
-The [operating workspace design](docs/design/operating-workspace.md) covers its
-control and parameter screens, including reviewed proposals and outcome recovery.
-The [Milestone 9 design](docs/design/twin-core-milestone-9.md) covers the implemented
-wellhead workspace and its verification. Milestone 10's local delivery checks
-passed with an isolated clean candidate export. Remote CI, publication and
-licence contributor consent remain open.
-The login page now uses an original text layout without the old photograph. The owner has deferred the physical host sleep/wake test.
-Milestone 9 now includes the complete [mockup gallery](docs/design/milestone-9/mockups/index.html),
-[shared visual specification](docs/design/milestone-9/visual-specification.md),
-and implemented accessibility improvements. The
-[verification record](docs/design/milestone-9/accessibility-verification.md)
-describes the Chromium and Orca checks and the combinations not tested.
-The [usability design](docs/design/dashboard-usability.md) records the revised
-page structure, optional Guide, two design checks and the next delivery sequence.
-The published [ADR index](docs/adr/README.md) records decision status; local
-roadmaps are working notes, not dependencies for understanding the project.
-
-## Quick Start
-
-New installations use PostgreSQL 16.15 and TimescaleDB 2.30.2. For an existing
-database, first select its path in the
-[existing-database update guide](docs/operations/database-updates.md).
-PostgreSQL 14 volumes require the matching legacy baseline and verified engine
-conversion before the current database image can use them.
-
-```bash
-cp .env.example .env
-# Set POSTGRES_PASSWORD, TWIN_DB_PASSWORD, API_DB_PASSWORD, JWT_SECRET,
-# and TWIN_INTERNAL_TOKEN to separate random values before starting.
-docker compose up --build
-```
-
-The `migrator` service installs `data/sql/schema.sql` on a new database and
-verifies its recorded baseline on later starts. A database from the numbered
-runner needs adoption with its matching historical installer and contract.
-Today's `adopt` does not add missing schedule or alarm tables. Follow the
-[update sequence](docs/operations/database-updates.md) for adoption, engine
-acceptance and table extension. Changes to existing definitions need a reviewed
-conversion. These steps preserve the existing data.
-The engine conversion preserves the original volume and selects the verified
-new volume through TIMESCALE_DATA_VOLUME.
-
-For an existing `.env`, add `API_DB_USER=well_api` and a separate URL-safe
-`API_DB_PASSWORD` before upgrading. The migrator creates this restricted
-application account. The API no longer uses the database administrator login.
-
-The dashboard is served at <http://localhost:8090>. Sign in with the demo
-account:
-
-| Account | Role | Password |
-| --- | --- | --- |
-| `demo@example.com` | `USER` | `demo-operator-2026` |
-
-This account can view the dashboard and save forecasts and what-if scenarios
-through its forms or the API. It cannot change the running well's controls.
-The password is in the repository on purpose for the local synthetic demo.
-
-You cannot sign yourself up. Only an `ADMIN` can create a user, as set out in
-[ADR 0033](docs/adr/0033-role-model-and-access-control.md). The migrator creates
-the first administrator when it first runs, and logs the generated password
-once:
-
-```
-"message": "Created bootstrap administrator; record this password now",
-"email": "admin@example.com", "password": "..."
-```
-
-Get it with `docker compose logs migrator` and save it. There is no way to
-recover it later.
+See the [architecture overview](docs/architecture/overview.md) and
+[verification and deployment limits](docs/architecture/production-readiness.md)
+for details.
 
 ## Access Control
 
-Running the plant and administering the system are separate jobs. The table
-shows the intended permissions, including capabilities that are not built yet.
-An administrator cannot send a control command, and an operator cannot create
-users.
+The demo account has the USER role. OPERATIONS accounts can change the simulated
+controls and manage alarms. ADMIN accounts can create users, publish model
+parameters and manage forecast schedules.
 
-| Capability | USER | OPERATIONS | ADMIN |
-| --- | :---: | :---: | :---: |
-| View dashboard, trends, alarms | yes | yes | yes |
-| Run what-if scenarios | yes | yes | yes |
-| Acknowledge or shelve an alarm | no | yes | no |
-| Issue a live control command | no | yes | no |
-| Manage users | no | no | yes |
-| Publish model parameters or edit forecast schedules | no | no | yes |
-| Edit alarm rules and asset metadata | no | no | yes |
+| Capability                                          | USER | OPERATIONS | ADMIN |
+| --------------------------------------------------- | :--: | :--------: | :---: |
+| View dashboard, trends, alarms                      | yes  |    yes     |  yes  |
+| Run what-if scenarios                               | yes  |    yes     |  yes  |
+| Acknowledge or shelve an alarm                      |  no  |    yes     |  no   |
+| Issue a live control command                        |  no  |    yes     |  no   |
+| Create users                                        |  no  |     no     |  yes  |
+| Publish model parameters or edit forecast schedules |  no  |     no     |  yes  |
 
 Dashboard access, forecasts, scenarios, and administrator user creation are
 implemented. OPERATIONS users can issue live synthetic controls through the
@@ -183,38 +155,30 @@ timed shelves in the Alarm Center. General alarm-rule and asset editing remain
 outside the implemented administration screens. Logout revokes all existing sessions and prevents
 commands queued by those sessions from applying.
 
+### Administrator access (optional)
+
+A fresh simulation also creates `admin@example.com`. Find its generated password
+in `./simulator logs` after the first start and save it if you want to create
+accounts or manage model parameters and forecast schedules.
+
 ## Documentation
 
-- `docs/README.md`: index of everything in `docs/`
-- `docs/architecture/overview.md`: current services, data paths and model boundaries
-- `docs/architecture/production-readiness.md`: local evidence, open work and deployment limits
-- `docs/adr/README.md`: the architecture decision records
-- `docs/openapi/README.md`: the API contracts
-- `docs/design/twin-core-milestone-4.md`: the twin-core skeleton design
-- `docs/design/twin-core-milestone-5.md`: the process model equations and limits
-- `docs/design/twin-core-milestone-6.md`: the model-to-Modbus data path
-- `docs/design/twin-core-milestone-7.md`: twin persistence design and verification
-- `docs/design/twin-core-milestone-8.md`: forecasts, scenarios, and saved results
-- `docs/design/twin-core-milestone-8b.md`: live control lifecycle and operating steps
-- `docs/design/twin-core-milestone-9.md`: dashboard layout, interactions, and verification
-- `docs/design/historical-scenarios.md`: exact saved-state branches
-- `docs/design/scheduled-forecasts.md`: owned schedules and durable jobs
-- `docs/design/alarm-lifecycle.md`: acknowledgement, shelving and receipts
-- `docs/operations/database-updates.md`: the correct path for each database baseline
-- `observability/README.md`: optional metrics startup and troubleshooting
-- `docs/design/reference-well-physics.md`: the phase and diagnostic equations
-- `docs/roadmap.md`: the local feature plan (ignored by Git)
-- `docs/remediation-roadmap.md`: the local repair record (ignored by Git)
+- [Demo walkthrough](docs/demo/demo-script.md): try monitoring and saved analyses.
+- [Documentation index](docs/README.md): architecture, models and feature guides.
+- [Architecture overview](docs/architecture/overview.md): services and data flow.
+- [Model equations and limits](docs/design/reference-well-physics.md).
+- [API contracts](docs/openapi/README.md).
+- [Web development](monorepo/README.md): run and test the web application locally.
+- [Service metrics](observability/README.md): optional Prometheus and Grafana.
 
 ## What the numbers mean
 
-Every reading is invented. New values are calculated by the reduced-order
-model and passed through Modbus. Older random readings remain labelled in the
-historian until retention removes them. The model links flow, pressure, temperature, water cut, gas, sand, corrosion,
+Every reading is simulated. The model calculates values and passes them through
+Modbus. It links flow, pressure, temperature, water cut, gas, sand, corrosion,
 annulus pressure, and vibration, but it has not been calibrated against a real well.
 Seven of these (annulus pressure, gas-oil ratio, sand, corrosion rate, H2S, CO2,
-and vibration) come from simpler diagnostic equations added in model version
-0.3.0. They are less grounded than the pressure and flow equations.
+and vibration) come from simpler diagnostic equations. They are less grounded
+than the pressure and flow equations.
 
 Two more things are compressed for a demo rather than set the way a plant would
 set them:
@@ -228,7 +192,7 @@ Raw readings are kept for 7 days and alarm events for 90.
 
 ## Screenshots
 
-Captured on 2026-10-17 from the running Milestone 9 dashboard. Forecast and
+Captured on 2026-10-17 from the running dashboard. Forecast and
 scenario images show actual saved model results. The synthetic operating point
 shown in the monitoring views has no active alarms.
 
@@ -260,63 +224,6 @@ layouts, keyboard focus, saved links, stale data, and failed requests. Set
 UPDATE_SCREENSHOTS=1 when intentionally refreshing the committed screenshots;
 ordinary test runs write their images under the ignored test-results directory.
 CI installs Chromium and its system dependencies before running this workflow.
-
-## Where this project actually stands
-
-The operating screens use the same reviewed-command API as Milestone 8B.
-OPERATIONS users see Controls; ADMIN users see Parameters. An administrator
-creates operating accounts through the existing account API. The seeded demo
-reader keeps its current permissions. See the [operating verification](docs/design/operating-workspace.md#verification-on-2026-10-17)
-for the real command, historian and parameter-restart checks.
-
-| Controls | Parameters |
-| --- | --- |
-| ![Reviewed running control command](docs/screenshots/controls.png) | ![Model parameter editor with canonical units and bounds](docs/screenshots/parameters.png) |
-
-[Control proposal on a phone](docs/screenshots/controls-mobile.png)
-
-On 2026-10-13, a clean export of commit `e3d44c7` passed
-`docker compose up -d --build` with a fresh volume. All six images built,
-the migrator exited with code 0, and all six long-running services became
-healthy. The API and twin-core returned ready, with all 12 model wells running.
-The verification used separate container names, loopback ports, network, and
-volume to preserve the existing stack. The test export contained committed
-application files; only those isolation settings and generated test secrets
-differed.
-
-The same isolated stack then passed an upgrade to the working Milestone 8B code.
-A live synthetic command flowed through the model, Modbus, and historian;
-restart preserved its controls. Parameter publication adopted a new parameter
-set after restart. The four existing dashboard pages passed browser checks.
-See the [8B verification record](docs/design/twin-core-milestone-8b.md#verification-on-2026-10-13).
-The API contract is written down under `docs/openapi`.
-
-On 2026-10-16, the Milestone 9 workspace passed its local API, HTTP, unit, and
-browser checks. Real forecasts and scenarios were saved and reopened, while
-installed controls and revision stayed unchanged. Desktop and mobile layouts,
-keyboard focus, stale data, and failure recovery passed. All six services
-reported healthy. See the [Milestone 9 verification record](docs/design/twin-core-milestone-9.md#verification-on-2026-10-16).
-The completed design pass also passed 37 shared-contract/frontend tests, all
-three browser workflows, automated accessibility scans, and an Orca speech-output
-check. The mockups passed 96 screen/state/viewport combinations. See the
-[accessibility verification record](docs/design/milestone-9/accessibility-verification.md)
-for the exact scope and limitations.
-
-On 2026-10-17, the usability update passed five browser workflows, 37 shared
-contract/frontend tests, 95 API integration tests and 14 model HTTP tests.
-An isolated export of the complete candidate built all six service images and
-started with fresh storage using the example configuration. Schema setup exited
-0 and all six running services became healthy. A browser read all 12 wells,
-saved and reopened a scenario, and confirmed unchanged installed controls.
-The [usability delivery record](docs/design/dashboard-usability.md#delivery-evidence-2026-10-17)
-records the design checks and remaining external delivery items.
-
-It is not production ready. The twin-core model uses synthetic, uncalibrated
-parameters and has no field calibration or physical device control. The optional [service metrics profile](observability/README.md) collects API,
-gateway, ingestion and twin-core metrics in Prometheus and provides a Grafana
-Service health dashboard.
-The [ADR index](docs/adr/README.md) tracks completed local decisions and the
-remaining external portfolio delivery gates.
 
 ## Licence
 

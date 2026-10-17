@@ -1,0 +1,124 @@
+#!/usr/bin/env bash
+# Start the local demo without requiring Python or Node on the host.
+set -euo pipefail
+
+project_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+env_tmp=""
+trap 'if [[ -n "$env_tmp" ]]; then rm -f -- "$env_tmp"; fi' EXIT
+
+usage() {
+    cat <<'EOF'
+Usage: ./simulator [start|stop|logs|reset --yes]
+
+  start        Create local configuration if needed and start the simulator.
+  stop         Stop all simulator services and keep saved work.
+  logs         Show recent service logs for troubleshooting.
+  reset --yes  Delete this stack's saved data and start a fresh simulation.
+
+With no argument, start the simulator. Docker with Compose must be running.
+EOF
+}
+
+fail() {
+    printf '%s\n' "$*" >&2
+    exit 1
+}
+
+compose() {
+    docker compose --project-directory "$project_root" "$@"
+}
+
+random_secret() {
+    local value
+    value="$(LC_ALL=C od -An -N32 -tx1 /dev/urandom | tr -d '[:space:]')"
+    [[ "$value" =~ ^[0-9a-f]{64}$ ]] || fail 'Could not generate a local password.'
+    printf '%s' "$value"
+}
+
+prepare_env() {
+    if [[ -f "$project_root/.env" ]]; then
+        printf 'Using the existing local configuration.\n'
+        return
+    fi
+    [[ ! -e "$project_root/.env" && ! -L "$project_root/.env" ]] ||
+        fail '.env exists but is not a readable configuration file.'
+    umask 077
+    env_tmp="$(mktemp "$project_root/.env.setup.XXXXXX")"
+    local line key secret
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        key="${line%%=*}"
+        case "$key" in
+            POSTGRES_PASSWORD|TWIN_DB_PASSWORD|API_DB_PASSWORD|JWT_SECRET|TWIN_INTERNAL_TOKEN|PGADMIN_DEFAULT_PASSWORD|GRAFANA_ADMIN_PASSWORD)
+                secret="$(random_secret)"
+                printf '%s=%s\n' "$key" "$secret"
+                ;;
+            *) printf '%s\n' "$line" ;;
+        esac
+    done < "$project_root/.env.example" > "$env_tmp"
+    # Publish a complete file without overwriting one from another invocation.
+    if ln "$env_tmp" "$project_root/.env" 2>/dev/null; then
+        printf 'Created .env with separate random local passwords and tokens.\n'
+    elif [[ ! -f "$project_root/.env" ]]; then
+        fail 'Could not create .env. Check the directory permissions.'
+    fi
+    rm -f -- "$env_tmp"
+    env_tmp=""
+}
+
+start() {
+    if ! compose up --build --detach --wait --wait-timeout 180; then
+        fail 'Startup did not finish. Check ./simulator logs, then run ./simulator again.'
+    fi
+    local published_port
+    published_port="$(compose port dashboard 80)"
+    published_port="${published_port##*:}"
+    [[ "$published_port" =~ ^[0-9]+$ ]] || fail 'Could not find the dashboard port. Check ./simulator logs.'
+    printf '\nSimulator ready: http://localhost:%s\n' "$published_port"
+    cat <<'EOF'
+Demo account:    demo@example.com
+Password:        demo-operator-2026
+
+Open a well to explore readings, forecasts and scenarios. The Guide explains each page.
+Use ./simulator stop to stop the simulator and keep your saved work.
+EOF
+}
+
+action="${1:-start}"
+case "$action" in
+    -h|--help|help) usage; exit 0 ;;
+    start|stop|logs)
+        [[ $# -le 1 ]] || { usage >&2; exit 2; }
+        ;;
+    reset)
+        if [[ $# -ne 2 || "${2:-}" != '--yes' ]]; then
+            printf 'Reset deletes readings, saved runs, accounts and settings for this stack.\n' >&2
+            printf 'To confirm, run: ./simulator reset --yes\n' >&2
+            exit 2
+        fi
+        ;;
+    *) usage >&2; exit 2 ;;
+esac
+
+command -v docker >/dev/null 2>&1 || fail 'Install Docker with Compose, then run ./simulator again.'
+docker compose version >/dev/null 2>&1 || fail 'Docker Compose is required. Install the Compose plugin and try again.'
+docker info >/dev/null 2>&1 || fail 'Docker is not running or is not accessible. Start Docker and try again.'
+
+if [[ "$action" == start ]]; then
+    prepare_env
+else
+    [[ -f "$project_root/.env" ]] || fail 'No local configuration found. Run ./simulator first.'
+fi
+
+case "$action" in
+    start) start ;;
+    stop)
+        compose --profile '*' stop
+        printf 'Simulator stopped. Your saved work is still available.\n'
+        ;;
+    logs) compose --profile '*' logs --tail 100 ;;
+    reset)
+        printf 'Deleting this stack\047s saved simulation data.\n'
+        compose --profile '*' down --volumes --remove-orphans
+        start
+        ;;
+esac

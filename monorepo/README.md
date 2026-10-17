@@ -18,8 +18,7 @@ service in `../twin_core` owns the process model and calculations.
 | `packages/tsconfig`      | Shared TypeScript configuration                                               |
 
 The database structure comes from [one SQL file](../data/sql/schema.sql).
-Drizzle does not install or convert the schema. Follow the
-[database update guide](../docs/operations/database-updates.md) for existing data.
+Drizzle mirrors that schema for application queries.
 
 ## Current workflows
 
@@ -37,14 +36,15 @@ paths and the separation between model experiments and running controls.
 
 ## Run the complete application
 
-Follow the [root quick start](../README.md#quick-start), including the required
-secret settings and any existing-database upgrade. From the repository root:
+Follow the [root quick start](../README.md#quick-start). From the repository root:
 
 ```sh
-docker compose up -d --build --wait
+./simulator
 ```
 
-Open <http://localhost:8090>. The root README lists the demo login.
+The launcher generates local credentials on first use and waits for the services.
+Open <http://localhost:8090>. The root README lists the demo login, stop and reset
+commands.
 
 ## Develop the API and dashboard on the host
 
@@ -73,9 +73,9 @@ docker compose -f docker-compose.yml -f /tmp/well-simulation-dev.compose.yml up 
 
 In the ignored root `.env`, set `DATABASE_URL` to the restricted API login on
 `127.0.0.1:5434`, using the same database name and `API_DB_PASSWORD` as Compose.
-The example URL contains a placeholder password; changing `API_DB_PASSWORD`
-does not update that URL. Keep `JWT_SECRET` and `TWIN_INTERNAL_TOKEN` equal to
-the values used by the stack.
+The generated URL refers to `API_DB_USER`, `API_DB_PASSWORD` and `POSTGRES_DB`;
+the development command expands those values. Keep `JWT_SECRET` and
+`TWIN_INTERNAL_TOKEN` equal to the values used by the stack.
 
 Start the host API from `monorepo/`:
 

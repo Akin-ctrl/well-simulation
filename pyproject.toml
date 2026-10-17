@@ -37,6 +37,7 @@ ignore = [
 # Test names and assertions are the documentation; assert is the point.
 "data/tests/*" = ["D100", "D101", "D102", "D103", "D104", "S101"]
 "twin_core/tests/*" = ["D100", "D101", "D102", "D103", "D104", "S101"]
+"scripts/tests/*" = ["D100", "D101", "D102", "D103", "D104", "S101"]
 
 [tool.ruff.lint.mccabe]
 max-complexity = 10
@@ -58,6 +59,6 @@ ignore_missing_imports = true
 untyped_calls_exclude = ["pymodbus", "psycopg2"]
 
 [tool.pytest.ini_options]
-testpaths = ["data/tests", "twin_core/tests"]
+testpaths = ["data/tests", "twin_core/tests", "scripts/tests"]
 pythonpath = [".", "data/src", "data/tests"]
 addopts = "-q"

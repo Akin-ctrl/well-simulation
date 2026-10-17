@@ -173,13 +173,8 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
-      # Compose interpolates these at config-parse time even for `build`.
-      # The example values are non-secret placeholders.
-      - name: Provide placeholder environment
-        run: cp .env.example .env
-
-      - name: Build all service images
-        run: docker compose build
+      - name: Build and start the demo with the public launcher
+        run: ./simulator
 
       - name: Validate optional metrics configuration and rules
         run: |
@@ -204,9 +199,6 @@ jobs:
         run: |
           pnpm install --frozen-lockfile
           pnpm --filter @well-simulation/website exec playwright install --with-deps chromium
-
-      - name: Start the demo stack
-        run: docker compose up -d --wait --wait-timeout 180
 
       - name: Verify browser workflows
         working-directory: monorepo
