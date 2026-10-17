@@ -25,6 +25,8 @@ import psycopg2
 import psycopg2.extensions
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
+from telemetry_metrics import TELEMETRY_READY
+
 # Both the gateway and ingestion encode values as two 16-bit words, big-endian
 # bytes with the low word first. This reproduces the layout written before the
 # pymodbus 3.x upgrade, so existing register maps and stored readings stay valid.
@@ -35,6 +37,15 @@ WORD_ORDER: Literal["little"] = "little"
 # that range and carries the epoch seconds of the last telemetry batch, letting
 # ingestion tell a live pipeline from a stalled one serving stale registers.
 HEARTBEAT_REGISTER = 1900
+
+# The model version that produced the register image follows the heartbeat:
+# one unsigned 16-bit register each for major (1902), minor (1903), and patch
+# (1904). Heartbeat and version form one five-register status block. The
+# gateway writes the block in one call and ingestion reads it in one Read
+# Holding Registers request, so the two always describe the same update.
+MODEL_VERSION_REGISTER = HEARTBEAT_REGISTER + 2
+STATUS_BLOCK_REGISTERS = 5
+_MAX_REGISTER_VALUE = 0xFFFF
 
 _RESERVED_LOG_FIELDS = frozenset(
     logging.LogRecord("", 0, "", 0, "", None, None).__dict__
@@ -167,6 +178,61 @@ def connect_db(settings: DatabaseSettings) -> psycopg2.extensions.connection:
         user=settings.user,
         password=settings.password,
     )
+
+
+@dataclass(frozen=True)
+class ModelVersion:
+    """The twin-core model version, as published in the Modbus status block.
+
+    Twin-core reports text such as "0.3.0". Modbus carries it as three unsigned
+    16-bit registers, one per part. Version 0.0.0 is reserved: an all-zero block
+    means the gateway is mid-update or has never published, exactly as a zero
+    heartbeat does.
+    """
+
+    major: int
+    minor: int
+    patch: int
+
+    def __post_init__(self) -> None:
+        """Reject parts that cannot be one register each, and the reserved zero."""
+        parts = (self.major, self.minor, self.patch)
+        if any(
+            type(part) is not int or not 0 <= part <= _MAX_REGISTER_VALUE
+            for part in parts
+        ):
+            raise ValueError("Model version parts must be integers from 0 to 65535")
+        if parts == (0, 0, 0):
+            raise ValueError("Model version 0.0.0 is reserved for 'not published'")
+
+    @classmethod
+    def parse(cls, text: object) -> ModelVersion:
+        """Read "major.minor.patch" text, rejecting anything else."""
+        if not isinstance(text, str):
+            raise ValueError("Model version must be text")
+        parts = text.split(".")
+        if len(parts) != 3 or not all(
+            part.isascii() and part.isdigit() for part in parts
+        ):
+            raise ValueError("Model version must look like 0.3.0")
+        return cls(int(parts[0]), int(parts[1]), int(parts[2]))
+
+    @classmethod
+    def from_registers(cls, registers: list[int]) -> ModelVersion | None:
+        """Decode three registers, or return None for the unpublished zero block."""
+        if len(registers) != 3:
+            raise ValueError("A model version occupies exactly three registers")
+        if registers == [0, 0, 0]:
+            return None
+        return cls(registers[0], registers[1], registers[2])
+
+    def to_registers(self) -> list[int]:
+        """Encode as three registers in major, minor, patch order."""
+        return [self.major, self.minor, self.patch]
+
+    def __str__(self) -> str:
+        """Return the text form stored in parameterReading.model_version."""
+        return f"{self.major}.{self.minor}.{self.patch}"
 
 
 @dataclass(frozen=True)
@@ -324,6 +390,7 @@ class ServiceEndpointHandler(BaseHTTPRequestHandler):
                 {"status": "ready" if ready else "not_ready", **self.health.detail},
             )
         elif self.path == "/metrics":
+            TELEMETRY_READY.set(int(self.health.alive and self.health.ready))
             body = generate_latest()
             self.send_response(200)
             self.send_header("Content-Type", CONTENT_TYPE_LATEST)

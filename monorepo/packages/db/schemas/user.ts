@@ -1,5 +1,6 @@
 import {
   boolean,
+  integer,
   pgTable,
   serial,
   text,
@@ -40,6 +41,9 @@ export const users = pgTable('users', {
   deleted: boolean('deleted'),
   deletedAt: timestamp('deleted_at', { withTimezone: true, mode: 'date' }),
   encryptedPassword: varchar('encrypted_password', { length: 256 }).notNull(),
+  // Migration 0009 (ADR 0037): every session token carries this number, and
+  // logout adds one, which ends all of the user's existing sessions.
+  sessionVersion: integer('session_version').notNull().default(0),
   lastSignedIn: timestamp('last_signed_in', {
     withTimezone: true,
     mode: 'date',

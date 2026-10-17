@@ -9,7 +9,7 @@ from typing import Any
 import pytest
 
 from model_source import parse_model_snapshot, supported_mappings
-from telemetry_common import ParameterMapping
+from telemetry_common import ModelVersion, ParameterMapping
 
 NOW = datetime(2026, 9, 30, 12, 0, tzinfo=timezone.utc)
 
@@ -50,6 +50,7 @@ def snapshot() -> dict[str, Any]:
 def test_complete_snapshot_maps_all_seeded_values() -> None:
     batch = parse_model_snapshot(snapshot(), {1}, NOW, 10)
     assert batch.simulated_at == NOW
+    assert batch.model_version == ModelVersion(0, 3, 0)
     params = batch.telemetry[0]["parameters"]
     assert isinstance(params, dict)
     assert len(params) == 18
@@ -60,7 +61,17 @@ def test_complete_snapshot_maps_all_seeded_values() -> None:
 
 
 @pytest.mark.parametrize(
-    "fault", ["missing", "old", "future", "mixed", "nan", "unready"]
+    "fault",
+    [
+        "missing",
+        "old",
+        "future",
+        "mixed",
+        "nan",
+        "unready",
+        "no_version",
+        "bad_version",
+    ],
 )
 def test_rejects_incomplete_or_untrustworthy_model_ticks(fault: str) -> None:
     payload = snapshot()
@@ -79,6 +90,11 @@ def test_rejects_incomplete_or_untrustworthy_model_ticks(fault: str) -> None:
         payload["wellheads"].append(other)
     elif fault == "nan":
         process["flowRateBpd"] = float("nan")
+    elif fault == "no_version":
+        del payload["modelVersion"]
+    elif fault == "bad_version":
+        # Cannot become three 16-bit registers, so it must not reach Modbus.
+        payload["modelVersion"] = "0.3.70000"
     else:
         well["status"] = "degraded"
     with pytest.raises(ValueError):

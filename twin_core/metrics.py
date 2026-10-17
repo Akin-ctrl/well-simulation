@@ -2,7 +2,13 @@
 
 from __future__ import annotations
 
-from prometheus_client import CollectorRegistry, Counter, Gauge, generate_latest
+from prometheus_client import (
+    CollectorRegistry,
+    Counter,
+    Gauge,
+    Histogram,
+    generate_latest,
+)
 
 
 class TwinMetrics:
@@ -36,6 +42,43 @@ class TwinMetrics:
             "Fixed-step ticks skipped after the catch-up limit",
             registry=self.registry,
         )
+        self.clock_adjustments = Counter(
+            "well_sim_twin_clock_adjustments_total",
+            "Times tick time was realigned with a wall clock that jumped",
+            ["direction"],
+            registry=self.registry,
+        )
+        self.snapshot_writes = Counter(
+            "well_sim_twin_snapshot_writes_total",
+            "Well state rows saved for recovery",
+            registry=self.registry,
+        )
+        self.snapshot_write_failures = Counter(
+            "well_sim_twin_snapshot_write_failures_total",
+            "Fleet snapshot transactions that failed",
+            registry=self.registry,
+        )
+        self.snapshots_replaced = Counter(
+            "well_sim_twin_snapshots_replaced_total",
+            "Pending fleet snapshots replaced by newer copies",
+            registry=self.registry,
+        )
+        self.last_snapshot_age_seconds = Gauge(
+            "well_sim_twin_last_snapshot_age_seconds",
+            "Wall age of the last saved fleet snapshot",
+            registry=self.registry,
+        )
+        self.recoveries = Counter(
+            "well_sim_twin_recoveries_total",
+            "Recovery and clock events by outcome",
+            ["outcome"],
+            registry=self.registry,
+        )
+        self.recovery_events_dropped = Counter(
+            "well_sim_twin_recovery_events_dropped_total",
+            "Recovery events rejected because the queue was full",
+            registry=self.registry,
+        )
         self.lag_seconds = Gauge(
             "well_sim_twin_simulation_lag_seconds",
             "Scheduler lag before the current tick pass",
@@ -62,9 +105,69 @@ class TwinMetrics:
             "Telemetry reads rejected because all database read slots were busy",
             registry=self.registry,
         )
+        self.projection_runs = Counter(
+            "well_sim_twin_projection_runs_total",
+            "Requested forecasts and scenarios by outcome",
+            ["kind", "outcome"],
+            registry=self.registry,
+        )
+        self.projection_duration = Histogram(
+            "well_sim_twin_projection_duration_seconds",
+            "Time spent computing and saving a forecast or scenario",
+            ["kind"],
+            registry=self.registry,
+        )
         self.ready = Gauge(
             "well_sim_twin_ready",
             "One when service reads and the tick loop are ready",
+            registry=self.registry,
+        )
+        self.control_outcomes = Counter(
+            "well_sim_twin_control_outcomes_total",
+            "Command results and reconciliation",
+            ["outcome"],
+            registry=self.registry,
+        )
+        self.control_queue_depth = Gauge(
+            "well_sim_twin_control_queue_depth",
+            "Durable queued commands",
+            registry=self.registry,
+        )
+        self.control_backlog = Gauge(
+            "well_sim_twin_control_backlog",
+            "Queued commands beyond the current scan bound",
+            registry=self.registry,
+        )
+        self.control_inbox_ready = Gauge(
+            "well_sim_twin_control_inbox_ready",
+            "One when the inbox scan succeeds",
+            registry=self.registry,
+        )
+        self.control_apply_duration = Histogram(
+            "well_sim_twin_control_apply_seconds",
+            "Database and memory control application time",
+            registry=self.registry,
+        )
+
+        self.scheduled_forecasts = Counter(
+            "well_sim_twin_scheduled_forecasts_total",
+            "Scheduled job outcomes",
+            ["outcome"],
+            registry=self.registry,
+        )
+        self.forecast_intervals_missed = Counter(
+            "well_sim_twin_forecast_intervals_missed_total",
+            "Due forecast intervals skipped without replay",
+            registry=self.registry,
+        )
+        self.forecast_scheduler_ready = Gauge(
+            "well_sim_twin_forecast_scheduler_ready",
+            "One after a successful schedule scan",
+            registry=self.registry,
+        )
+        self.forecast_scheduler_last_scan = Gauge(
+            "well_sim_twin_forecast_scheduler_last_scan_timestamp_seconds",
+            "Wall time of the last successful schedule scan",
             registry=self.registry,
         )
 

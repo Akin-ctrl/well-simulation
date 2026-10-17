@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useRevalidator } from 'react-router';
 
 /**
@@ -15,14 +15,18 @@ import { useRevalidator } from 'react-router';
  */
 export function useAutoRefresh(intervalMs: number): void {
   const revalidator = useRevalidator();
+  const currentRevalidator = useRef(revalidator);
+  useEffect(() => {
+    currentRevalidator.current = revalidator;
+  }, [revalidator]);
 
   useEffect(() => {
     const tick = () => {
       if (document.visibilityState !== 'visible') return;
       // Skip if a revalidation is already in flight, so a slow response cannot
       // stack requests on top of each other.
-      if (revalidator.state !== 'idle') return;
-      revalidator.revalidate();
+      if (currentRevalidator.current.state !== 'idle') return;
+      void currentRevalidator.current.revalidate();
     };
 
     const onVisible = () => {
@@ -36,9 +40,7 @@ export function useAutoRefresh(intervalMs: number): void {
       window.clearInterval(timer);
       document.removeEventListener('visibilitychange', onVisible);
     };
-    // revalidator is recreated on each render; depending on it would reset the
-    // timer constantly. The interval is the only real input.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Keep one timer while reading the latest refresh state from the ref.
   }, [intervalMs]);
 }
 

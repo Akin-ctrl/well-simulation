@@ -7,10 +7,15 @@ import {
   parametertype,
   wellhead,
 } from '@well-simulation/db/schemas/schema';
-import type {
-  DashboardAnalyticsResponse,
-  DashboardOverviewResponse,
-  WellheadDetailResponse,
+import {
+  ALARM_SEVERITIES,
+  type ActiveAlarmTotals,
+  type AlarmCount,
+  type ActiveAlarmsResponse,
+  type AlarmSeverity,
+  type DashboardAnalyticsResponse,
+  type DashboardOverviewResponse,
+  type WellheadDetailResponse,
 } from '@well-simulation/dto/res/dashboard';
 import {
   mv5minAlarmCounts,
@@ -26,7 +31,11 @@ import { HTTPException } from 'hono/http-exception';
 
 const RECENT_READING_LIMIT = 24;
 const ACTIVE_ALARM_LIMIT = 12;
+/** Rows in the Alarm Center list. The totals always cover every alarm. */
+const ALARM_CENTER_LIMIT = 50;
 const ANALYTICS_TREND_LIMIT = 144;
+/** Hours of alarm history the Analytics severity total covers. */
+const ALARM_COUNT_WINDOW_HOURS = 24;
 
 async function countRows(
   table: typeof wellhead | typeof parametertype | typeof vActiveAlarms
@@ -133,6 +142,46 @@ async function activeAlarms(limit = ACTIVE_ALARM_LIMIT) {
     .from(vActiveAlarms)
     .orderBy(desc(vActiveAlarms.triggeredAt))
     .limit(limit);
+}
+
+/**
+ * Position of an alarm's severity in ALARM_SEVERITIES, or the list length for
+ * a level the list does not name, so unknown levels sort last.
+ */
+const severityRank = sql`case ${vActiveAlarms.severityLevel} ${sql.join(
+  ALARM_SEVERITIES.map((level, rank) => sql`when ${level} then ${rank}`),
+  sql` `
+)} else ${ALARM_SEVERITIES.length} end`;
+
+/**
+ * The Alarm Center's list: most severe first, then oldest first.
+ *
+ * The list is capped, so the cut must follow the order the operator works in.
+ * Sorting newest first and cutting there would drop an old critical alarm
+ * while showing a recent warning.
+ */
+async function rankedActiveAlarms(limit: number) {
+  return db
+    .select()
+    .from(vActiveAlarms)
+    .orderBy(severityRank, asc(vActiveAlarms.triggeredAt), asc(vActiveAlarms.eventId))
+    .limit(limit);
+}
+
+/** Counts over every active alarm, independent of the list's cap. */
+async function activeAlarmTotals(): Promise<ActiveAlarmTotals> {
+  const critical: AlarmSeverity = 'CRITICAL';
+  const warning: AlarmSeverity = 'WARNING';
+  const [row] = await db
+    .select({
+      total: sql<number>`count(*)::int`,
+      critical: sql<number>`(count(*) filter (where ${vActiveAlarms.severityLevel} = ${critical}))::int`,
+      warning: sql<number>`(count(*) filter (where ${vActiveAlarms.severityLevel} = ${warning}))::int`,
+      affectedWellheads: sql<number>`count(distinct ${vActiveAlarms.wellheadId})::int`,
+    })
+    .from(vActiveAlarms);
+
+  return row ?? { total: 0, critical: 0, warning: 0, affectedWellheads: 0 };
 }
 
 async function activeAlarmsForWellhead(wellheadId: number) {
@@ -267,12 +316,28 @@ async function waterCutGorTrendForWellhead(wellheadId: number) {
     .limit(ANALYTICS_TREND_LIMIT);
 }
 
-async function alarmCounts() {
+/**
+ * Alarms triggered in the last ALARM_COUNT_WINDOW_HOURS, one total per severity.
+ *
+ * This previously returned the newest 144 rows of the aggregate, where a row is
+ * one bucket for one wellhead, parameter, and severity. The period that covered
+ * changed with the alarm mix, and on a stack that had been stopped it reached
+ * back days, so the Analytics total described no stated time. The window is now
+ * a time bound, and the totals are summed here because the page needs nothing
+ * finer.
+ */
+async function alarmCounts(): Promise<AlarmCount[]> {
   return db
-    .select()
+    .select({
+      severityLevel: mv5minAlarmCounts.severityLevel,
+      alarmsTriggered: sql<number>`coalesce(sum(${mv5minAlarmCounts.alarmsTriggered}), 0)::int`,
+    })
     .from(mv5minAlarmCounts)
-    .orderBy(desc(mv5minAlarmCounts.bucketTime))
-    .limit(ANALYTICS_TREND_LIMIT);
+    .where(
+      sql`${mv5minAlarmCounts.bucketTime} > now() - make_interval(hours => ${ALARM_COUNT_WINDOW_HOURS})`
+    )
+    .groupBy(mv5minAlarmCounts.severityLevel)
+    .orderBy(mv5minAlarmCounts.severityLevel);
 }
 
 export const dashboardRouter = new Hono()
@@ -289,9 +354,25 @@ export const dashboardRouter = new Hono()
           latestReadingTimestamp(),
         ]);
 
-      const [readings, alarms] = await Promise.all([
+      const [readings, alarms, assets] = await Promise.all([
         latestSnapshotReadings(latestAt),
         activeAlarms(),
+        db
+          .select({
+            wellheadId: wellhead.wellheadId,
+            wellheadName: wellhead.name,
+            activeAlarmCount: sql<number>`(select count(*)::int from v_active_alarms where wellhead_id = ${wellhead.wellheadId})`,
+            wellheadType: wellhead.type,
+            status: wellhead.status,
+            locationId: location.locationId,
+            locationName: location.name,
+            fieldId: field.fieldId,
+            fieldName: field.name,
+          })
+          .from(wellhead)
+          .innerJoin(location, eq(wellhead.locationId, location.locationId))
+          .innerJoin(field, eq(location.fieldId, field.fieldId))
+          .orderBy(wellhead.wellheadId),
       ]);
 
       const overview: DashboardOverviewResponse = {
@@ -304,6 +385,7 @@ export const dashboardRouter = new Hono()
         },
         latestReadings: readings,
         activeAlarms: alarms,
+        wellheads: assets,
       };
 
       return overview;
@@ -316,7 +398,12 @@ export const dashboardRouter = new Hono()
   )
   .get('/active-alarms', (c) =>
     responseHandler(async () => {
-      return { alarms: await activeAlarms(50) };
+      const [totals, alarms] = await Promise.all([
+        activeAlarmTotals(),
+        rankedActiveAlarms(ALARM_CENTER_LIMIT),
+      ]);
+      const response: ActiveAlarmsResponse = { totals, alarms };
+      return response;
     })(c)
   )
   .get('/wellheads/:wellheadId', (c) =>
@@ -345,6 +432,7 @@ export const dashboardRouter = new Hono()
       const detail: WellheadDetailResponse = {
         wellhead: asset,
         latestReadingAt: latestAt,
+        latestReadingAgeSeconds: ageInSeconds(latestAt),
         latestReadings: readings,
         activeAlarms: alarms,
         pressureTrend: pressure,

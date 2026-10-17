@@ -1,4 +1,5 @@
 import { AlertTriangleIcon, CheckCircle2Icon, CircleSlashIcon } from 'lucide-react';
+import { useElapsedSeconds } from '../../../hooks/use-elapsed-seconds';
 
 /**
  * Whether the telemetry on screen is current.
@@ -14,7 +15,7 @@ import { AlertTriangleIcon, CheckCircle2Icon, CircleSlashIcon } from 'lucide-rea
  */
 
 /** Older than this and the data is treated as stale, in seconds. */
-const STALE_AFTER_SECONDS = 30;
+export const STALE_AFTER_SECONDS = 30;
 
 function describe(ageSeconds: number): string {
   if (ageSeconds < 60) return `${ageSeconds}s ago`;
@@ -25,36 +26,53 @@ function describe(ageSeconds: number): string {
 export function FreshnessIndicator({
   ageSeconds,
   latestReadingAt,
+  announce = false,
 }: {
   ageSeconds: number | null;
   latestReadingAt: string | null;
+  announce?: boolean;
 }) {
+  const elapsed = useElapsedSeconds(`${latestReadingAt}:${ageSeconds}`);
+  const category =
+    ageSeconds === null || !latestReadingAt
+      ? 'No readings ingested'
+      : ageSeconds + elapsed > STALE_AFTER_SECONDS
+        ? 'Telemetry is stale'
+        : 'Telemetry is current';
+  const announcement = announce ? (
+    <span className='sr-only' role='status'>
+      {category}
+    </span>
+  ) : null;
   if (ageSeconds === null || !latestReadingAt) {
     return (
       <span className='inline-flex items-center gap-1.5 text-sm text-fgColor-muted'>
-        <CircleSlashIcon className='size-4' />
+        <CircleSlashIcon aria-hidden='true' className='size-4' />
+        {announcement}
         No readings ingested
       </span>
     );
   }
 
-  const isStale = ageSeconds > STALE_AFTER_SECONDS;
+  const currentAge = ageSeconds + elapsed;
+  const isStale = currentAge > STALE_AFTER_SECONDS;
 
   return (
     <span
       className={`inline-flex items-center gap-1.5 text-sm ${
-        isStale ? 'text-red-600' : 'text-green-700'
+        isStale ? 'text-red-700' : 'text-green-700'
       }`}
       title={new Date(latestReadingAt).toLocaleString()}
     >
+      {announcement}
       {isStale ? (
-        <AlertTriangleIcon className='size-4' />
+        <AlertTriangleIcon aria-hidden='true' className='size-4' />
       ) : (
-        <CheckCircle2Icon className='size-4' />
+        <CheckCircle2Icon aria-hidden='true' className='size-4' />
       )}
       {isStale
-        ? `Telemetry stale, last reading ${describe(ageSeconds)}`
-        : `Live, updated ${describe(ageSeconds)}`}
+        ? `Telemetry stale, last reading ${describe(currentAge)}`
+        : `Live, updated ${describe(currentAge)}`}
     </span>
   );
 }

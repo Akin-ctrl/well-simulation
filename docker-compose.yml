@@ -1,6 +1,7 @@
 services:
   db:
-    image: timescale/timescaledb:latest-pg14
+    # PostgreSQL 16.15 / TimescaleDB 2.30.2. See the engine upgrade design.
+    image: timescale/timescaledb@sha256:6f139d56042989bd35f50ba5986e492cd32e35cc6778c50be2659add298dc09f
     container_name: wellhead_db
     environment:
       - POSTGRES_USER=${POSTGRES_USER}
@@ -38,8 +39,8 @@ services:
   #   networks:
   #     - wellnet
 
-  # Applies the ordered SQL migrations, then exits. Every service that reads or
-  # writes the schema waits for it to finish successfully.
+  # Installs or checks the current schema, then exits. Existing legacy databases
+  # require an explicit, verified adoption before this default startup check.
   migrator:
     build: ./data/src
     container_name: wellhead_migrator
@@ -58,6 +59,8 @@ services:
       POSTGRES_PORT: "5432"
       TWIN_DB_USER: ${TWIN_DB_USER}
       TWIN_DB_PASSWORD: ${TWIN_DB_PASSWORD}
+      API_DB_USER: ${API_DB_USER:?Set API_DB_USER to a separate application login}
+      API_DB_PASSWORD: ${API_DB_PASSWORD:?Set API_DB_PASSWORD}
     networks:
       - wellnet
 
@@ -65,6 +68,7 @@ services:
     build: ./twin_core
     container_name: well_simulation_twin_core
     restart: unless-stopped
+    stop_grace_period: 15s
     depends_on:
       db:
         condition: service_healthy
@@ -77,6 +81,7 @@ services:
       TWIN_DB_USER: ${TWIN_DB_USER}
       TWIN_DB_PASSWORD: ${TWIN_DB_PASSWORD}
       TWIN_SERVICE_PORT: "8000"
+      TWIN_INTERNAL_TOKEN: ${TWIN_INTERNAL_TOKEN}
       TWIN_MAX_CATCHUP_STEPS: "5"
       TWIN_FLEET_REFRESH_SECONDS: "30"
       TELEMETRY_INTERVAL_SECONDS: ${TELEMETRY_INTERVAL_SECONDS:-5}
@@ -153,7 +158,9 @@ services:
         condition: service_completed_successfully
     environment:
       NODE_ENV: production
-      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      DATABASE_URL: postgres://${API_DB_USER}:${API_DB_PASSWORD}@db:5432/${POSTGRES_DB}
+      TWIN_CORE_URL: http://twin-core:8000
+      TWIN_INTERNAL_TOKEN: ${TWIN_INTERNAL_TOKEN}
       JWT_SECRET: ${JWT_SECRET}
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
       # The dashboard's nginx is the only thing that should speak for a client.
@@ -169,7 +176,7 @@ services:
         - CMD
         - node
         - -e
-        - "fetch('http://127.0.0.1:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+        - "fetch('http://127.0.0.1:3000/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
       interval: 15s
       timeout: 3s
       retries: 3
@@ -188,18 +195,81 @@ services:
     ports:
       - "8090:80"
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/"]
-      interval: 15s
-      timeout: 3s
-      retries: 3
-      start_period: 10s
+    # The image checks both the static page and /api/ready through nginx.
     networks:
       - wellnet
 
+  prometheus:
+    image: prom/prometheus@sha256:87861b8cf91579109319ebc300f3f1060e6da9c05d6ae8ad15a20c879e84e32e
+    profiles: [observability]
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --web.listen-address=0.0.0.0:9090
+    ports:
+      - "127.0.0.1:9090:9090"
+    volumes:
+      - ./observability/prometheus:/etc/prometheus:ro
+      - prometheus_data:/prometheus
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    healthcheck:
+      test: [CMD, wget, -q, -O, /dev/null, http://127.0.0.1:9090/-/ready]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    restart: unless-stopped
+    networks: [wellnet]
+
+  grafana:
+    image: grafana/grafana@sha256:dbbc38ea21103cefb50396340cd88afec779c7e070b0a7bf5a75b4ce46651d3f
+    profiles: [observability]
+    entrypoint: [/bin/sh, /etc/grafana/start.sh]
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES: "false"
+      GF_PLUGINS_PREINSTALL_DISABLED: "true"
+      GF_PLUGINS_PREINSTALL_AUTO_UPDATE: "false"
+      GF_PLUGINS_PLUGIN_ADMIN_ENABLED: "false"
+      GF_USERS_DEFAULT_THEME: light
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/service-health.json
+      GF_LOG_MODE: console
+      GF_LOG_CONSOLE_FORMAT: json
+    ports:
+      - "127.0.0.1:3010:3000"
+    volumes:
+      - ./observability/grafana/start.sh:/etc/grafana/start.sh:ro
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      prometheus:
+        condition: service_healthy
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    healthcheck:
+      test: [CMD, wget, -q, -O, /dev/null, http://127.0.0.1:3000/api/health]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 180s
+    restart: unless-stopped
+    networks: [wellnet]
+
 volumes:
   timescaledb_data:
+    # Keep the existing default name. A major-version upgrade selects its
+    # verified new volume explicitly, preserving the original for recovery.
+    name: ${TIMESCALE_DATA_VOLUME:-${COMPOSE_PROJECT_NAME}_timescaledb_data}
   pgadmin_data:
+  prometheus_data:
+  grafana_data:
 
 networks:
   wellnet:

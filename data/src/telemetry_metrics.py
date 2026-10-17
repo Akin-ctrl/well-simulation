@@ -19,9 +19,19 @@ READINGS_WRITTEN = Counter(
     "Parameter readings inserted into the historian",
 )
 
+LAST_COMMIT_TIMESTAMP = Gauge(
+    "well_sim_ingestion_last_commit_timestamp_seconds",
+    "UTC epoch time of the last committed complete reading batch; zero before a commit",
+)
+
 POLLS_SKIPPED_STALE = Counter(
     "wellhead_polls_skipped_stale_total",
     "Poll cycles skipped because the gateway heartbeat had not advanced",
+)
+
+POLL_RETRIES = Counter(
+    "wellhead_poll_retries_total",
+    "Polls repeated because a gateway update landed while registers were being read",
 )
 
 MODBUS_READ_ERRORS = Counter(
@@ -58,6 +68,11 @@ BATCH_ERRORS = Counter(
 )
 
 # Shared -----------------------------------------------------------------
+
+TELEMETRY_READY = Gauge(
+    "well_sim_telemetry_ready",
+    "One when the telemetry service is alive and ready at collection time",
+)
 
 METADATA_RELOADS = Counter(
     "wellhead_metadata_reloads_total",

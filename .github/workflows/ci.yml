@@ -47,6 +47,9 @@ jobs:
       - name: Unit tests
         run: pnpm test:dto
 
+      - name: Website unit tests
+        run: pnpm test:website
+
   python:
     name: Python (lint, types, tests)
     runs-on: ubuntu-latest
@@ -86,14 +89,14 @@ jobs:
         run: python3 scripts/check_prose.py
 
   api-tests:
-    name: API integration tests
+    name: Database and API integration tests
     runs-on: ubuntu-latest
     # These run against a real TimescaleDB. The dashboard reads continuous
     # aggregates and alarm evaluation lives in a trigger, so a mocked database
     # would verify almost nothing that matters.
     services:
       db:
-        image: timescale/timescaledb:latest-pg14
+        image: timescale/timescaledb@sha256:6f139d56042989bd35f50ba5986e492cd32e35cc6778c50be2659add298dc09f
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
@@ -111,6 +114,9 @@ jobs:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       TEST_JWT_SECRET: ci-secret-of-at-least-thirty-two-characters
+      # Only the disposable CI database uses this public test credential.
+      API_DB_USER: well_api_test
+      API_DB_PASSWORD: ci-only-api-database-password
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -142,6 +148,15 @@ jobs:
         run: pnpm install --frozen-lockfile
         working-directory: monorepo
 
+      - name: Verify schema, controls, projections and scheduled forecasts
+        run: >-
+          python -m pytest data/tests/test_schema_database.py
+          data/tests/test_schema_extension_database.py data/tests/test_forecast_database.py
+          data/tests/test_schema_normalize_database.py
+          twin_core/tests/test_control_database.py twin_core/tests/test_projection_database.py
+        env:
+          SCHEMA_DATABASE_TEST: '1'
+
       - name: Run API integration tests
         run: pnpm --filter @well-simulation/api test
         working-directory: monorepo
@@ -149,16 +164,46 @@ jobs:
   images:
     name: Container images
     runs-on: ubuntu-latest
+    env:
+      # Keep the built image names equal to the regression script defaults.
+      COMPOSE_PROJECT_NAME: well-simulation
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
-      # Compose interpolates these at config-parse time even for `build`.
-      # The example values are non-secret placeholders.
-      - name: Provide placeholder environment
-        run: cp .env.example .env
+      - name: Build and start the demo with the public launcher
+        run: ./simulator
 
-      - name: Build all service images
-        run: docker compose build
+      - name: Validate optional metrics configuration and rules
+        run: |
+          docker compose --profile observability run --rm --no-deps --entrypoint /bin/promtool prometheus check config /etc/prometheus/prometheus.yml
+          docker compose --profile observability run --rm --no-deps --workdir /etc/prometheus --entrypoint /bin/promtool prometheus test rules rules.test.yml
+
+      - name: Verify dashboard proxy recovery
+        run: python3 scripts/verify_proxy_recovery.py
+
+      - name: Install pnpm for browser verification
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          version: 10.11.1
+
+      - name: Install Node for browser verification
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: monorepo/.nvmrc
+
+      - name: Install browser test dependencies
+        working-directory: monorepo
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm --filter @well-simulation/website exec playwright install --with-deps chromium
+
+      - name: Verify browser workflows
+        working-directory: monorepo
+        run: pnpm --filter @well-simulation/website test:browser
+
+      - name: Stop the demo stack
+        if: always()
+        run: docker compose down --remove-orphans

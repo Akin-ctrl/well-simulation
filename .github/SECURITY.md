@@ -37,7 +37,7 @@ and send it again rather than waiting.
 
 **In scope:** the API and its authentication and access control, the
 dashboard, the twin-core service, the Modbus gateway, the ingestion service,
-the SQL migrations in `data/sql/migrations`, the Docker images and
+the canonical SQL in `data/sql/schema.sql`, the Docker images and
 `docker-compose.yml`, and the CI workflow in `.github/workflows/`.
 
 **Out of scope**, because these are known and documented:
@@ -54,9 +54,9 @@ the SQL migrations in `data/sql/migrations`, the Docker images and
   makes it worse.
 - Findings that need an already-compromised host.
 
-The full list of known gaps is in
-[docs/architecture/production-readiness.md](../docs/architecture/production-readiness.md).
-Anything listed there as missing is a known gap, not a new finding.
+The readiness record separates [open work and deployment limits](../docs/architecture/production-readiness.md#open-work-and-deployment-limits)
+from verified local behavior. A documented limitation is known, but a report that
+shows a failure within an implemented boundary is still useful.
 
 ## Disclosure
 

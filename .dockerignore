@@ -16,4 +16,5 @@ build
 .react-router
 *.tsbuildinfo
 .env
+.env.setup.*
 docs

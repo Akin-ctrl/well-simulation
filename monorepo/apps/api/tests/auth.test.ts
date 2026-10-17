@@ -1,4 +1,7 @@
+import { sign } from 'hono/jwt';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+
+import { config } from '../src/config';
 
 import {
   createUser,
@@ -106,5 +109,62 @@ describe('authentication', () => {
   it('requires a session to log out', async () => {
     const response = await request('/auth/logout', { method: 'POST' });
     expect(response.status).toBe(401);
+  });
+});
+
+describe('session revocation (ADR 0037)', () => {
+  beforeAll(deleteTestUsers);
+  afterAll(deleteTestUsers);
+
+  it('ends every session of the user on logout, including copies', async () => {
+    const user = await createUser('USER');
+    const first = await login(user);
+    // A second device, or a copied cookie: both must stop working.
+    const second = await login(user);
+
+    const logout = await request('/auth/logout', { method: 'POST', cookie: first });
+    expect(logout.status).toBe(200);
+
+    expect((await request('/auth/me', { cookie: first })).status).toBe(401);
+    expect((await request('/auth/me', { cookie: second })).status).toBe(401);
+    expect((await request('/dashboard/overview', { cookie: second })).status).toBe(401);
+  });
+
+  it('lets the user sign in again after logging out', async () => {
+    const user = await createUser('USER');
+    const before = await login(user);
+    await request('/auth/logout', { method: 'POST', cookie: before });
+
+    const after = await login(user);
+    expect((await request('/auth/me', { cookie: after })).status).toBe(200);
+  });
+
+  it('refuses a correctly signed token that carries no session version', async () => {
+    // Shaped like a token issued before ADR 0037: valid signature, no `sv`.
+    const user = await createUser('USER');
+    const token = await sign(
+      {
+        sub: String(user.id),
+        email: user.email,
+        role: user.role,
+        exp: Math.floor(Date.now() / 1000) + 3600,
+      },
+      config.jwtSecret,
+      config.jwtAlgorithm
+    );
+
+    const response = await request('/auth/me', { cookie: `auth_token=${token}` });
+    expect(response.status).toBe(401);
+  });
+
+  it('does not expose the session counter', async () => {
+    const user = await createUser('USER');
+    const cookie = await login(user);
+
+    const body = (await (await request('/auth/me', { cookie })).json()) as {
+      data: { user: Record<string, unknown> };
+    };
+    expect(body.data.user).not.toHaveProperty('sessionVersion');
+    expect(body.data.user).not.toHaveProperty('encryptedPassword');
   });
 });

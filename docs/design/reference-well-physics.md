@@ -104,9 +104,9 @@ or negative result. The gateway rejects a missing, nonfinite, negative, stale,
 or mixed-tick field before changing any holding register. Ingestion writes a
 batch only after the Modbus heartbeat is stable. Values are encoded as float32,
 so historian precision is limited by the wire format. The fleet snapshot carries
-model version 0.3.0, but the present Modbus and historian row format carries
-only the source kind and tick time. Model-version lineage per stored reading
-remains a persistence gap for Milestone 7.
+model version 0.3.0. Since 2026-10-02 the gateway publishes that version beside
+the Modbus heartbeat, and each stored reading records it in `model_version`
+(see the ADR 0036 amendment). Readings stored earlier have no recorded version.
 
 ## Verification and standards boundary
 

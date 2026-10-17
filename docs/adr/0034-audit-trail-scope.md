@@ -1,6 +1,6 @@
 # ADR 0034: Record An Audit Trail For Actors, Not For Auditors
 
-- Status: Accepted
+- Status: Accepted, amended
 - Date: 2026-08-29
 - Implementation: Implemented
 
@@ -153,3 +153,62 @@ has been kept.
 - The control API ships. The promotion workflow should be reconsidered then.
 - Audit volume stops being bounded by the rate limiter, for example if a machine
   client is given credentials.
+
+## Amendment 2026-10-03: Name the rate-limited routes exactly
+
+### The problem
+
+This record says "`/auth/*` is capped at 10 a minute per client". The limiter
+did match every path under `/auth/`, and that included `/auth/me`, the session
+check the dashboard makes. Every timed refresh repeated that check, so one open
+tab spent 6 of the 10 requests a minute, and a second tab locked its user out.
+
+### Decision
+
+The strict budget of 10 a minute per client now covers three named routes:
+`/auth/login`, `/auth/register`, and `/auth/logout`. `/auth/me` moves to the
+general budget of 100 a minute. It checks no password and writes no audit row,
+so the bound this record relies on is unchanged.
+
+Logout stays on the strict budget on purpose. It writes an `auth.logout` row,
+and it only deletes the cookie without revoking the session, so a copied
+cookie could replay it. Moving it to the general budget would let one client
+write 100 audit rows a minute. **Do not move `/auth/logout` off the strict
+budget** unless logout starts revoking the session.
+
+The list lives in `CREDENTIAL_PATHS` in
+`monorepo/apps/api/src/middleware/rate-limiter.ts`. A new route that checks a
+password or writes an audit row must be added there.
+
+## Amendment 2026-10-03 (later): Logout now revokes the session
+
+[ADR 0037](0037-session-revocation.md) makes logout end every session of the
+user on the server. A copied cookie can no longer replay logout: the second
+call is refused before any audit row is written. The reason given above for
+keeping `/auth/logout` on the strict budget no longer applies, but the budget
+stays as it is. Ten logouts a minute is far above real use, and the limit is a
+second line of defence if revocation ever regresses.
+
+## Amendment 2026-10-13: Control and parameter writes require atomic audit
+
+A live control or parameter publication must not succeed without its actor
+record. Milestone 8B therefore inserts audit rows in the same transaction as
+accepted draft, activation, cancellation, and publication changes. A failed
+audit insert rolls back the operation. The existing best-effort helper remains
+appropriate for authentication events, where an audit outage must not silently
+change the login result.
+
+Twin-core records application, rejection, and expiry in control_command_event
+in the same transaction as the command result. The command retains its human
+activation identity. This costs a database dependency for new control changes,
+but allows every accepted change to be traced after a restart. See
+[ADR 0038](0038-live-control-command-lifecycle.md).
+
+## Amendment, 2026-10-17: alarm actions require atomic audit
+
+Acknowledgement, shelving and early unshelving follow the same atomic-write rule
+as live controls. The receipt, lifecycle state and audit event commit together.
+The shared ten-per-user-per-minute command budget bounds these writes. A replay
+returns the existing receipt without adding another audit event. General audit
+retention remains 90 days; alarm action receipts remain durable alongside their
+current-state references. See [ADR 0039](0039-alarm-operator-actions.md).

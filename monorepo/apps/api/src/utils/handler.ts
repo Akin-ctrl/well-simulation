@@ -1,3 +1,4 @@
+import { errorCode as databaseErrorCode } from './database-error';
 import type { ApiErr, ApiRes } from '@well-simulation/dto/res/response';
 import type { Context } from 'hono';
 import { HTTPException } from 'hono/http-exception';
@@ -16,8 +17,6 @@ import type { ContentfulStatusCode } from 'hono/utils/http-status';
 
 /** Postgres unique-constraint violation. */
 const UNIQUE_VIOLATION = '23505';
-
-type DatabaseError = { code?: unknown; cause?: unknown };
 
 /**
  * Strip bound query parameters from a database error message.
@@ -60,21 +59,6 @@ function serverResponse<T>(
   meta?: { limit: number; page: number; total: number }
 ): ApiRes<T> {
   return { msg, data, status, meta };
-}
-
-/**
- * Find a Postgres error code, following the cause chain.
- *
- * Drizzle wraps driver failures in its own error, so the `code` that says a
- * unique constraint was violated is on `error.cause`, not the error itself.
- */
-function databaseErrorCode(error: unknown, depth = 0): string | undefined {
-  if (typeof error !== 'object' || error === null || depth > 5) return undefined;
-
-  const code = (error as DatabaseError).code;
-  if (typeof code === 'string') return code;
-
-  return databaseErrorCode((error as DatabaseError).cause, depth + 1);
 }
 
 function isZodError(error: unknown): boolean {

@@ -1,14 +1,13 @@
 openapi: 3.1.0
 info:
   title: Twin-Core Internal API
-  version: 0.4.0
+  version: 0.5.0
   summary: Internal API for the wellhead twin-core service.
   description: |
     Health, readiness, metrics, lifecycle state, complete model fleet snapshots,
-    and source-labelled historian telemetry reads are implemented. Process
-    values are synthetic and uncalibrated.
-    Controls, forecasts, and scenarios below
-    are planned endpoints, not available in the running service.
+    source-labelled historian telemetry reads, forecasts, and isolated scenarios
+    are implemented. Controls enter through durable commands and an authenticated
+    wake-up hint. Parameter validation is read-only. Values remain synthetic and uncalibrated.
 servers:
   - url: http://twin-core:8000
     description: Internal Docker Compose service address.
@@ -20,6 +19,32 @@ tags:
   - name: Forecasts
   - name: Scenarios
 paths:
+  /wellheads/{wellheadId}/snapshots:
+    get:
+      summary: Find exact saved states for historical scenarios.
+      description: Requires the internal service token. Search covers 24 hours at or before a UTC time within the preceding 89 days. Compatibility is checked again when running.
+      operationId: findInternalSnapshots
+      security: [{serviceToken: []}]
+      parameters:
+        - name: wellheadId
+          in: path
+          required: true
+          schema: {type: integer, minimum: 1, maximum: 2147483647}
+        - name: at
+          in: query
+          required: true
+          schema: {$ref: '#/components/schemas/SnapshotSelection/properties/simulatedAt'}
+      responses:
+        '200':
+          description: Bounded snapshot metadata, newest first.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SnapshotList'
+        '400': {description: Invalid search fields or time.}
+        '403': {description: Missing authority.}
+        '404': {description: Unknown active well.}
+        '503': {description: Model parameters or snapshot storage unavailable.}
   /health:
     get:
       tags: [Health]
@@ -56,6 +81,19 @@ paths:
             text/plain:
               schema:
                 type: string
+  /model-status:
+    get:
+      summary: Read lifecycle and process freshness even during partial startup.
+      operationId: getModelStatus
+      security: [{serviceToken: []}]
+      responses:
+        "200":
+          description: A registry snapshot with freshness computed by the model clock.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/FleetModelStatus"}
+        "403":
+          description: Internal service token missing or invalid.
   /model-snapshot:
     get:
       tags: [Telemetry]
@@ -108,34 +146,11 @@ paths:
                 $ref: "#/components/schemas/WellheadState"
         "404":
           $ref: "#/components/responses/NotFound"
-  /wellheads/{wellheadId}/controls:
-    post:
-      tags: [Controls]
-      summary: Planned endpoint for applying bounded live control inputs.
-      operationId: applyWellheadControls
-      parameters:
-        - $ref: "#/components/parameters/WellheadId"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/ControlInput"
-      responses:
-        "202":
-          description: Control input accepted for the next model tick.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ControlAccepted"
-        "400":
-          $ref: "#/components/responses/ValidationError"
-        "404":
-          $ref: "#/components/responses/NotFound"
   /wellheads/{wellheadId}/forecast:
     post:
       tags: [Forecasts]
-      summary: Planned endpoint for short operational forecasts.
+      summary: Create and persist a bounded forecast from current model state.
+      description: Requires X-Twin-Internal-Token and X-Twin-Actor-Id headers.
       operationId: createWellheadForecast
       parameters:
         - $ref: "#/components/parameters/WellheadId"
@@ -146,8 +161,8 @@ paths:
             schema:
               $ref: "#/components/schemas/ForecastRequest"
       responses:
-        "200":
-          description: Forecast generated from current model state.
+        "201":
+          description: Forecast persisted and returned.
           content:
             application/json:
               schema:
@@ -156,10 +171,15 @@ paths:
           $ref: "#/components/responses/ValidationError"
         "404":
           $ref: "#/components/responses/NotFound"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          $ref: "#/components/responses/HistorianUnavailable"
   /scenarios:
     post:
       tags: [Scenarios]
-      summary: Planned endpoint for isolated what-if scenario execution.
+      summary: Create and persist an isolated what-if scenario.
+      description: Requires X-Twin-Internal-Token and X-Twin-Actor-Id headers.
       operationId: runScenario
       requestBody:
         required: true
@@ -168,15 +188,177 @@ paths:
             schema:
               $ref: "#/components/schemas/ScenarioRequest"
       responses:
-        "200":
-          description: Scenario run completed against cloned model state.
+        "201":
+          description: Scenario and unchanged baseline persisted together.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ScenarioResponse"
         "400":
           $ref: "#/components/responses/ValidationError"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409": {description: Selected snapshot is incompatible or outside the supported age window.}
+        "503":
+          $ref: "#/components/responses/HistorianUnavailable"
+  /wellheads/{wellheadId}/controls:
+    get:
+      tags:
+      - Controls
+      summary: Read installed model setpoints.
+      operationId: getInstalledControls
+      security:
+      - serviceToken: []
+      responses:
+        '200':
+          description: Read result or notification acceptance; a hint never applies
+            controls.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RunningControls'
+        '400':
+          description: Invalid request.
+        '403':
+          description: Missing or incorrect service token.
+        '404':
+          description: Unknown well.
+        '503':
+          description: Model, database, or inbox unavailable.
+      parameters:
+      - $ref: '#/components/parameters/WellheadId'
+  /control-commands/{id}/notify:
+    post:
+      tags:
+      - Controls
+      summary: Wake polling for a durable command UUID.
+      operationId: notifyCommandInbox
+      security:
+      - serviceToken: []
+      responses:
+        '202':
+          description: Read result or notification acceptance; a hint never applies
+            controls.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationAccepted'
+        '400':
+          description: Invalid request.
+        '403':
+          description: Missing or incorrect service token.
+        '404':
+          description: Unknown well.
+        '503':
+          description: Model, database, or inbox unavailable.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmptyHint'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+  /wellheads/{wellheadId}/parameters:
+    get:
+      tags:
+      - Controls
+      summary: Read canonical parameter definitions and running values.
+      operationId: getParameterCatalogue
+      security:
+      - serviceToken: []
+      parameters:
+      - name: wellheadId
+        in: path
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+      responses:
+        '200':
+          description: Definitions remain available if the process cannot start; runningValue
+            is then null.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ParameterCatalogue'
+        '403':
+          description: Missing or incorrect service token.
+        '404':
+          description: Unknown well.
+  /parameter-changes/validate:
+    post:
+      tags:
+      - Controls
+      summary: Validate without publishing or changing running parameters.
+      operationId: validateParameterProposal
+      security:
+      - serviceToken: []
+      responses:
+        '200':
+          description: Read result or notification acceptance; a hint never applies
+            controls.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ParameterValidation'
+        '400':
+          description: Invalid request.
+        '403':
+          description: Missing or incorrect service token.
+        '404':
+          description: Unknown well.
+        '503':
+          description: Model, database, or inbox unavailable.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ParameterValidationRequest'
+  /fleet/refresh:
+    post:
+      tags:
+      - Controls
+      summary: Request a fleet refresh on the scheduler thread.
+      operationId: requestFleetRefresh
+      security:
+      - serviceToken: []
+      responses:
+        '202':
+          description: Read result or notification acceptance; a hint never applies
+            controls.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationAccepted'
+        '400':
+          description: Invalid request.
+        '403':
+          description: Missing or incorrect service token.
+        '404':
+          description: Unknown well.
+        '503':
+          description: Model, database, or inbox unavailable.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmptyHint'
 components:
+  securitySchemes:
+    serviceToken:
+      type: apiKey
+      in: header
+      name: X-Twin-Internal-Token
   parameters:
     WellheadId:
       name: wellheadId
@@ -204,7 +386,205 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/ErrorResponse"
+    Forbidden:
+      description: The internal service token is absent or invalid.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
   schemas:
+    FleetModelStatus:
+      type: object
+      required: [checkedAt, available, wellheads]
+      properties:
+        checkedAt: {type: string, format: date-time}
+        available: {type: boolean}
+        wellheads:
+          type: array
+          maxItems: 1000
+          items:
+            type: object
+            required: [wellheadId, modelVersion, status, reason, lastTickAt,
+              simulatedAt, processAgeSeconds, current, skippedTicks, restoredFrom,
+              lastRecoveryEvent]
+            properties:
+              wellheadId: {type: integer, minimum: 1}
+              modelVersion: {type: string}
+              status: {type: string}
+              reason: {type: string}
+              lastTickAt: {type: [string, "null"], format: date-time}
+              simulatedAt: {type: [string, "null"], format: date-time}
+              processAgeSeconds: {type: [number, "null"]}
+              current: {type: boolean}
+              skippedTicks: {type: integer, minimum: 0}
+              restoredFrom: {type: [string, "null"], format: date-time}
+              lastRecoveryEvent:
+                type: [object, "null"]
+                required: [type, time]
+                properties:
+                  type: {type: string}
+                  time: {type: string, format: date-time}
+    RunningControls:
+      type: object
+      required:
+      - wellheadId
+      - revision
+      - modelVersion
+      - parameterFingerprint
+      - status
+      - lastTickAt
+      - controls
+      properties:
+        wellheadId:
+          type: integer
+          minimum: 1
+          maximum: 2147483647
+        revision:
+          type: integer
+          minimum: 0
+          maximum: 2147483646
+        modelVersion:
+          type: string
+        parameterFingerprint:
+          type: string
+          minLength: 64
+          maxLength: 64
+        status:
+          type: string
+        lastTickAt:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        controls:
+          type: object
+          required:
+          - chokePositionPercent
+          - masterValveOpen
+          - wingValveOpen
+          - pumpOn
+          - emergencyShutdown
+          - swabValveOpen
+          properties:
+            chokePositionPercent:
+              type: number
+              minimum: 0
+              maximum: 100
+            masterValveOpen:
+              type: boolean
+            wingValveOpen:
+              type: boolean
+            pumpOn:
+              type: boolean
+            emergencyShutdown:
+              type: boolean
+            swabValveOpen:
+              type: boolean
+          additionalProperties: false
+      additionalProperties: false
+    ParameterValidationRequest:
+      type: object
+      required:
+      - wellheadId
+      - modelVersion
+      - parameterKey
+      - value
+      - unit
+      properties:
+        wellheadId:
+          type: integer
+          minimum: 1
+          maximum: 2147483647
+        modelVersion:
+          type: string
+          pattern: ^\d+\.\d+\.\d+$
+        parameterKey:
+          type: string
+          minLength: 1
+          maxLength: 100
+        value:
+          type:
+          - number
+          - 'null'
+        unit:
+          type:
+          - string
+          - 'null'
+          minLength: 1
+          maxLength: 40
+      additionalProperties: false
+    ParameterCatalogue:
+      type: object
+      required:
+      - wellheadId
+      - modelVersion
+      - parameters
+      properties:
+        wellheadId:
+          type: integer
+          minimum: 1
+        modelVersion:
+          type: string
+        parameters:
+          type: array
+          minItems: 1
+          maxItems: 200
+          items:
+            type: object
+            required:
+            - key
+            - description
+            - unit
+            - defaultValue
+            - minimum
+            - maximum
+            - requiresRestart
+            - runningValue
+            properties:
+              key:
+                type: string
+              description:
+                type: string
+              unit:
+                type: string
+              defaultValue:
+                type: number
+              minimum:
+                type: number
+              maximum:
+                type: number
+              requiresRestart:
+                type: boolean
+              runningValue:
+                type:
+                - number
+                - 'null'
+    ParameterValidation:
+      type: object
+      required:
+      - modelVersion
+      - runningParameterFingerprint
+      - proposedParameterFingerprint
+      - restartRequired
+      properties:
+        modelVersion:
+          type: string
+        runningParameterFingerprint:
+          type: [string, "null"]
+        proposedParameterFingerprint:
+          type: string
+        restartRequired:
+          const: true
+    EmptyHint:
+      type: object
+      additionalProperties: false
+    NotificationAccepted:
+      type: object
+      required:
+      - status
+      properties:
+        status:
+          const: notification_accepted
     HealthResponse:
       type: object
       required: [status, service, timestamp]
@@ -249,6 +629,13 @@ components:
           minimum: 0
         reason:
           type: string
+          description: >-
+            The first thing stopping readiness, or service_ready_model_running.
+            Values include historian_unavailable, no_active_wellheads,
+            invalid_model_parameters, wall_clock_moved_back (ticks held after
+            the wall clock went back), tick_clock_drift (last tick more than
+            3 seconds from wall time), tick_loop_not_current, and
+            model_not_running.
         timestamp:
           type: string
           format: date-time
@@ -263,6 +650,8 @@ components:
         - skippedTicks
         - lastTickAt
         - process
+        - restoredFrom
+        - lastRecoveryEvent
       properties:
         wellheadId:
           type: integer
@@ -288,6 +677,25 @@ components:
         process:
           oneOf:
             - $ref: "#/components/schemas/ProcessState"
+            - type: "null"
+        restoredFrom:
+          description: UTC time of the snapshot restored for this process, if any.
+          oneOf:
+            - type: string
+              format: date-time
+            - type: "null"
+        lastRecoveryEvent:
+          description: Last startup recovery decision for this well in this process.
+          oneOf:
+            - type: object
+              required: [type, time]
+              properties:
+                type:
+                  type: string
+                  enum: [snapshot_restored, cold_start_no_snapshot, snapshot_incompatible]
+                time:
+                  type: string
+                  format: date-time
             - type: "null"
     ProcessState:
       type: object
@@ -503,116 +911,228 @@ components:
             - type: string
               enum: [synthetic_random_simulator, synthetic_reduced_order_model]
             - type: "null"
-    ControlInput:
+    ForecastRequest:
       type: object
       additionalProperties: false
       properties:
-        chokePositionPercent:
-          type: number
-          minimum: 0
-          maximum: 100
-        valveState:
-          type: string
-          enum: [open, closed]
-        pumpState:
-          type: string
-          enum: [on, off]
-        reason:
-          type: string
-          maxLength: 240
-    ControlAccepted:
-      type: object
-      required: [accepted, effectiveFromTick]
-      properties:
-        accepted:
-          type: boolean
-          const: true
-        effectiveFromTick:
-          type: string
-          format: date-time
-    ForecastRequest:
-      type: object
-      required: [horizonMinutes]
-      properties:
-        horizonMinutes:
+        horizonSeconds:
+          type: integer
+          minimum: 300
+          maximum: 7200
+          default: 1800
+        stepSeconds:
           type: integer
           minimum: 5
-          maximum: 240
-        timestepSeconds:
-          type: integer
-          minimum: 1
           maximum: 300
+          default: 60
+      description: Horizon must be divisible by step size.
     ForecastResponse:
+      $ref: "#/components/schemas/ProjectionResponse"
+    SnapshotSelection:
       type: object
-      required: [wellheadId, generatedAt, horizonMinutes, points]
+      additionalProperties: false
+      required: [snapshotId, simulatedAt]
       properties:
-        wellheadId:
-          type: integer
-        generatedAt:
+        snapshotId:
+          type: string
+          pattern: '^[1-9][0-9]{0,18}$'
+          description: Exact decimal bigint, at most 9223372036854775807.
+        simulatedAt:
           type: string
           format: date-time
-        horizonMinutes:
-          type: integer
-        points:
+          description: UTC timestamp with at most six fractional digits.
+    ExecutionOrigin:
+      oneOf:
+        - type: object
+          required: [kind]
+          properties:
+            kind: {type: string, const: manual}
+        - type: object
+          required: [kind, scheduleId, jobId, scheduledFor]
+          properties:
+            kind: {type: string, const: scheduled}
+            scheduleId: {type: string, format: uuid}
+            jobId: {type: string, format: uuid}
+            scheduledFor: {type: string, format: date-time}
+    BranchOrigin:
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required: [kind]
+          properties:
+            kind: {type: string, const: current}
+        - type: object
+          additionalProperties: false
+          required: [kind, snapshotId, simulatedAt]
+          properties:
+            kind: {type: string, const: snapshot}
+            snapshotId: {$ref: '#/components/schemas/SnapshotSelection/properties/snapshotId'}
+            simulatedAt: {$ref: '#/components/schemas/SnapshotSelection/properties/simulatedAt'}
+    SnapshotList:
+      type: object
+      required: [wellheadId, checkedAt, items, hasMore]
+      properties:
+        wellheadId: {type: integer, minimum: 1}
+        checkedAt: {type: string, format: date-time}
+        hasMore: {type: boolean}
+        items:
           type: array
+          maxItems: 20
           items:
-            $ref: "#/components/schemas/ForecastPoint"
-    ForecastPoint:
-      type: object
-      required: [timestamp, pressurePsi, temperatureF, flowRateBpd, confidence]
-      properties:
-        timestamp:
-          type: string
-          format: date-time
-        pressurePsi:
-          type: number
-        temperatureF:
-          type: number
-        flowRateBpd:
-          type: number
-        confidence:
-          type: number
-          minimum: 0
-          maximum: 1
+            type: object
+            required: [snapshotId, simulatedAt, modelVersion, compatible, reason]
+            properties:
+              snapshotId: {$ref: '#/components/schemas/SnapshotSelection/properties/snapshotId'}
+              simulatedAt: {$ref: '#/components/schemas/SnapshotSelection/properties/simulatedAt'}
+              modelVersion: {type: string}
+              compatible: {type: boolean}
+              reason: {type: string, enum: [compatible, model_version_changed, parameters_changed]}
     ScenarioRequest:
       type: object
-      required: [wellheadId, name, horizonMinutes, controls]
+      additionalProperties: false
+      required: [wellheadId, name, horizonSeconds, stepSeconds, controls]
       properties:
+        baseSnapshot: {$ref: "#/components/schemas/SnapshotSelection"}
         wellheadId:
           type: integer
+          minimum: 1
         name:
           type: string
+          minLength: 1
           maxLength: 120
-        horizonMinutes:
+        horizonSeconds:
+          type: integer
+          minimum: 300
+          maximum: 7200
+        stepSeconds:
           type: integer
           minimum: 5
-          maximum: 240
+          maximum: 300
         controls:
           type: array
+          minItems: 1
+          maxItems: 16
           items:
             $ref: "#/components/schemas/ScenarioControlStep"
+      description: Horizon must divide by step; offsets must increase and stay below horizon.
     ScenarioControlStep:
       type: object
+      additionalProperties: false
       required: [offsetMinutes, input]
       properties:
         offsetMinutes:
           type: integer
           minimum: 0
         input:
-          $ref: "#/components/schemas/ControlInput"
-    ScenarioResponse:
+          $ref: "#/components/schemas/ScenarioControlChange"
+    ScenarioControlChange:
       type: object
-      required: [scenarioId, generatedAt, points]
+      additionalProperties: false
+      minProperties: 1
       properties:
-        scenarioId:
+        chokePositionPercent:
+          type: number
+          minimum: 0
+          maximum: 100
+        masterValveOpen:
+          type: boolean
+        wingValveOpen:
+          type: boolean
+        pumpOn:
+          type: boolean
+        emergencyShutdown:
+          type: boolean
+    ScenarioResponse:
+      $ref: "#/components/schemas/ProjectionResponse"
+    ProjectionResponse:
+      type: object
+      required: [runId, kind, wellheadId, name, source, fieldCalibrated,
+        modelVersion, baseSimulatedAt, generatedAt, horizonSeconds,
+        stepSeconds, confidence, points, branchOrigin, executionOrigin]
+      properties:
+        branchOrigin: {$ref: "#/components/schemas/BranchOrigin"}
+        executionOrigin: {$ref: "#/components/schemas/ExecutionOrigin"}
+        runId:
           type: string
+          format: uuid
+        kind:
+          type: string
+          enum: [forecast, scenario]
+        wellheadId:
+          type: integer
+          minimum: 1
+        name:
+          type: [string, "null"]
+        source:
+          type: string
+          const: synthetic_reduced_order_model
+        fieldCalibrated:
+          type: boolean
+          const: false
+        modelVersion:
+          type: string
+        baseSimulatedAt:
+          type: string
+          format: date-time
         generatedAt:
           type: string
           format: date-time
+        horizonSeconds:
+          type: integer
+        stepSeconds:
+          type: integer
+        confidence:
+          type: object
+          required: [method, score, label, reasons]
+          properties:
+            method:
+              type: string
+              const: heuristic_uncalibrated
+            score:
+              type: number
+              minimum: 0
+              maximum: 1
+            label:
+              type: string
+              enum: [moderate, low]
+            reasons:
+              type: array
+              items:
+                type: string
         points:
           type: array
+          minItems: 1
+          maxItems: 1440
           items:
-            $ref: "#/components/schemas/ForecastPoint"
+            $ref: "#/components/schemas/ProjectionPoint"
+    ProjectionPoint:
+      type: object
+      required: [elapsedSeconds, timestamp, values, alarmRisk, triggeredRuleIds]
+      properties:
+        elapsedSeconds:
+          type: integer
+          minimum: 1
+        timestamp:
+          type: string
+          format: date-time
+        values:
+          type: object
+          additionalProperties:
+            type: number
+        alarmRisk:
+          type: string
+          enum: [none, warning, critical, unknown]
+        triggeredRuleIds:
+          type: array
+          items:
+            type: integer
+        baselineValues:
+          type: object
+          additionalProperties:
+            type: number
+        baselineAlarmRisk:
+          type: string
+          enum: [none, warning, critical, unknown]
     ErrorResponse:
       type: object
       required: [error]

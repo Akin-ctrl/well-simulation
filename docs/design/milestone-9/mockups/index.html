@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Milestone 9 design review</title>
+    <link
+      rel="stylesheet"
+      href="../../../../monorepo/apps/website/app/styles/tokens.css"
+    />
+    <link rel="stylesheet" href="mockups.css" />
+    <script src="mockups.js" defer></script>
+  </head>
+  <body>
+    <a class="skip" href="#workspace">Skip to workspace</a>
+    <header class="review">
+      <strong>Milestone 9 · visual design</strong
+      ><span>Illustrative data for design review</span>
+      <div>
+        <label for="screen">Screen</label
+        ><select id="screen">
+          <option value="fleet">Fleet</option>
+          <option value="monitoring">Monitoring</option>
+          <option value="forecast">Forecast</option>
+          <option value="scenario">Scenarios</option>
+          <option value="runs">Saved runs</option></select
+        ><label for="state">State</label
+        ><select id="state">
+          <option value="ready">Ready</option>
+          <option value="loading">Loading</option>
+          <option value="empty">Empty</option>
+          <option value="stale">Stale</option>
+          <option value="error">Error</option>
+          <option value="permission">Permission</option>
+          <option value="invalid">Invalid input</option>
+        </select>
+      </div>
+    </header>
+    <div class="shell">
+      <aside>
+        <a class="brand" href="?screen=fleet">Well Simulation</a>
+        <nav aria-label="Main navigation">
+          <a href="?screen=fleet">Overview</a><span>Alarms</span
+          ><span>Analytics</span>
+        </nav>
+        <p>Wellhead operations</p>
+      </aside>
+      <div class="content">
+        <header class="account">
+          Demo operator <button type="button">Logout</button>
+        </header>
+        <main id="workspace" tabindex="-1"></main>
+      </div>
+    </div>
+  </body>
+</html>

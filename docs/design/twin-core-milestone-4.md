@@ -1,5 +1,9 @@
 # Milestone 4: Twin-Core Service Design
 
+This document records this milestone’s original scope and dated checks. See the
+[current architecture](../architecture/overview.md) and [ADR index](../adr/README.md)
+for later additions, including operating screens, historical scenarios and schedules.
+
 ## Purpose
 
 Milestone 4 creates the service boundary for the future wellhead model. It does
@@ -64,6 +68,14 @@ invalid model parameters. No invalid override silently falls back to a default.
 
 The scheduler uses monotonic time so wall-clock changes cannot move its
 deadlines. The model timestep is one second, as decided in ADR 0020.
+
+Tick times are UTC instants that other services compare with their own wall
+clocks, so they cannot come from the monotonic clock alone. That clock stands
+still while the host sleeps. Before each pass, the runtime compares tick time
+with the wall clock. A forward jump of more than 2 seconds is recorded as
+skipped ticks and tick time moves onto the wall clock. A backward jump holds
+ticks until the wall clock passes the last tick. The ADR 0020 amendment of
+2026-10-03 records why.
 
 ```text
 due = max(0, floor((now - next_due) / interval) + 1)

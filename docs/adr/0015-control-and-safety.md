@@ -2,7 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-05-31
-- Implementation: Not started
+- Implementation: Implemented for the synthetic model
 
 ## Context
 
@@ -46,4 +46,15 @@ This keeps the twin realistic. Operators change controls; the process responds. 
 - Live control commands must be validated, authorized, and audited.
 - Direct edits to process outcomes are not allowed.
 - Emergency shutdown should override normal control behavior.
+
+## Implementation on 2026-10-13
+
+Milestone 8B exposes only choke position, pump state, master valve, wing valve,
+and emergency shutdown through the live command API. Process outcomes remain
+model outputs. Shutdown and reset each require their own command with no other
+target. A shutdown must be reset before another control can change.
+
+[ADR 0038](0038-live-control-command-lifecycle.md) records the draft,
+confirmation, current-authority checks, audit, expiry, and restart behavior.
+These controls affect only the synthetic model; no physical safety claim is made.
 

@@ -5,3 +5,8 @@ build
 .react-router
 pnpm-lock.yaml
 *.tsbuildinfo
+.mypy_cache
+.pytest_cache
+.ruff_cache
+test-results
+playwright-report

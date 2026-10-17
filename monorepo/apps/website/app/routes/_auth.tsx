@@ -1,36 +1,33 @@
-import { useOutlet } from 'react-router';
-import authBg from '~/assets/images/auth/auth-bg.webp';
+import { Outlet } from 'react-router';
 import Logo from '~/assets/svg/brand/logo.svg?react';
 
+/** Original text layout, with no external photograph or tracking request. */
 export default function AuthLayout() {
-  const outlet = useOutlet();
   return (
-    <div className='relative flex w-full h-screen'>
-      <div className='flex-1 container mx-auto p-10'>
-        <div className='flex flex-col justify-center h-10/12'>
-          <div className='flex items-center mx-auto w-fit gap-2'>
-            <Logo className='size-7' />
-
-            <span className='text-[26px] font-medium text-[#023BB5]'>
-              Well Simulation
-            </span>
-          </div>
-
-          {outlet}
+    <main className='twin-auth twin-workspace'>
+      <section className='twin-auth-intro' aria-label='Well Simulation'>
+        <div className='twin-inline'>
+          <Logo aria-hidden='true' className='size-8' />
+          <strong>Well Simulation</strong>
         </div>
+        <h2>
+          Follow a well.
+          <br />
+          Understand a change.
+        </h2>
+        <p>
+          Check readings and alarms, explore forecasts, and compare proposed control
+          changes.
+        </p>
+        <ol>
+          <li>Choose a well</li>
+          <li>Inspect its recent behaviour</li>
+          <li>Compare a scenario</li>
+        </ol>
+      </section>
+      <div className='twin-auth-form'>
+        <Outlet />
       </div>
-
-      <div
-        className='bg-center bg-cover h-full flex flex-col justify-end gap-6 flex-1 p-10 text-white'
-        style={{ backgroundImage: `url(${authBg})` }}
-      >
-        <div className='w-3/4 mx-auto drop-shadow-lg bg-black/20 rounded-xl p-4'>
-          <h3 className='font-semibold text-3xl text-center'>Wellhead Monitoring</h3>
-          <h5 className='font-medium text-center text-lg'>
-            Live telemetry, alarms, and trends for the North Field.
-          </h5>
-        </div>
-      </div>
-    </div>
+    </main>
   );
 }

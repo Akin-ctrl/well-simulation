@@ -2,7 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-05-31
-- Implementation: Partial
+- Implementation: Implemented
 
 ## Context
 
@@ -50,3 +50,11 @@ Milestone 6 replaced the random Modbus source with the current model state.
 The gateway now reads one complete model fleet snapshot. Ingestion stores the
 supported values with a model source label. Durable model state snapshots remain
 Milestone 7 work.
+
+## Implementation on 2026-10-13
+
+The synthetic process model now supplies all 18 seeded Modbus signals.
+Milestone 7 stores snapshots and recovery events. Milestone 8 uses the same
+one-second step for saved forecasts and isolated scenarios. Model response,
+recovery, and projection tests cover these paths. Field calibration remains
+outside the implemented synthetic reference-well scope.

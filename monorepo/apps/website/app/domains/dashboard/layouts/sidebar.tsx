@@ -19,10 +19,13 @@ export function DesktopNav() {
       className={cn(
         'bg-bgColor-default border-r-border-default sticky inset-y-0 z-2 hidden h-screen',
         'border-r transition-all ease-in-out xl:block',
-        expanded ? 'w-[300px]' : 'w-16'
+        expanded ? 'w-[240px] shrink-0' : 'w-16'
       )}
     >
       <button
+        aria-label={expanded ? 'Collapse navigation' : 'Expand navigation'}
+        aria-expanded={expanded}
+        aria-controls='desktop-navigation'
         className={
           'btn btn-primary absolute! -right-2 top-4 z-2 inline-grid aspect-square size-7 rounded-full!'
         }
@@ -41,11 +44,11 @@ export function DesktopNav() {
       <div className='flex flex-col h-full gap-8 overflow-x-hidden'>
         <div className='border-b border-b-border-default h-[57px] flex items-center'>
           <Link
-            prefetch='viewport'
+            aria-label='Well Simulation overview'
             className={cn('flex gap-1 items-center', expanded ? 'pl-5' : 'pl-2')}
             to={routes.dashboard.overview}
           >
-            <Logo className='size-7' />
+            <Logo aria-hidden='true' className='size-7' />
             {expanded && (
               <span className='text-lg font-semibold text-[#023BB5] transition-all duration-300'>
                 Well Simulation

@@ -136,6 +136,30 @@ describe('budget enforcement', () => {
     expect(response?.status).toBe(429);
   });
 
+  it.each(['/auth/register', '/auth/logout'])(
+    'gives %s the strict budget too',
+    async (path) => {
+      for (let i = 0; i < 10; i += 1) await send(100, path);
+      const { response } = await send(100, path);
+      expect(response?.status).toBe(429);
+    }
+  );
+
+  it('keeps /auth/me on the normal budget, since it checks no password', async () => {
+    // The dashboard checks the session on every page load. Twenty checks in a
+    // minute is ordinary use, not credential guessing.
+    for (let i = 0; i < 20; i += 1) {
+      const { response } = await send(100, '/auth/me');
+      expect(response).toBeUndefined();
+    }
+  });
+
+  it('does not let session checks spend the login budget', async () => {
+    for (let i = 0; i < 20; i += 1) await send(100, '/auth/me');
+    const { response } = await send(100, '/auth/login');
+    expect(response).toBeUndefined();
+  });
+
   it('keeps auth and dashboard budgets in separate buckets', async () => {
     for (let i = 0; i < 10; i += 1) await send(100, '/auth/login');
     const { response } = await send(100, '/dashboard/overview');

@@ -4,13 +4,13 @@ import { Client } from 'pg';
 import { REPO_ROOT, TEST_DATABASE, databaseUrl, serverTarget } from './env';
 
 /**
- * Create a disposable database, apply the canonical migrations, and drop it
+ * Create a disposable database, apply the canonical schema, and drop it
  * again when the suite finishes.
  *
- * Migrations are applied by running `data/src/schema.py`, the same migrator the
+ * The schema is applied by running `data/src/schema.py`, the same migrator the
  * compose stack uses, rather than by a second implementation living in the test
  * harness. That keeps one applier (Standard 6) and means the suite also
- * proves the migrations apply cleanly to an empty database.
+ * proves the schema installs cleanly to an empty database.
  */
 
 async function withMaintenanceClient<T>(
@@ -45,7 +45,7 @@ async function dropTestDatabase(client: Client): Promise<void> {
   await client.query(`DROP DATABASE IF EXISTS "${TEST_DATABASE}"`);
 }
 
-function applyMigrations(): void {
+function applySchema(): void {
   const { host, port, user, password } = serverTarget();
   const python = process.env.PYTHON_BIN ?? 'python3';
 
@@ -70,17 +70,41 @@ export async function setup(): Promise<void> {
   });
 
   try {
-    applyMigrations();
+    applySchema();
   } catch (cause) {
-    const detail =
-      cause instanceof Error && 'stderr' in cause
-        ? String((cause as { stderr?: Buffer }).stderr ?? '')
-        : '';
     throw new Error(
-      `Failed to apply migrations to the test database.\n` +
-        `Ensure the migrator's dependencies are installed:  pip install -r requirements-dev.txt\n${detail}`
+      `Failed to install the schema to the test database.\n` +
+        `Ensure the migrator's dependencies are installed:  pip install -r requirements-dev.txt\n` +
+        describeMigratorFailure(cause)
     );
   }
+}
+
+/**
+ * Report everything the failed migrator run left behind.
+ *
+ * The migrator writes its JSON log to stdout, not stderr, so reporting stderr
+ * alone hid its own "Migration failed" message. A spawn failure (python3
+ * missing) or a kill signal leaves both streams empty, and only `code`,
+ * `status`, or `signal` explain it.
+ */
+function describeMigratorFailure(cause: unknown): string {
+  if (!(cause instanceof Error)) return `Unknown failure: ${String(cause)}`;
+  const failure = cause as Error & {
+    code?: string;
+    status?: number | null;
+    signal?: string | null;
+    stdout?: Buffer | string;
+    stderr?: Buffer | string;
+  };
+  return [
+    `error: ${failure.message}`,
+    `code: ${failure.code ?? 'none'}`,
+    `exit status: ${failure.status ?? 'none'}`,
+    `signal: ${failure.signal ?? 'none'}`,
+    `stdout:\n${String(failure.stdout ?? '').trim() || '(empty)'}`,
+    `stderr:\n${String(failure.stderr ?? '').trim() || '(empty)'}`,
+  ].join('\n');
 }
 
 export async function teardown(): Promise<void> {

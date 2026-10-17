@@ -1,8 +1,8 @@
 # ADR 0022: Restore From Snapshots And Mark Recovery Gaps
 
-- Status: Accepted
+- Status: Accepted, amended
 - Date: 2026-05-31
-- Implementation: Partial
+- Implementation: Complete for startup recovery and recorded clock jumps
 
 ## Context
 
@@ -75,3 +75,65 @@ The scheduler bounds catch-up and records skipped time. Snapshot restoration, re
 ## Implementation on 2026-09-29
 
 A new process run starts from a synthetic balance and is labelled `cold_start_no_snapshot`. Scheduler gaps increment a per-well counter without integrating missed time. Snapshot restoration and durable recovery events remain Milestone 7 work.
+
+## Implementation on 2026-10-03
+
+A host that sleeps is now treated as downtime. Twin-core compares tick time
+with the wall clock on every scheduler pass. When the wall clock has moved
+ahead, the missing time is counted as skipped ticks per well and is not
+replayed, as this record requires for longer gaps. See the ADR 0020 amendment
+of the same date.
+
+## Amendment 2026-10-03: What state a well resumes from after a long gap
+
+### The problem
+
+The recovery flow above says to restore the latest snapshot, catch up small
+gaps, and record larger ones. It does not say what the restored state should
+be after a long gap. Resuming every field as saved would show pressures from
+before the outage hours later. Starting from balance would throw away the
+accumulated damage that snapshots exist to keep.
+
+### Decision
+
+- A gap of 5 seconds or less is caught up with real one-second steps.
+- A longer gap is recorded as skipped ticks and a `snapshot_restored` recovery
+  event. Then:
+  - slow damage (water cut, corrosion, blockage) is restored exactly as saved,
+    and not advanced through the gap;
+  - the operating balance is re-solved with that damage and the current
+    controls;
+  - each fast state (tubing and casing pressure, wellhead and annulus
+    temperature, pump factor) moves from its saved value toward the balance by
+    $e^{-g/\tau}$, where $g$ is the gap and $\tau$ that state's time constant.
+    Tubing pressure's is about 6 minutes, and the others are under 4;
+  - annulus pressure follows the restored annulus temperature by the fixed-mass
+    gas law, and flow and the diagnostic readings are recomputed.
+- A snapshot from another model version, or made under other parameters, is not
+  restored. The well cold-starts and a `snapshot_incompatible` event records why.
+
+The equations, time constants, and their check against the running model are in
+the [Milestone 7 design](../design/twin-core-milestone-7.md).
+
+### Rejected
+
+- **Resume exactly as saved.** Simplest, but after hours offline the fast
+  states are stale values, not the state a real well would be in.
+- **A fixed cut-off, such as 30 minutes.** A 25-minute gap would restore values
+  that would be 98% settled in reality, then jump at 30 minutes.
+- **Always re-settle fast states.** A short restart would jump visibly to
+  balance.
+
+**Do not replay the gap or advance slow damage through it.** Both would present
+model history that was never computed.
+
+## Implementation on 2026-10-12
+
+Twin-core writes a fleet snapshot about every 30 model seconds and on clean
+shutdown. At startup it checks each saved model version, parameter fingerprint,
+timestamp, and process state before using it. It runs up to five real steps for
+a short gap. For a longer gap it keeps saved slow damage and settles fast
+states using the rule above. The well reports `recovering` until its first
+new tick. Startup decisions and clock jumps enter `twin_recovery_event`.
+The local Docker restart restored all 12 active wells; a real host sleep test
+has not run.

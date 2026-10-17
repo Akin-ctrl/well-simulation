@@ -1,6 +1,6 @@
 # ADR 0032: Implement Active Alarm Inspection Before Alarm Lifecycle Workflows
 
-- Status: Accepted
+- Status: Accepted, amended
 - Date: 2026-06-21
 - Implementation: Implemented
 
@@ -56,3 +56,15 @@ This keeps the project honest. It improves dashboard credibility using real exis
 - The API may need a richer alarm DTO for threshold and asset context.
 - Future alarm lifecycle work should get its own ADR before implementation.
 - The demo can say: active alarm inspection is implemented; operator alarm management is planned.
+
+## Amendment, 2026-10-17: add recorded operator actions
+
+The owner approved acknowledgement and timed shelving after the inspection
+workflow. [ADR 0039](0039-alarm-operator-actions.md) adds explicit persistence,
+current-role checks, exact event identity, reviewed writes and atomic audit
+receipts. The Alarm Center now exposes those actions to OPERATIONS. ADMIN does
+not inherit operating authority. Active totals still reflect process conditions.
+
+This amendment completes the prerequisite in the original decision. General
+suppression, rule editing and a site alarm-management program remain outside
+this workflow. The earlier inspection-only decision remains above as history.

@@ -1,6 +1,6 @@
 """Contract tests binding the Drizzle read layer to the canonical SQL schema.
 
-ADR 0006 makes the SQL migrations canonical and the Drizzle schema a typed
+ADR 0006 makes the single SQL schema canonical and the Drizzle schema a typed
 mirror of them. Nothing enforced that, so the two drifted: enum values and
 table definitions were maintained independently in both places.
 
@@ -17,41 +17,38 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-MIGRATIONS_DIR = REPO_ROOT / "data" / "sql" / "migrations"
+SCHEMA_PATH = REPO_ROOT / "data" / "sql" / "schema.sql"
 DRIZZLE_SCHEMAS = REPO_ROOT / "monorepo" / "packages" / "db" / "schemas"
 
 
-def migration_sql() -> str:
-    """Return every migration concatenated, with original casing preserved.
+def canonical_sql() -> str:
+    """Read the canonical schema with original casing preserved.
 
     Identifiers are compared case-insensitively via the patterns below; the
     text itself must not be lowercased or enum *values* would be corrupted
     along with the keywords.
     """
-    return "\n".join(
-        path.read_text(encoding="utf-8")
-        for path in sorted(MIGRATIONS_DIR.glob("*.sql"))
-    )
+    return SCHEMA_PATH.read_text(encoding="utf-8")
 
 
 def sql_tables() -> set[str]:
-    """Return every table name created by the migrations."""
+    """Return every table name created by the schema."""
     return {
         name.lower()
         for name in re.findall(
-            r"create table if not exists\s+([a-zA-Z_]+)",
-            migration_sql(),
+            r"create table(?: if not exists)?\s+([a-zA-Z_]+)",
+            canonical_sql(),
             re.IGNORECASE,
         )
     }
 
 
 def sql_enums() -> dict[str, list[str]]:
-    """Return every enum type created by the migrations, with its values."""
+    """Return every enum type created by the schema, with its values."""
     enums: dict[str, list[str]] = {}
     for name, body in re.findall(
         r"create type\s+\"?([a-zA-Z_]+)\"?\s+as enum\s*\(([^)]*)\)",
-        migration_sql(),
+        canonical_sql(),
         re.IGNORECASE,
     ):
         enums[name.lower()] = re.findall(r"'([^']+)'", body)
@@ -105,7 +102,7 @@ class TestEnums:
     @pytest.mark.parametrize("enum_name", sorted(drizzle_enums()))
     def test_values_match_sql(self, enum_name: str) -> None:
         assert drizzle_enums()[enum_name] == sql_enums()[enum_name], (
-            f"'{enum_name}' differs between the SQL migrations and "
+            f"'{enum_name}' differs between the SQL schema and "
             f"packages/db/schemas/enums.ts"
         )
 
@@ -146,7 +143,7 @@ class TestViews:
             name.lower()
             for name in re.findall(
                 r"create (?:or replace )?(?:materialized )?view\s+([a-zA-Z_0-9]+)",
-                migration_sql(),
+                canonical_sql(),
                 re.IGNORECASE,
             )
         }

@@ -5,9 +5,10 @@ info:
   summary: Dashboard-facing API for the wellhead monitoring simulation.
   description: |
     This contract documents the public API exposed by the TypeScript/Hono service.
-    It covers the currently implemented dashboard/auth surface and keeps the
-    digital-twin evolution honest: twin-core endpoints belong in the internal
-    contract until they are implemented.
+    It covers monitoring, authentication, saved projections, synthetic control
+    commands, parameter proposals and alarm operator actions. Controls and alarm
+    actions require current OPERATIONS
+    authority; parameter publication requires ADMIN. No route controls field hardware.
 servers:
   - url: /api
     description: Dashboard reverse-proxy path.
@@ -17,7 +18,383 @@ tags:
   - name: Health
   - name: Auth
   - name: Dashboard
+  - name: Twin
+  - name: Alarms
 paths:
+  /alarms:
+    get:
+      tags:
+      - Alarms
+      operationId: listAlarmLifecycle
+      summary: Read retained events and independent condition, acknowledgement and shelf
+        states.
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: Current alarm state or the committed action receipt.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - msg
+                - status
+                properties:
+                  data:
+                    $ref: '#/components/schemas/AlarmList'
+                  msg:
+                    type: string
+                  status:
+                    type: integer
+                    const: 200
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/ServerError'
+      parameters:
+      - name: view
+        in: query
+        schema:
+          type: string
+          enum:
+          - attention
+          - active
+          - history
+          default: attention
+      - name: wellheadId
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 2147483647
+      - name: cursor
+        in: query
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 600
+  /alarms/shelves:
+    get:
+      tags:
+      - Alarms
+      operationId: listAlarmShelves
+      summary: Read current shelves, including those with no active event.
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: Current alarm state or the committed action receipt.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - msg
+                - status
+                properties:
+                  data:
+                    $ref: '#/components/schemas/AlarmShelfList'
+                  msg:
+                    type: string
+                  status:
+                    type: integer
+                    const: 200
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/ServerError'
+      parameters:
+      - name: wellheadId
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 2147483647
+      - name: cursor
+        in: query
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 600
+  /alarms/events/{eventId}:
+    get:
+      tags:
+      - Alarms
+      operationId: readAlarmEvent
+      summary: Read an exact retained event and the latest 20 actions for its well and
+        rule.
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: Current alarm state or the committed action receipt.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - msg
+                - status
+                properties:
+                  data:
+                    $ref: '#/components/schemas/AlarmDetail'
+                  msg:
+                    type: string
+                  status:
+                    type: integer
+                    const: 200
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/ServerError'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      parameters:
+      - name: eventId
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: ^[1-9][0-9]{0,18}$
+          description: Positive PostgreSQL bigint decimal string, at most 9223372036854775807.
+            Never convert to a JavaScript number.
+      - name: triggeredAt
+        in: query
+        required: true
+        schema:
+          type: string
+          format: date-time
+          description: UTC timestamp; preserve all six fractional digits for event identity.
+  /alarms/actions/{requestKey}:
+    get:
+      tags:
+      - Alarms
+      operationId: readOwnAlarmReceipt
+      summary: Find the signed-in actor’s committed result after a missing reply.
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: Current alarm state or the committed action receipt.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - msg
+                - status
+                properties:
+                  data:
+                    $ref: '#/components/schemas/AlarmReceipt'
+                  msg:
+                    type: string
+                  status:
+                    type: integer
+                    const: 200
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/ServerError'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      parameters:
+      - name: requestKey
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+  /alarms/actions:
+    post:
+      tags:
+      - Alarms
+      operationId: applyAlarmAction
+      summary: OPERATIONS acknowledges one event, shelves a rule, or ends a shelf.
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: Current alarm state or the committed action receipt.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - msg
+                - status
+                properties:
+                  data:
+                    $ref: '#/components/schemas/AlarmReceipt'
+                  msg:
+                    type: string
+                  status:
+                    type: integer
+                    const: 200
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/ServerError'
+        '404':
+          description: Event is no longer retained, or target does not exist.
+        '409':
+          description: Acknowledgement, shelf revision or request key conflicts. Read
+            and review the current state.
+        '413':
+          description: Body exceeds 4096 bytes.
+        '429':
+          description: Write budget exhausted.
+        '503':
+          description: Outcome unknown. Check the request key before retrying.
+      description: Requires current OPERATIONS authority, explicit confirmation and
+        a reason. The shared control write budget permits ten writes per user per minute.
+        Maximum body size is 4096 bytes. Receipt, lifecycle state and audit commit together.
+        Repeating the same key and input returns the original receipt. A shelf expires
+        by database time and never changes condition truth. On an uncertain outcome,
+        look up the same request key before retrying the exact input.
+      parameters:
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AlarmActionInput'
+  /twin/wellheads/{wellheadId}/forecast-schedule:
+    parameters:
+      - name: wellheadId
+        in: path
+        required: true
+        schema: {type: integer, minimum: 1, maximum: 2147483647}
+    get:
+      tags: [Twin]
+      operationId: readForecastSchedule
+      summary: Read the schedule, latest attempt and latest completed job.
+      security: [{cookieAuth: []}]
+      responses:
+        "200":
+          description: Schedule metadata, with null for records that do not exist.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, msg, status]
+                properties:
+                  msg: {type: string}
+                  status: {type: integer, const: 200}
+                  data:
+                    type: object
+                    required: [schedule, latestJob, latestCompleted]
+                    properties:
+                      schedule: {oneOf: [{$ref: "#/components/schemas/ForecastSchedule"}, {type: "null"}]}
+                      latestJob: {oneOf: [{$ref: "#/components/schemas/ForecastJob"}, {type: "null"}]}
+                      latestCompleted: {oneOf: [{$ref: "#/components/schemas/ForecastJob"}, {type: "null"}]}
+        "400": {$ref: "#/components/responses/ValidationError"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "500": {$ref: "#/components/responses/ServerError"}
+    put:
+      tags: [Twin]
+      operationId: saveForecastSchedule
+      summary: Save reviewed settings with current administrator authority.
+      description: Saving takes ownership and starts a new interval. Disabling leaves claimed work intact. Read status after an uncertain response; do not replay automatically.
+      security: [{cookieAuth: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [expectedRevision, enabled, intervalMinutes, durationMinutes, reason, confirmed]
+              properties:
+                expectedRevision: {type: integer, minimum: 0, maximum: 2147483646}
+                enabled: {type: boolean}
+                intervalMinutes: {type: integer, minimum: 5, maximum: 1440}
+                durationMinutes: {type: integer, minimum: 5, maximum: 30}
+                reason: {type: string, minLength: 1, maxLength: 500}
+                confirmed: {type: boolean, const: true}
+      responses:
+        "200":
+          description: Settings and audit record committed together.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, msg, status]
+                properties:
+                  msg: {type: string}
+                  status: {type: integer, const: 200}
+                  data: {$ref: "#/components/schemas/ForecastSchedule"}
+        "400": {$ref: "#/components/responses/ValidationError"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409":
+          description: Settings changed or the well is inactive. Reload and review before saving.
+        "503": {$ref: "#/components/responses/ServerError"}
+  /twin/wellheads/{wellheadId}/snapshots:
+    get:
+      summary: Find exact saved states for historical scenarios.
+      description: Requires scenario analysis permission. Search covers 24 hours at or before a UTC time within the preceding 89 days. Compatibility is checked again when running.
+      operationId: findTwinSnapshots
+      security: [{cookieAuth: []}]
+      parameters:
+        - name: wellheadId
+          in: path
+          required: true
+          schema: {type: integer, minimum: 1, maximum: 2147483647}
+        - name: at
+          in: query
+          required: true
+          schema: {$ref: '#/components/schemas/SnapshotSelection/properties/simulatedAt'}
+      responses:
+        '200':
+          description: Bounded snapshot metadata, newest first.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, msg, status]
+                properties:
+                  data: {$ref: '#/components/schemas/SnapshotList'}
+                  msg: {type: string}
+                  status: {type: integer, const: 200}
+        '400': {description: Invalid search fields or time.}
+        '403': {description: Missing authority.}
+        '404': {description: Unknown active well.}
+        '503': {description: Model parameters or snapshot storage unavailable.}
   /health:
     get:
       tags: [Health]
@@ -50,6 +427,27 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ReadinessResponse"
+  /metrics:
+    get:
+      tags: [Health]
+      summary: Read API service metrics in Prometheus format.
+      description: |
+        Unauthenticated service counters, durations and database-readiness metrics.
+        This endpoint exposes no well readings. Prometheus scrapes the internal
+        API address; the dashboard proxy also exposes it at /api/metrics.
+        Global API rate limiting applies. Reading metrics does not probe the
+        database again; readiness metrics describe the most recent /ready check.
+      operationId: getApiMetrics
+      security: []
+      responses:
+        '200':
+          description: Current metrics from this API process.
+          content:
+            text/plain:
+              schema:
+                type: string
+        '429':
+          description: API request limit exceeded.
   /auth/register:
     post:
       tags: [Auth]
@@ -132,9 +530,13 @@ paths:
   /auth/logout:
     post:
       tags: [Auth]
-      summary: Clear the current session cookie.
+      summary: End every session of the signed-in user and clear the cookie.
+      description: >-
+        Moves the user's session version on (ADR 0037), so every session token
+        issued so far is refused from then on, on any device. Requires a session.
       operationId: logoutUser
-      security: []
+      security:
+        - cookieAuth: []
       responses:
         "200":
           description: Logout succeeded. The session cookie is cleared.
@@ -147,6 +549,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/LogoutResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "500":
           $ref: "#/components/responses/ServerError"
   /dashboard/overview:
@@ -188,7 +592,7 @@ paths:
   /dashboard/active-alarms:
     get:
       tags: [Dashboard]
-      summary: Return active alarm events.
+      summary: Return totals over all active alarms and a capped, ranked list of them.
       operationId: getActiveAlarms
       security:
         - cookieAuth: []
@@ -250,6 +654,732 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "500":
           $ref: "#/components/responses/ServerError"
+  /twin/status:
+    get:
+      tags: [Twin]
+      summary: Read lifecycle and successful process freshness, including partial startup.
+      operationId: getTwinModelStatus
+      security: [{cookieAuth: []}]
+      responses:
+        "200":
+          description: Model state, or available false if its optional read failed.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, msg, status]
+                properties:
+                  msg: {type: string}
+                  status: {type: integer, const: 200}
+                  data: {$ref: "#/components/schemas/FleetModelStatus"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+  /twin/wellheads/{wellheadId}/runs:
+    get:
+      tags: [Twin]
+      summary: List saved run summaries for one well, newest first.
+      description: Shared with authorized dashboard readers. Metadata can outlive retained points.
+      operationId: listTwinRuns
+      security: [{cookieAuth: []}]
+      parameters:
+        - name: wellheadId
+          in: path
+          required: true
+          schema: {type: integer, minimum: 1}
+        - name: kind
+          in: query
+          schema: {type: string, enum: [forecast, scenario], default: scenario}
+        - name: limit
+          in: query
+          schema: {type: integer, minimum: 1, maximum: 50, default: 20}
+        - name: offset
+          in: query
+          schema: {type: integer, minimum: 0, maximum: 10000, default: 0}
+      responses:
+        "200":
+          description: Bounded summary page with hasMore for pagination.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, msg, status]
+                properties:
+                  msg: {type: string}
+                  status: {type: integer, const: 200}
+                  data:
+                    type: object
+                    required: [items, hasMore]
+                    properties:
+                      hasMore: {type: boolean}
+                      items:
+                        type: array
+                        maxItems: 50
+                        items: {$ref: "#/components/schemas/RunSummary"}
+        "400": {$ref: "#/components/responses/ValidationError"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+  /twin/wellheads/{wellheadId}/forecast:
+    post:
+      tags: [Twin]
+      summary: Run and save a forecast from current synthetic model state.
+      operationId: createTwinForecast
+      security: [{cookieAuth: []}]
+      parameters:
+        - name: wellheadId
+          in: path
+          required: true
+          schema: {type: integer, minimum: 1}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/ForecastRequest"}
+      responses:
+        "200":
+          description: Forecast saved and returned in the standard API envelope.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ProjectionEnvelope"}
+        "400": {$ref: "#/components/responses/ValidationError"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "503": {$ref: "#/components/responses/ServerError"}
+        "504": {$ref: "#/components/responses/ServerError"}
+  /twin/scenarios:
+    post:
+      tags: [Twin]
+      summary: Run and save a private control scenario with an unchanged baseline.
+      operationId: createTwinScenario
+      security: [{cookieAuth: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/ScenarioRequest"}
+      responses:
+        "200":
+          description: Scenario saved and returned in the standard API envelope.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ProjectionEnvelope"}
+        "400": {$ref: "#/components/responses/ValidationError"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409": {description: Selected snapshot is incompatible or outside the supported age window.}
+        "503": {$ref: "#/components/responses/ServerError"}
+        "504": {$ref: "#/components/responses/ServerError"}
+  /twin/forecasts/{runId}:
+    get:
+      tags: [Twin]
+      summary: Load a complete saved forecast.
+      operationId: getTwinForecast
+      security: [{cookieAuth: []}]
+      parameters:
+        - name: runId
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        "200":
+          description: Complete forecast with sampled points.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/SavedProjectionEnvelope"}
+        "400": {$ref: "#/components/responses/ValidationError"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "410": {$ref: "#/components/responses/Gone"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+  /twin/scenarios/{runId}:
+    get:
+      tags: [Twin]
+      summary: Load a complete saved scenario and baseline.
+      operationId: getTwinScenario
+      security: [{cookieAuth: []}]
+      parameters:
+        - name: runId
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        "200":
+          description: Complete scenario with sampled points.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/SavedProjectionEnvelope"}
+        "400": {$ref: "#/components/responses/ValidationError"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "410": {$ref: "#/components/responses/Gone"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+  /twin/wellheads/{wellheadId}/controls:
+    get:
+      tags:
+      - Twin
+      summary: Read durable and running synthetic controls.
+      operationId: getLiveControlState
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: Durable status. A queued command is not yet applied.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ControlStateResponse'
+        '400':
+          description: Invalid JSON, target, or confirmation.
+        '401':
+          description: Missing or revoked session.
+        '403':
+          description: Current account lacks authority.
+        '404':
+          description: Unknown command or well.
+        '409':
+          description: Stale revision, conflicting proposal, or idempotency-key reuse.
+        '429':
+          description: More than ten writes per authenticated user per minute.
+        '503':
+          description: Dependency unavailable or commit outcome unknown. Read status
+            or retry the same proposal; do not assume a write failed.
+      parameters:
+      - name: wellheadId
+        in: path
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 2147483647
+  /twin/wellheads/{wellheadId}/control-commands:
+    get:
+      tags:
+      - Twin
+      summary: Read the current OPERATIONS user's proposals for one well.
+      operationId: listOwnControlProposals
+      security:
+      - cookieAuth: []
+      parameters:
+      - name: wellheadId
+        in: path
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 2147483647
+      - name: offset
+        in: query
+        schema:
+          type: integer
+          minimum: 0
+          maximum: 10000
+          default: 0
+      - name: idempotencyKey
+        in: query
+        description: Optional exact lookup for the current creator after a missing response.
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: At most 20 own proposals, newest first. Does not require the
+            model.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - msg
+                - status
+                properties:
+                  msg:
+                    type: string
+                  status:
+                    const: 200
+                  data:
+                    type: object
+                    required:
+                    - items
+                    - offset
+                    - hasMore
+                    properties:
+                      items:
+                        type: array
+                        maxItems: 20
+                        items:
+                          $ref: '#/components/schemas/ControlProposalSummary'
+                      offset:
+                        type: integer
+                      hasMore:
+                        type: boolean
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '503':
+          description: Database unavailable.
+  /twin/wellheads/{wellheadId}/parameter-changes:
+    get:
+      tags:
+      - Twin
+      summary: Read the current ADMIN user's proposals for one well.
+      operationId: listOwnParameterProposals
+      security:
+      - cookieAuth: []
+      parameters:
+      - name: wellheadId
+        in: path
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 2147483647
+      - name: offset
+        in: query
+        schema:
+          type: integer
+          minimum: 0
+          maximum: 10000
+          default: 0
+      - name: idempotencyKey
+        in: query
+        description: Optional exact lookup for the current creator after a missing response.
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: At most 20 own proposals, newest first. Does not require the
+            model.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - msg
+                - status
+                properties:
+                  msg:
+                    type: string
+                  status:
+                    const: 200
+                  data:
+                    type: object
+                    required:
+                    - items
+                    - offset
+                    - hasMore
+                    properties:
+                      items:
+                        type: array
+                        maxItems: 20
+                        items:
+                          $ref: '#/components/schemas/ParameterChange'
+                      offset:
+                        type: integer
+                      hasMore:
+                        type: boolean
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '503':
+          description: Database unavailable.
+  /twin/control-commands:
+    post:
+      tags:
+      - Twin
+      summary: Create an immutable OPERATIONS control draft.
+      operationId: draftControlCommand
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          description: Durable status. A queued command is not yet applied.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ControlCommandResponse'
+        '400':
+          description: Invalid JSON, target, or confirmation.
+        '401':
+          description: Missing or revoked session.
+        '403':
+          description: Current account lacks authority.
+        '404':
+          description: Unknown command or well.
+        '409':
+          description: Stale revision, conflicting proposal, or idempotency-key reuse.
+        '429':
+          description: More than ten writes per authenticated user per minute.
+        '503':
+          description: Dependency unavailable or commit outcome unknown. Read status
+            or retry the same proposal; do not assume a write failed.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ControlDraftRequest'
+      parameters:
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          format: uuid
+  /twin/control-commands/{id}/activate:
+    post:
+      tags:
+      - Twin
+      summary: Explicitly activate the creator's command.
+      operationId: activateControlCommand
+      security:
+      - cookieAuth: []
+      responses:
+        '202':
+          description: Durable status. A queued command is not yet applied.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ControlCommandResponse'
+        '400':
+          description: Invalid JSON, target, or confirmation.
+        '401':
+          description: Missing or revoked session.
+        '403':
+          description: Current account lacks authority.
+        '404':
+          description: Unknown command or well.
+        '409':
+          description: Stale revision, conflicting proposal, or idempotency-key reuse.
+        '429':
+          description: More than ten writes per authenticated user per minute.
+        '503':
+          description: Dependency unavailable or commit outcome unknown. Read status
+            or retry the same proposal; do not assume a write failed.
+        '200':
+          description: Repeated activation returns an existing terminal result without
+            requeuing.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ControlCommandResponse'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ControlActivateRequest'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+  /twin/control-commands/{id}/cancel:
+    post:
+      tags:
+      - Twin
+      summary: Cancel the creator's draft or queued command.
+      operationId: cancelControlCommand
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: Durable status. A queued command is not yet applied.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ControlCommandResponse'
+        '400':
+          description: Invalid JSON, target, or confirmation.
+        '401':
+          description: Missing or revoked session.
+        '403':
+          description: Current account lacks authority.
+        '404':
+          description: Unknown command or well.
+        '409':
+          description: Stale revision, conflicting proposal, or idempotency-key reuse.
+        '429':
+          description: More than ten writes per authenticated user per minute.
+        '503':
+          description: Dependency unavailable or commit outcome unknown. Read status
+            or retry the same proposal; do not assume a write failed.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExplicitConfirmation'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+  /twin/control-commands/{id}:
+    get:
+      tags:
+      - Twin
+      summary: Read command status and lifecycle events.
+      operationId: getControlCommand
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: Durable status. A queued command is not yet applied.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ControlCommandResponse'
+        '400':
+          description: Invalid JSON, target, or confirmation.
+        '401':
+          description: Missing or revoked session.
+        '403':
+          description: Current account lacks authority.
+        '404':
+          description: Unknown command or well.
+        '409':
+          description: Stale revision, conflicting proposal, or idempotency-key reuse.
+        '429':
+          description: More than ten writes per authenticated user per minute.
+        '503':
+          description: Dependency unavailable or commit outcome unknown. Read status
+            or retry the same proposal; do not assume a write failed.
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+  /twin/parameter-changes:
+    post:
+      tags:
+      - Twin
+      summary: Create an ADMIN parameter proposal.
+      operationId: draftParameterChange
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          description: Stored proposal status. A new draft needs explicit publication.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ParameterChangeResponse'
+        '400':
+          description: Invalid JSON, target, or confirmation.
+        '401':
+          description: Missing or revoked session.
+        '403':
+          description: Current account lacks authority.
+        '404':
+          description: Unknown parameter proposal or well.
+        '409':
+          description: Stale revision, conflicting proposal, or idempotency-key reuse.
+        '429':
+          description: More than ten writes per authenticated user per minute.
+        '503':
+          description: Dependency unavailable or commit outcome unknown. Read status
+            or retry the same proposal; do not assume a write failed.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ParameterDraftRequest'
+      parameters:
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          format: uuid
+  /twin/parameter-changes/{id}/publish:
+    post:
+      tags:
+      - Twin
+      summary: Publish an attributed override requiring restart.
+      operationId: publishParameterChange
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: Stored proposal status. A published override requires model restart; it is not proof of running adoption.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ParameterChangeResponse'
+        '400':
+          description: Invalid JSON, target, or confirmation.
+        '401':
+          description: Missing or revoked session.
+        '403':
+          description: Current account lacks authority.
+        '404':
+          description: Unknown parameter proposal or well.
+        '409':
+          description: Stale revision, conflicting proposal, or idempotency-key reuse.
+        '429':
+          description: More than ten writes per authenticated user per minute.
+        '503':
+          description: Dependency unavailable or commit outcome unknown. Read status
+            or retry the same proposal; do not assume a write failed.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExplicitConfirmation'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+  /twin/parameter-changes/{id}/cancel:
+    post:
+      tags:
+      - Twin
+      summary: Cancel the creator's parameter proposal.
+      operationId: cancelParameterChange
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: Stored proposal status. Cancels a draft; an already terminal proposal keeps its outcome.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ParameterChangeResponse'
+        '400':
+          description: Invalid JSON, target, or confirmation.
+        '401':
+          description: Missing or revoked session.
+        '403':
+          description: Current account lacks authority.
+        '404':
+          description: Unknown parameter proposal or well.
+        '409':
+          description: Stale revision, conflicting proposal, or idempotency-key reuse.
+        '429':
+          description: More than ten writes per authenticated user per minute.
+        '503':
+          description: Dependency unavailable or commit outcome unknown. Read status
+            or retry the same proposal; do not assume a write failed.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExplicitConfirmation'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+  /twin/parameter-changes/{id}:
+    get:
+      tags:
+      - Twin
+      summary: Read the proposal and the currently running parameter identity.
+      operationId: getParameterChange
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: Stored proposal status and running parameter identity, or null when the model read is unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ParameterChangeResponse'
+        '400':
+          description: Invalid proposal identifier.
+        '401':
+          description: Missing or revoked session.
+        '403':
+          description: Current account lacks authority.
+        '404':
+          description: Unknown parameter proposal or well.
+        '429':
+          description: API request limit exceeded.
+        '503':
+          description: Proposal storage unavailable. Retry the status read.
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+  /twin/wellheads/{wellheadId}/parameters:
+    get:
+      tags: [Twin]
+      summary: Read current override revision IDs and running model identity.
+      operationId: getModelParameterStatus
+      security: [{cookieAuth: []}]
+      parameters:
+        - name: wellheadId
+          in: path
+          required: true
+          schema: {type: integer, minimum: 1}
+      responses:
+        '200':
+          description: ADMIN read with latestOverrides, modelVersion, status, and running controls (or null if unavailable).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, msg, status]
+                properties:
+                  msg: {type: string}
+                  status: {const: 200}
+                  data:
+                    type: object
+                    required: [wellheadId, modelVersion, status, latestOverrides, running, catalogue]
+                    properties:
+                      wellheadId: {type: integer}
+                      modelVersion: {type: string}
+                      status: {type: string}
+                      running:
+                        anyOf:
+                          - {$ref: '#/components/schemas/RunningControls'}
+                          - {type: 'null'}
+                      catalogue: {$ref: '#/components/schemas/ParameterCatalogue'}
+                      latestOverrides:
+                        type: array
+                        items:
+                          type: object
+                          required: [parameterOverrideId, wellheadId, modelVersion, parameterKey, value, unit, source, changedBy, reason, validFrom]
+                          properties:
+                            parameterOverrideId: {type: integer}
+                            wellheadId: {type: integer}
+                            modelVersion: {type: string}
+                            parameterKey: {type: string}
+                            value: {type: [number, 'null']}
+                            unit: {type: [string, 'null']}
+                            source: {type: string}
+                            changedBy: {type: string}
+                            reason: {type: string}
+                            validFrom: {type: string, format: date-time}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '503': {description: Model identity or database unavailable.}
 components:
   securitySchemes:
     cookieAuth:
@@ -278,6 +1408,18 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/ErrorResponse"
+    NotFound:
+      description: The requested well or saved run does not exist.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Gone:
+      description: Some or all saved points have expired.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
     ServerError:
       description: Unexpected server-side error. Secrets and raw stack traces are not returned.
       content:
@@ -285,6 +1427,1355 @@ components:
           schema:
             $ref: "#/components/schemas/ErrorResponse"
   schemas:
+    AlarmTarget:
+      type: object
+      required:
+      - wellheadId
+      - wellheadName
+      - locationName
+      - ruleId
+      - parameterName
+      - unit
+      - operator
+      - threshold
+      - severity
+      - triggerAfter
+      - clearAfter
+      properties:
+        wellheadId:
+          type: integer
+          minimum: 1
+          maximum: 2147483647
+        wellheadName:
+          type: string
+        locationName:
+          type: string
+        ruleId:
+          type: integer
+          minimum: 1
+          maximum: 2147483647
+        parameterName:
+          type: string
+        unit:
+          oneOf:
+          - type: string
+          - type: 'null'
+        operator:
+          type: string
+        threshold:
+          type: number
+        severity:
+          type: string
+        triggerAfter:
+          type: integer
+          minimum: 1
+          maximum: 2147483647
+        clearAfter:
+          type: integer
+          minimum: 1
+          maximum: 2147483647
+    AlarmShelfState:
+      type: object
+      required:
+      - revision
+      - until
+      - active
+      - updatedAt
+      - actorName
+      - reason
+      properties:
+        revision:
+          type: integer
+          minimum: 1
+          maximum: 2147483647
+        until:
+          oneOf:
+          - type: string
+            format: date-time
+            description: UTC timestamp; preserve all six fractional digits for event identity.
+          - type: 'null'
+        active:
+          type: boolean
+        updatedAt:
+          type: string
+          format: date-time
+          description: UTC timestamp; preserve all six fractional digits for event identity.
+        actorName:
+          type: string
+        reason:
+          type: string
+    AlarmReceipt:
+      type: object
+      required:
+      - actionId
+      - action
+      - occurredAt
+      - actorUserId
+      - actorName
+      - reason
+      - target
+      - eventId
+      - triggeredAt
+      - revision
+      - shelvedUntil
+      properties:
+        actionId:
+          type: string
+          format: uuid
+        action:
+          type: string
+          enum:
+          - acknowledge
+          - shelve
+          - unshelve
+        occurredAt:
+          type: string
+          format: date-time
+          description: UTC timestamp; preserve all six fractional digits for event identity.
+        actorUserId:
+          type: integer
+          minimum: 1
+          maximum: 2147483647
+        actorName:
+          type: string
+        reason:
+          type: string
+        target:
+          $ref: '#/components/schemas/AlarmTarget'
+        eventId:
+          oneOf:
+          - type: string
+            pattern: ^[1-9][0-9]{0,18}$
+            description: Positive PostgreSQL bigint decimal string, at most 9223372036854775807.
+              Never convert to a JavaScript number.
+          - type: 'null'
+        triggeredAt:
+          oneOf:
+          - type: string
+            format: date-time
+            description: UTC timestamp; preserve all six fractional digits for event identity.
+          - type: 'null'
+        revision:
+          oneOf:
+          - type: integer
+            minimum: 1
+            maximum: 2147483647
+          - type: 'null'
+        shelvedUntil:
+          oneOf:
+          - type: string
+            format: date-time
+            description: UTC timestamp; preserve all six fractional digits for event identity.
+          - type: 'null'
+    AlarmLifecycleEvent:
+      type: object
+      required:
+      - eventId
+      - triggeredAt
+      - clearedAt
+      - severity
+      - triggeredValue
+      - target
+      - acknowledgement
+      - shelf
+      properties:
+        eventId:
+          type: string
+          pattern: ^[1-9][0-9]{0,18}$
+          description: Positive PostgreSQL bigint decimal string, at most 9223372036854775807.
+            Never convert to a JavaScript number.
+        triggeredAt:
+          type: string
+          format: date-time
+          description: UTC timestamp; preserve all six fractional digits for event identity.
+        clearedAt:
+          oneOf:
+          - type: string
+            format: date-time
+            description: UTC timestamp; preserve all six fractional digits for event identity.
+          - type: 'null'
+        severity:
+          type: string
+        triggeredValue:
+          type: number
+        target:
+          $ref: '#/components/schemas/AlarmTarget'
+        acknowledgement:
+          oneOf:
+          - type: object
+            required:
+            - at
+            - actorName
+            - reason
+            properties:
+              at:
+                type: string
+                format: date-time
+                description: UTC timestamp; preserve all six fractional digits for event
+                  identity.
+              actorName:
+                type: string
+              reason:
+                type: string
+          - type: 'null'
+        shelf:
+          oneOf:
+          - $ref: '#/components/schemas/AlarmShelfState'
+          - type: 'null'
+    AlarmSummary:
+      type: object
+      required:
+      - active
+      - critical
+      - attention
+      - shelves
+      - retained
+      properties:
+        active:
+          type: integer
+          minimum: 0
+        critical:
+          type: integer
+          minimum: 0
+        attention:
+          type: integer
+          minimum: 0
+        shelves:
+          type: integer
+          minimum: 0
+        retained:
+          type: integer
+          minimum: 0
+    AlarmList:
+      type: object
+      required:
+      - wells
+      - summary
+      - observedAt
+      - nextCursor
+      - items
+      properties:
+        wells:
+          type: array
+          items:
+            type: object
+            required:
+            - wellheadId
+            - wellheadName
+            properties:
+              wellheadId:
+                type: integer
+                minimum: 1
+                maximum: 2147483647
+              wellheadName:
+                type: string
+        summary:
+          $ref: '#/components/schemas/AlarmSummary'
+        observedAt:
+          type: string
+          format: date-time
+          description: UTC timestamp; preserve all six fractional digits for event identity.
+        nextCursor:
+          oneOf:
+          - type: string
+          - type: 'null'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AlarmLifecycleEvent'
+          maxItems: 50
+    AlarmShelfList:
+      type: object
+      required:
+      - wells
+      - summary
+      - observedAt
+      - nextCursor
+      - items
+      - total
+      properties:
+        wells:
+          type: array
+          items:
+            type: object
+            required:
+            - wellheadId
+            - wellheadName
+            properties:
+              wellheadId:
+                type: integer
+                minimum: 1
+                maximum: 2147483647
+              wellheadName:
+                type: string
+        summary:
+          $ref: '#/components/schemas/AlarmSummary'
+        observedAt:
+          type: string
+          format: date-time
+          description: UTC timestamp; preserve all six fractional digits for event identity.
+        nextCursor:
+          oneOf:
+          - type: string
+          - type: 'null'
+        items:
+          type: array
+          items:
+            type: object
+            required:
+            - target
+            - state
+            properties:
+              target:
+                $ref: '#/components/schemas/AlarmTarget'
+              state:
+                $ref: '#/components/schemas/AlarmShelfState'
+          maxItems: 50
+        total:
+          type: integer
+          minimum: 0
+    AlarmDetail:
+      type: object
+      required:
+      - observedAt
+      - event
+      - actions
+      properties:
+        observedAt:
+          type: string
+          format: date-time
+          description: UTC timestamp; preserve all six fractional digits for event identity.
+        event:
+          $ref: '#/components/schemas/AlarmLifecycleEvent'
+        actions:
+          type: array
+          items:
+            $ref: '#/components/schemas/AlarmReceipt'
+          maxItems: 20
+    AlarmActionInput:
+      oneOf:
+      - type: object
+        required:
+        - action
+        - eventId
+        - triggeredAt
+        - reason
+        - confirmed
+        properties:
+          action:
+            type: string
+            const: acknowledge
+          eventId:
+            type: string
+            pattern: ^[1-9][0-9]{0,18}$
+            description: Positive PostgreSQL bigint decimal string, at most 9223372036854775807.
+              Never convert to a JavaScript number.
+          triggeredAt:
+            type: string
+            format: date-time
+            description: UTC timestamp; preserve all six fractional digits for event identity.
+          reason:
+            type: string
+            minLength: 1
+            maxLength: 500
+            description: Trimmed operator reason.
+          confirmed:
+            type: boolean
+            const: true
+        additionalProperties: false
+      - type: object
+        required:
+        - action
+        - wellheadId
+        - ruleId
+        - expectedRevision
+        - durationMinutes
+        - reason
+        - confirmed
+        properties:
+          action:
+            type: string
+            const: shelve
+          wellheadId:
+            type: integer
+            minimum: 1
+            maximum: 2147483647
+          ruleId:
+            type: integer
+            minimum: 1
+            maximum: 2147483647
+          expectedRevision:
+            type: integer
+            minimum: 0
+            maximum: 2147483646
+          durationMinutes:
+            type: integer
+            minimum: 5
+            maximum: 480
+          reason:
+            type: string
+            minLength: 1
+            maxLength: 500
+            description: Trimmed operator reason.
+          confirmed:
+            type: boolean
+            const: true
+        additionalProperties: false
+      - type: object
+        required:
+        - action
+        - wellheadId
+        - ruleId
+        - expectedRevision
+        - reason
+        - confirmed
+        properties:
+          action:
+            type: string
+            const: unshelve
+          wellheadId:
+            type: integer
+            minimum: 1
+            maximum: 2147483647
+          ruleId:
+            type: integer
+            minimum: 1
+            maximum: 2147483647
+          expectedRevision:
+            type: integer
+            minimum: 0
+            maximum: 2147483646
+          reason:
+            type: string
+            minLength: 1
+            maxLength: 500
+            description: Trimmed operator reason.
+          confirmed:
+            type: boolean
+            const: true
+        additionalProperties: false
+    LiveControlTargets:
+      type: object
+      required: []
+      properties:
+        chokePositionPercent:
+          type: number
+          minimum: 0
+          maximum: 100
+        masterValveOpen:
+          type: boolean
+        wingValveOpen:
+          type: boolean
+        pumpOn:
+          type: boolean
+        emergencyShutdown:
+          type: boolean
+      additionalProperties: false
+      minProperties: 1
+      description: Absolute targets. Missing fields keep their value; null is invalid.
+        Shutdown and reset each require a command containing only emergencyShutdown. While
+        shutdown is active, other changes are refused.
+    RunningControls:
+      type: object
+      required:
+      - wellheadId
+      - revision
+      - modelVersion
+      - parameterFingerprint
+      - status
+      - lastTickAt
+      - controls
+      properties:
+        wellheadId:
+          type: integer
+          minimum: 1
+          maximum: 2147483647
+        revision:
+          type: integer
+          minimum: 0
+          maximum: 2147483646
+        modelVersion:
+          type: string
+        parameterFingerprint:
+          type: string
+          minLength: 64
+          maxLength: 64
+        status:
+          type: string
+        lastTickAt:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        controls:
+          type: object
+          required:
+          - chokePositionPercent
+          - masterValveOpen
+          - wingValveOpen
+          - pumpOn
+          - emergencyShutdown
+          - swabValveOpen
+          properties:
+            chokePositionPercent:
+              type: number
+              minimum: 0
+              maximum: 100
+            masterValveOpen:
+              type: boolean
+            wingValveOpen:
+              type: boolean
+            pumpOn:
+              type: boolean
+            emergencyShutdown:
+              type: boolean
+            swabValveOpen:
+              type: boolean
+          additionalProperties: false
+      additionalProperties: false
+    ControlDraftRequest:
+      type: object
+      required:
+      - wellheadId
+      - expectedRevision
+      - reason
+      - targets
+      properties:
+        wellheadId:
+          type: integer
+          minimum: 1
+          maximum: 2147483647
+        expectedRevision:
+          type: integer
+          minimum: 0
+          maximum: 2147483646
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 500
+        targets:
+          $ref: '#/components/schemas/LiveControlTargets'
+      additionalProperties: false
+    ControlActivateRequest:
+      type: object
+      required:
+      - confirm
+      - expectedRevision
+      properties:
+        confirm:
+          const: true
+        expectedRevision:
+          type: integer
+          minimum: 0
+          maximum: 2147483646
+      additionalProperties: false
+    ExplicitConfirmation:
+      type: object
+      required:
+      - confirm
+      properties:
+        confirm:
+          const: true
+      additionalProperties: false
+    ControlCommand:
+      type: object
+      required:
+      - commandId
+      - wellheadId
+      - createdBy
+      - idempotencyKey
+      - reason
+      - expectedRevision
+      - modelVersion
+      - parameterFingerprint
+      - chokePositionPercent
+      - masterValveOpen
+      - wingValveOpen
+      - pumpOn
+      - emergencyShutdown
+      - status
+      - createdAt
+      - expiresAt
+      - queuedAt
+      - activatedBy
+      - activatedRole
+      - activatedSessionVersion
+      - resultAt
+      - resultRevision
+      - resultReason
+      - requestId
+      properties:
+        commandId:
+          type: string
+          format: uuid
+        wellheadId:
+          type: integer
+          minimum: 1
+          maximum: 2147483647
+        createdBy:
+          type: integer
+          minimum: 1
+          maximum: 2147483647
+        idempotencyKey:
+          type: string
+          format: uuid
+        reason:
+          type: string
+          maxLength: 500
+        expectedRevision:
+          type: integer
+          minimum: 0
+          maximum: 2147483646
+        modelVersion:
+          type: string
+        parameterFingerprint:
+          type: string
+        chokePositionPercent:
+          type:
+          - number
+          - 'null'
+          minimum: 0
+          maximum: 100
+        masterValveOpen:
+          type:
+          - boolean
+          - 'null'
+        wingValveOpen:
+          type:
+          - boolean
+          - 'null'
+        pumpOn:
+          type:
+          - boolean
+          - 'null'
+        emergencyShutdown:
+          type:
+          - boolean
+          - 'null'
+        status:
+          type: string
+          enum:
+          - draft
+          - queued
+          - applied
+          - rejected
+          - expired
+          - cancelled
+        createdAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+        queuedAt:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        activatedBy:
+          type:
+          - integer
+          - 'null'
+        activatedRole:
+          type:
+          - string
+          - 'null'
+        activatedSessionVersion:
+          type:
+          - integer
+          - 'null'
+        resultAt:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        resultRevision:
+          type:
+          - integer
+          - 'null'
+        resultReason:
+          type:
+          - string
+          - 'null'
+        requestId:
+          type:
+          - string
+          - 'null'
+        events:
+          type: array
+          items:
+            type: object
+            required:
+            - eventId
+            - commandId
+            - eventType
+            - occurredAt
+            - actorUserId
+            - reasonCode
+            - requestId
+            properties:
+              eventId:
+                type: integer
+                minimum: 1
+                maximum: 2147483647
+              commandId:
+                type: string
+                format: uuid
+              eventType:
+                type: string
+              occurredAt:
+                type: string
+                format: date-time
+              actorUserId:
+                type:
+                - integer
+                - 'null'
+              reasonCode:
+                type: string
+              requestId:
+                type:
+                - string
+                - 'null'
+        notificationPending:
+          type: boolean
+    ParameterCatalogue:
+      type: object
+      required:
+      - wellheadId
+      - modelVersion
+      - parameters
+      properties:
+        wellheadId:
+          type: integer
+          minimum: 1
+        modelVersion:
+          type: string
+        parameters:
+          type: array
+          minItems: 1
+          maxItems: 200
+          items:
+            type: object
+            required:
+            - key
+            - description
+            - unit
+            - defaultValue
+            - minimum
+            - maximum
+            - requiresRestart
+            - runningValue
+            properties:
+              key:
+                type: string
+              description:
+                type: string
+              unit:
+                type: string
+              defaultValue:
+                type: number
+              minimum:
+                type: number
+              maximum:
+                type: number
+              requiresRestart:
+                type: boolean
+              runningValue:
+                type:
+                - number
+                - 'null'
+    ControlProposalSummary:
+      type: object
+      required:
+      - commandId
+      - wellheadId
+      - createdBy
+      - idempotencyKey
+      - reason
+      - expectedRevision
+      - modelVersion
+      - chokePositionPercent
+      - masterValveOpen
+      - wingValveOpen
+      - pumpOn
+      - emergencyShutdown
+      - status
+      - createdAt
+      - expiresAt
+      - resultAt
+      - resultRevision
+      - resultReason
+      properties:
+        commandId:
+          type: string
+          format: uuid
+        wellheadId:
+          type: integer
+          minimum: 1
+          maximum: 2147483647
+        createdBy:
+          type: integer
+          minimum: 1
+          maximum: 2147483647
+        idempotencyKey:
+          type: string
+          format: uuid
+        reason:
+          type: string
+          maxLength: 500
+        expectedRevision:
+          type: integer
+          minimum: 0
+          maximum: 2147483646
+        modelVersion:
+          type: string
+        chokePositionPercent:
+          type:
+          - number
+          - 'null'
+          minimum: 0
+          maximum: 100
+        masterValveOpen:
+          type:
+          - boolean
+          - 'null'
+        wingValveOpen:
+          type:
+          - boolean
+          - 'null'
+        pumpOn:
+          type:
+          - boolean
+          - 'null'
+        emergencyShutdown:
+          type:
+          - boolean
+          - 'null'
+        status:
+          type: string
+          enum:
+          - draft
+          - queued
+          - applied
+          - rejected
+          - expired
+          - cancelled
+        createdAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+        resultAt:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        resultRevision:
+          type:
+          - integer
+          - 'null'
+        resultReason:
+          type:
+          - string
+          - 'null'
+    ParameterDraftRequest:
+      type: object
+      required:
+      - wellheadId
+      - modelVersion
+      - parameterKey
+      - value
+      - unit
+      - expectedOverrideId
+      - reason
+      properties:
+        wellheadId:
+          type: integer
+          minimum: 1
+          maximum: 2147483647
+        modelVersion:
+          type: string
+          pattern: ^\d+\.\d+\.\d+$
+        parameterKey:
+          type: string
+          minLength: 1
+          maxLength: 100
+        value:
+          type:
+          - number
+          - 'null'
+        unit:
+          type:
+          - string
+          - 'null'
+          minLength: 1
+          maxLength: 40
+        expectedOverrideId:
+          type:
+          - integer
+          - 'null'
+          minimum: 1
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 500
+      additionalProperties: false
+      description: Null value and unit together remove an override. Ranges and units are
+        validated by twin-core.
+    ParameterChange:
+      type: object
+      required:
+      - changeId
+      - wellheadId
+      - createdBy
+      - idempotencyKey
+      - modelVersion
+      - parameterKey
+      - value
+      - unit
+      - reason
+      - expectedOverrideId
+      - status
+      - createdAt
+      - expiresAt
+      - resultAt
+      - publishedOverrideId
+      properties:
+        changeId:
+          type: string
+          format: uuid
+        wellheadId:
+          type: integer
+          minimum: 1
+          maximum: 2147483647
+        createdBy:
+          type: integer
+          minimum: 1
+          maximum: 2147483647
+        idempotencyKey:
+          type: string
+          format: uuid
+        modelVersion:
+          type: string
+        parameterKey:
+          type: string
+        value:
+          type:
+          - number
+          - 'null'
+        unit:
+          type:
+          - string
+          - 'null'
+        reason:
+          type: string
+        expectedOverrideId:
+          type:
+          - integer
+          - 'null'
+        status:
+          type: string
+          enum:
+          - draft
+          - published
+          - cancelled
+          - expired
+        createdAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+        resultAt:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        publishedOverrideId:
+          type:
+          - integer
+          - 'null'
+        restartRequired:
+          type: boolean
+        notificationPending:
+          type: boolean
+        running:
+          anyOf:
+          - $ref: '#/components/schemas/RunningControls'
+          - type: 'null'
+    ControlState:
+      type: object
+      required:
+      - active
+      - running
+      - pendingCommandId
+      properties:
+        active:
+          anyOf:
+          - type: object
+            required:
+            - wellheadId
+            - revision
+            - modelVersion
+            - parameterFingerprint
+            - chokePositionPercent
+            - masterValveOpen
+            - wingValveOpen
+            - pumpOn
+            - emergencyShutdown
+            - swabValveOpen
+            - appliedCommandId
+            - appliedAt
+            properties:
+              wellheadId:
+                type: integer
+                minimum: 1
+                maximum: 2147483647
+              revision:
+                type: integer
+                minimum: 0
+                maximum: 2147483646
+              modelVersion:
+                type: string
+              parameterFingerprint:
+                type: string
+              chokePositionPercent:
+                type: number
+                minimum: 0
+                maximum: 100
+              masterValveOpen:
+                type: boolean
+              wingValveOpen:
+                type: boolean
+              pumpOn:
+                type: boolean
+              emergencyShutdown:
+                type: boolean
+              swabValveOpen:
+                type: boolean
+              appliedCommandId:
+                type:
+                - string
+                - 'null'
+                format: uuid
+              appliedAt:
+                type: string
+                format: date-time
+          - type: 'null'
+        running:
+          $ref: '#/components/schemas/RunningControls'
+        pendingCommandId:
+          type:
+          - string
+          - 'null'
+          format: uuid
+    ControlCommandResponse:
+      type: object
+      required:
+      - data
+      - msg
+      - status
+      properties:
+        data:
+          $ref: '#/components/schemas/ControlCommand'
+        msg:
+          type: string
+        status:
+          type: integer
+    ParameterChangeResponse:
+      type: object
+      required:
+      - data
+      - msg
+      - status
+      properties:
+        data:
+          $ref: '#/components/schemas/ParameterChange'
+        msg:
+          type: string
+        status:
+          type: integer
+    ControlStateResponse:
+      type: object
+      required:
+      - data
+      - msg
+      - status
+      properties:
+        data:
+          $ref: '#/components/schemas/ControlState'
+        msg:
+          type: string
+        status:
+          type: integer
+    ForecastRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        horizonSeconds: {type: integer, minimum: 300, maximum: 7200, default: 1800}
+        stepSeconds: {type: integer, minimum: 5, maximum: 300, default: 60}
+      description: Horizon must be divisible by step size.
+    SnapshotSelection:
+      type: object
+      additionalProperties: false
+      required: [snapshotId, simulatedAt]
+      properties:
+        snapshotId:
+          type: string
+          pattern: '^[1-9][0-9]{0,18}$'
+          description: Exact decimal bigint, at most 9223372036854775807.
+        simulatedAt:
+          type: string
+          format: date-time
+          description: UTC timestamp with at most six fractional digits.
+    ExecutionOrigin:
+      oneOf:
+        - type: object
+          required: [kind]
+          properties:
+            kind: {type: string, const: manual}
+        - type: object
+          required: [kind, scheduleId, jobId, scheduledFor]
+          properties:
+            kind: {type: string, const: scheduled}
+            scheduleId: {type: string, format: uuid}
+            jobId: {type: string, format: uuid}
+            scheduledFor: {type: string, format: date-time}
+    BranchOrigin:
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required: [kind]
+          properties:
+            kind: {type: string, const: current}
+        - type: object
+          additionalProperties: false
+          required: [kind, snapshotId, simulatedAt]
+          properties:
+            kind: {type: string, const: snapshot}
+            snapshotId: {$ref: '#/components/schemas/SnapshotSelection/properties/snapshotId'}
+            simulatedAt: {$ref: '#/components/schemas/SnapshotSelection/properties/simulatedAt'}
+    SnapshotList:
+      type: object
+      required: [wellheadId, checkedAt, items, hasMore]
+      properties:
+        wellheadId: {type: integer, minimum: 1}
+        checkedAt: {type: string, format: date-time}
+        hasMore: {type: boolean}
+        items:
+          type: array
+          maxItems: 20
+          items:
+            type: object
+            required: [snapshotId, simulatedAt, modelVersion, compatible, reason]
+            properties:
+              snapshotId: {$ref: '#/components/schemas/SnapshotSelection/properties/snapshotId'}
+              simulatedAt: {$ref: '#/components/schemas/SnapshotSelection/properties/simulatedAt'}
+              modelVersion: {type: string}
+              compatible: {type: boolean}
+              reason: {type: string, enum: [compatible, model_version_changed, parameters_changed]}
+    ScenarioRequest:
+      type: object
+      additionalProperties: false
+      required: [wellheadId, name, controls]
+      properties:
+        baseSnapshot: {$ref: "#/components/schemas/SnapshotSelection"}
+        wellheadId: {type: integer, minimum: 1}
+        name: {type: string, minLength: 1, maxLength: 120}
+        horizonSeconds: {type: integer, minimum: 300, maximum: 7200, default: 1800}
+        stepSeconds: {type: integer, minimum: 5, maximum: 300, default: 60}
+        controls:
+          type: array
+          minItems: 1
+          maxItems: 16
+          items:
+            type: object
+            additionalProperties: false
+            required: [offsetMinutes, input]
+            properties:
+              offsetMinutes: {type: integer, minimum: 0}
+              input:
+                type: object
+                additionalProperties: false
+                minProperties: 1
+                properties:
+                  chokePositionPercent: {type: number, minimum: 0, maximum: 100}
+                  masterValveOpen: {type: boolean}
+                  wingValveOpen: {type: boolean}
+                  pumpOn: {type: boolean}
+                  emergencyShutdown: {type: boolean}
+      description: Control offsets must increase and stay inside the horizon.
+    FleetModelStatus:
+      type: object
+      required: [checkedAt, available, wellheads]
+      properties:
+        checkedAt: {type: string, format: date-time}
+        available: {type: boolean}
+        wellheads:
+          type: array
+          maxItems: 1000
+          items:
+            type: object
+            required: [wellheadId, modelVersion, status, reason, lastTickAt,
+              simulatedAt, processAgeSeconds, current, skippedTicks, restoredFrom,
+              lastRecoveryEvent]
+            properties:
+              wellheadId: {type: integer, minimum: 1}
+              modelVersion: {type: string}
+              status: {type: string}
+              reason: {type: string}
+              lastTickAt: {type: [string, "null"], format: date-time}
+              simulatedAt: {type: [string, "null"], format: date-time}
+              processAgeSeconds: {type: [number, "null"]}
+              current: {type: boolean}
+              skippedTicks: {type: integer, minimum: 0}
+              restoredFrom: {type: [string, "null"], format: date-time}
+              lastRecoveryEvent:
+                type: [object, "null"]
+                required: [type, time]
+                properties:
+                  type: {type: string}
+                  time: {type: string, format: date-time}
+    RunSummary:
+      type: object
+      required: [runId, kind, wellheadId, name, createdAt, baseSimulatedAt,
+        modelVersion, horizonSeconds, stepSeconds, confidenceScore, branchOrigin, executionOrigin]
+      properties:
+        branchOrigin: {$ref: "#/components/schemas/BranchOrigin"}
+        executionOrigin: {$ref: "#/components/schemas/ExecutionOrigin"}
+        runId: {type: string, format: uuid}
+        kind: {type: string, enum: [forecast, scenario]}
+        wellheadId: {type: integer, minimum: 1}
+        name: {type: [string, "null"]}
+        createdAt: {type: string, format: date-time}
+        baseSimulatedAt: {type: string, format: date-time}
+        modelVersion: {type: string}
+        horizonSeconds: {type: integer}
+        stepSeconds: {type: integer}
+        confidenceScore: {type: number, minimum: 0, maximum: 1}
+    SavedProjectionEnvelope:
+      allOf:
+        - {$ref: "#/components/schemas/ProjectionEnvelope"}
+        - type: object
+          properties:
+            data:
+              type: object
+              required: [baselineControls, scheduledControls, signals]
+              properties:
+                baselineControls:
+                  type: object
+                  description: Original model control values, using persisted field names.
+                  additionalProperties: {type: [number, boolean]}
+                scheduledControls:
+                  type: array
+                  items: {$ref: "#/components/schemas/ScenarioRequest/properties/controls/items"}
+                signals:
+                  type: array
+                  items:
+                    type: object
+                    required: [code, displayName, canonicalUnit, dataType]
+                    properties:
+                      code: {type: string}
+                      displayName: {type: string}
+                      canonicalUnit: {type: [string, "null"]}
+                      dataType: {type: string}
+    ForecastSchedule:
+      type: object
+      required: [scheduleId, wellheadId, ownerUserId, ownerRole, enabled, intervalSeconds, horizonSeconds, stepSeconds, revision, nextDueAt, reason, updatedAt]
+      properties:
+        scheduleId: {type: string, format: uuid}
+        wellheadId: {type: integer}
+        ownerUserId: {type: integer}
+        ownerRole: {type: string, const: ADMIN}
+        enabled: {type: boolean}
+        intervalSeconds: {type: integer, minimum: 300, maximum: 86400, multipleOf: 60}
+        horizonSeconds: {type: integer, minimum: 300, maximum: 1800, multipleOf: 60}
+        stepSeconds: {type: integer, const: 60}
+        revision: {type: integer, minimum: 1}
+        nextDueAt: {type: [string, "null"], format: date-time}
+        reason: {type: string}
+        updatedAt: {type: string, format: date-time}
+    ForecastJob:
+      type: object
+      required: [jobId, scheduleId, scheduleRevision, wellheadId, ownerUserId, ownerRole, intervalSeconds, horizonSeconds, stepSeconds, scheduledFor, startedAt, leaseExpiresAt, missedIntervals, status, completedAt, reasonCode, runId]
+      properties:
+        jobId: {type: string, format: uuid}
+        scheduleId: {type: string, format: uuid}
+        scheduleRevision: {type: integer}
+        wellheadId: {type: integer}
+        ownerUserId: {type: integer}
+        ownerRole: {type: string, const: ADMIN}
+        intervalSeconds: {type: integer}
+        horizonSeconds: {type: integer}
+        stepSeconds: {type: integer, const: 60}
+        scheduledFor: {type: string, format: date-time}
+        startedAt: {type: string, format: date-time}
+        leaseExpiresAt: {type: string, format: date-time}
+        missedIntervals: {type: integer, minimum: 0}
+        status: {type: string, enum: [running, complete, skipped, failed]}
+        completedAt: {type: [string, "null"], format: date-time}
+        reasonCode: {type: [string, "null"]}
+        runId: {type: [string, "null"], format: uuid}
+    ProjectionEnvelope:
+      type: object
+      required: [msg, data, status]
+      properties:
+        msg: {type: string}
+        status: {type: integer, const: 200}
+        data:
+          type: object
+          required: [runId, kind, wellheadId, source, fieldCalibrated, modelVersion,
+            baseSimulatedAt, generatedAt, horizonSeconds, stepSeconds,
+            confidence, points, branchOrigin, executionOrigin]
+          properties:
+            runId: {type: string, format: uuid}
+            kind: {type: string, enum: [forecast, scenario]}
+            wellheadId: {type: integer, minimum: 1}
+            name: {type: [string, "null"]}
+            source: {type: string, const: synthetic_reduced_order_model}
+            fieldCalibrated: {type: boolean, const: false}
+            modelVersion: {type: string}
+            branchOrigin: {$ref: "#/components/schemas/BranchOrigin"}
+            executionOrigin: {$ref: "#/components/schemas/ExecutionOrigin"}
+            baseSimulatedAt: {type: string, format: date-time}
+            generatedAt: {type: string, format: date-time}
+            horizonSeconds: {type: integer}
+            stepSeconds: {type: integer}
+            confidence:
+              type: object
+              required: [method, score, label, reasons]
+              properties:
+                method: {type: string, const: heuristic_uncalibrated}
+                score: {type: number, minimum: 0, maximum: 1}
+                label: {type: string, enum: [moderate, low]}
+                reasons:
+                  type: array
+                  items: {type: string}
+            points:
+              type: array
+              minItems: 1
+              maxItems: 1440
+              items:
+                type: object
+                required: [elapsedSeconds, timestamp, values, alarmRisk,
+                  triggeredRuleIds]
+                properties:
+                  elapsedSeconds: {type: integer, minimum: 1}
+                  timestamp: {type: string, format: date-time}
+                  values:
+                    type: object
+                    additionalProperties: {type: number}
+                  alarmRisk: {type: string, enum: [none, warning, critical, unknown]}
+                  triggeredRuleIds:
+                    type: array
+                    items: {type: integer}
+                  baselineValues:
+                    type: object
+                    additionalProperties: {type: number}
+                  baselineAlarmRisk:
+                    type: string
+                    enum: [none, warning, critical, unknown]
     HealthResponse:
       type: object
       required: [status, service, timestamp]
@@ -425,8 +2916,17 @@ components:
           $ref: "#/components/schemas/DashboardOverviewData"
     DashboardOverviewData:
       type: object
-      required: [summary, latestReadings, activeAlarms]
+      required: [summary, latestReadings, activeAlarms, wellheads]
       properties:
+        wellheads:
+          type: array
+          items:
+            allOf:
+              - {$ref: "#/components/schemas/WellheadAsset"}
+              - type: object
+                required: [activeAlarmCount]
+                properties:
+                  activeAlarmCount: {type: integer, minimum: 0}
         summary:
           $ref: "#/components/schemas/DashboardSummary"
         latestReadings:
@@ -463,12 +2963,35 @@ components:
           type: integer
         data:
           type: object
-          required: [alarms]
+          required: [totals, alarms]
           properties:
+            totals:
+              $ref: "#/components/schemas/ActiveAlarmTotals"
             alarms:
               type: array
+              description: >-
+                At most 50 active alarms, most severe first and then oldest
+                first. It can hold fewer rows than totals.total.
+              maxItems: 50
               items:
                 $ref: "#/components/schemas/ActiveAlarm"
+    ActiveAlarmTotals:
+      type: object
+      description: Counts over every active alarm, not only the listed ones.
+      required: [total, critical, warning, affectedWellheads]
+      properties:
+        total:
+          type: integer
+          minimum: 0
+        critical:
+          type: integer
+          minimum: 0
+        warning:
+          type: integer
+          minimum: 0
+        affectedWellheads:
+          type: integer
+          minimum: 0
     DashboardAnalyticsResponse:
       type: object
       required: [msg, data, status]
@@ -483,7 +3006,7 @@ components:
             - pressureTrend
             - temperatureFlowTrend
             - waterCutGorTrend
-            - dailyAlarmCounts
+            - alarmCounts
           properties:
             pressureTrend:
               type: array
@@ -497,10 +3020,11 @@ components:
               type: array
               items:
                 $ref: "#/components/schemas/AggregateTrendPoint"
-            dailyAlarmCounts:
+            alarmCounts:
               type: array
+              description: One total per severity over the last 24 hours.
               items:
-                $ref: "#/components/schemas/DailyAlarmCount"
+                $ref: "#/components/schemas/AlarmCount"
     WellheadDetailResponse:
       type: object
       required: [msg, data, status]
@@ -513,6 +3037,7 @@ components:
           type: object
           required:
             - wellhead
+            - latestReadingAgeSeconds
             - latestReadingAt
             - latestReadings
             - activeAlarms
@@ -522,6 +3047,7 @@ components:
           properties:
             wellhead:
               $ref: "#/components/schemas/WellheadAsset"
+            latestReadingAgeSeconds: {type: [number, "null"], minimum: 0}
             latestReadingAt:
               type: [string, "null"]
               format: date-time
@@ -573,7 +3099,7 @@ components:
           type: string
     DashboardSummary:
       type: object
-      required: [totalWellheads, parametersTracked, activeAlarms, latestReadingAt]
+      required: [totalWellheads, parametersTracked, activeAlarms, latestReadingAt, latestReadingAgeSeconds]
       properties:
         totalWellheads:
           type: integer
@@ -581,6 +3107,7 @@ components:
           type: integer
         activeAlarms:
           type: integer
+        latestReadingAgeSeconds: {type: [number, "null"], minimum: 0}
         latestReadingAt:
           type: [string, "null"]
           format: date-time
@@ -636,7 +3163,11 @@ components:
           type: [string, "null"]
         fieldName:
           type: [string, "null"]
+        parameterCode:
+          type: [string, "null"]
         parameterDisplayName:
+          type: [string, "null"]
+        canonicalUnit:
           type: [string, "null"]
         operator:
           type: [string, "null"]
@@ -646,7 +3177,7 @@ components:
           type: [integer, "null"]
     AggregateTrendPoint:
       type: object
-      description: Hourly aggregate trend point from a TimescaleDB aggregate view.
+      description: Two-minute aggregate trend point from a TimescaleDB continuous aggregate.
       properties:
         bucketTime:
           type: [string, "null"]
@@ -665,25 +3196,16 @@ components:
           type: [number, "null"]
         readingCount:
           type: [integer, "null"]
-    DailyAlarmCount:
+    AlarmCount:
       type: object
-      description: Daily alarm count grouped by wellhead, parameter, and severity.
+      description: Alarms triggered in the last 24 hours for one severity.
+      required: [severityLevel, alarmsTriggered]
       properties:
-        bucketDay:
-          type: [string, "null"]
-          format: date-time
-        wellheadId:
-          type: [integer, "null"]
-        wellheadName:
-          type: [string, "null"]
-        locationName:
-          type: [string, "null"]
-        parameterDisplayName:
-          type: [string, "null"]
         severityLevel:
           type: [string, "null"]
-        totalAlarmsTriggered:
-          type: [integer, "null"]
+        alarmsTriggered:
+          type: integer
+          minimum: 0
     ErrorResponse:
       type: object
       properties:

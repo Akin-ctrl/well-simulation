@@ -1,8 +1,8 @@
 # ADR 0027: Stage Historical Scenario Branching From Model Snapshots
 
-- Status: Accepted
+- Status: Accepted, amended
 - Date: 2026-05-31
-- Implementation: Not started
+- Implementation: Historical scenarios, 2026-10-17
 
 ## Context
 
@@ -58,3 +58,32 @@ The UI and API must clearly show whether a scenario starts from current state or
 - Historical records must never be mutated by scenario execution.
 - Incident-review workflows can be added after current-state scenarios are stable.
 
+## Amendment on 2026-10-12
+
+The planned `model_state_snapshot` table was built in Milestone 7 as
+`twin_state_snapshot`. Version 2 historical branching should read that table.
+It must not create a second snapshot table for the same model state. Version 1
+still starts from current live state, and historical branching remains future
+work.
+
+
+## Amendment on 2026-10-17
+
+Historical scenarios now select an exact `twin_state_snapshot` by its bigint
+identifier and simulated timestamp. Requests preserve identifiers as strings and
+timestamp precision through microseconds. The installed model version and
+resolved parameter fingerprint must match the selected snapshot. Snapshots lack
+full parameter values, so incompatible snapshots cannot run under a new set.
+
+The existing `scenario_run.base_state` JSON stores `branchOrigin`, including the
+source identifier and time. Together with `base_simulated_at`, this fulfills the
+provenance requirement above without adding separate columns. The run already
+stores its full state, parameters, controls and alarm rules. Legacy runs without
+origin metadata start from current state. No numbered migration or SQL change
+is required.
+
+The finder searches bounded 24-hour windows within the preceding 89 days.
+Historical chart points follow the existing retention policy on simulated time,
+so new historical runs can expire sooner than current-state runs. The UI states
+this limit and identifies the alarm rules as those active at execution.
+See the [design and verification](../design/historical-scenarios.md).

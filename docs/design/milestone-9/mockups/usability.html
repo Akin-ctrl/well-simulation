@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Dashboard usability design</title>
+    <link
+      rel="stylesheet"
+      href="../../../../monorepo/apps/website/app/styles/tokens.css"
+    />
+    <link rel="stylesheet" href="mockups.css" />
+    <script src="usability.js" defer></script>
+  </head>
+  <body>
+    <header class="review">
+      <strong>Usability design review</strong><span>Illustrative data</span
+      ><label for="screen">Screen</label
+      ><select id="screen">
+        <option value="fleet">Overview</option>
+        <option value="monitoring">Monitoring</option>
+        <option value="forecast">Forecast</option>
+        <option value="scenario">Scenarios</option>
+        <option value="runs">Saved runs</option>
+        <option value="alarms">Alarms</option>
+        <option value="analytics">Analytics</option>
+        <option value="guide">Guide</option>
+        <option value="login">Login</option>
+        <option value="account">Create account</option>
+        <option value="missing">Not found</option></select
+      ><label for="state">State</label
+      ><select id="state">
+        <option>ready</option>
+        <option>loading</option>
+        <option>empty</option>
+        <option>stale</option>
+        <option>error</option>
+        <option>permission</option>
+        <option>invalid</option>
+      </select>
+    </header>
+    <nav class="review" aria-label="Compact navigation">
+      <a href="?screen=fleet">Overview</a><a href="?screen=alarms">Alarms</a
+      ><a href="?screen=analytics">Analytics</a
+      ><a href="?screen=guide">Guide</a>
+    </nav>
+    <div class="shell">
+      <aside>
+        <a class="brand" href="?screen=fleet">Well Simulation</a>
+        <nav aria-label="Main navigation">
+          <a href="?screen=fleet">Overview</a><a href="?screen=alarms">Alarms</a
+          ><a href="?screen=analytics">Analytics</a
+          ><a href="?screen=guide">Guide</a>
+        </nav>
+      </aside>
+      <main id="workspace" class="content" tabindex="-1"></main>
+    </div>
+  </body>
+</html>

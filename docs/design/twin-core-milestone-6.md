@@ -1,5 +1,9 @@
 # Milestone 6: Model Telemetry Through Modbus
 
+This document records this milestone’s original scope and dated checks. See the
+[current architecture](../architecture/overview.md) and [ADR index](../adr/README.md)
+for later additions, including operating screens, historical scenarios and schedules.
+
 ## Purpose
 
 A well's pressure and flow now come from the running process model. The Modbus
@@ -72,11 +76,15 @@ Both encoder and decoder use the shared `WORD_ORDER` constant and a round-trip
 test. The TCP header carries a transaction ID, protocol ID, length, and unit
 ID. It carries no measurement time or quality flag.
 
-Register 1900 is a two-word unsigned UTC epoch second for the model tick. The
-gateway writes zero to the heartbeat before changing any signal register, then
-writes the new tick time after all signal writes complete. Ingestion reads that
-register on every mapped Modbus unit before and after polling. It stores a batch
-only if all units agree on the same nonzero tick in both reads, the tick advances
+Register 1900 is a two-word unsigned UTC epoch second for the model tick.
+Registers 1902, 1903, and 1904 hold the model version's major, minor, and patch
+numbers (added 2026-10-02, see the ADR 0036 amendment). Together they form a
+five-register status block. The gateway writes zero to the whole block before
+changing any signal register, then writes the new tick time and version in one
+write after all signal writes complete. Ingestion reads the block with one
+request (offset 1900, quantity 5) on every mapped Modbus unit before and after
+polling. It stores a batch only if all units agree on the same nonzero tick and
+the same version in both reads, the tick advances
 beyond the last stored tick, and it is no more than twice the telemetry
 interval old (minimum five seconds). A value more than two
 seconds in the future is rejected. The second read detects a batch changed
@@ -84,7 +92,9 @@ mid-poll, including a change on a different unit. The zero marks an update in
 progress or an incomplete write.
 
 `timestamp_utc` in `parameterReading` is the model tick time carried by the
-heartbeat. `inserted_at` is the database insertion time. The new `source_kind`
+heartbeat. `model_version` is the version carried beside it, such as `0.3.0`,
+and is `NULL` for rows stored before migration 0008. `inserted_at` is the
+database insertion time. The new `source_kind`
 column marks old rows as `synthetic_random_simulator` and new rows as
 `synthetic_reduced_order_model`. Historian reads include the source on each
 reading and report `mixed` when old and new values appear together. No
@@ -99,6 +109,8 @@ measurement is presented as observed plant data.
 | Any mapped well is missing or degraded | The complete batch is rejected. |
 | A value is malformed or outside its basic physical range | The batch is rejected before any register write. |
 | A register write fails | Heartbeat remains zero; ingestion skips the incomplete image. |
+| A gateway update lands during a poll | Ingestion re-reads the status block and polls the new tick, stopping at half the telemetry interval. Without a consistent read by then, it skips that interval. Retries are counted in `wellhead_poll_retries_total`. |
+| A consistent Modbus read finishes after half the polling interval | Ingestion discards the late batch, reports unready, and tries again on the next scheduled poll. |
 | A Modbus read fails | Ingestion rejects the poll and reconnects; it does not insert a partial batch. |
 | Metadata changes | Both services reload it. The gateway clears its register image before using the new map. |
 | Database is offline | Ingestion retries with bounded backoff and reports unready. No local store-and-forward exists. |

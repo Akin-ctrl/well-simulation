@@ -61,7 +61,7 @@ class ParameterOverride:
 
 
 class ParameterOverrideSource(Protocol):
-    """Boundary for per-well overrides stored in the future model tables."""
+    """Boundary for validated per-well database parameter overrides."""
 
     def load(
         self, wellhead_ids: Sequence[int], model_version: str
@@ -70,12 +70,12 @@ class ParameterOverrideSource(Protocol):
 
 
 class NoDatabaseOverrides:
-    """Use defaults until Milestone 7 adds the model parameter table."""
+    """Use defaults in isolated model tests without a database."""
 
     def load(
         self, _wellhead_ids: Sequence[int], _model_version: str
     ) -> Mapping[int, Mapping[str, ParameterOverride]]:
-        """Return no per-well overrides while no model table exists."""
+        """Return no per-well overrides for an isolated model run."""
         return {}
 
 
@@ -215,6 +215,14 @@ def _positive_int(name: str, default: str) -> int:
     return value
 
 
+def _internal_token() -> str:
+    """Refuse a short or missing service-to-service secret at startup."""
+    token = _required_env("TWIN_INTERNAL_TOKEN")
+    if len(token) < 32:
+        raise ValueError("TWIN_INTERNAL_TOKEN must be at least 32 characters")
+    return token
+
+
 @dataclass(frozen=True)
 class ServiceSettings:
     """Settings needed to run the internal service and read the historian."""
@@ -230,6 +238,7 @@ class ServiceSettings:
     database_user: str
     database_password: str
     environment_overrides: Mapping[str, object]
+    internal_token: str = ""
 
     @classmethod
     def from_env(cls) -> ServiceSettings:
@@ -252,4 +261,5 @@ class ServiceSettings:
             environment_overrides=parse_environment_overrides(
                 os.getenv("TWIN_MODEL_OVERRIDES_JSON", "")
             ),
+            internal_token=_internal_token(),
         )

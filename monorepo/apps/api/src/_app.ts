@@ -9,8 +9,17 @@ import { customRateLimit } from './middleware/rate-limiter';
 import { originGuard } from './middleware/csrf';
 import { requestId } from './middleware/request-id';
 import { dashboardRouter } from './routers/dashboard';
+import { twinRouter } from './routers/twin';
+import { controlsRouter } from './routers/controls';
+import { alarmsRouter } from './routers/alarms';
 import { errorResponse } from './utils/handler';
-import { httpDuration, httpRequests, registry } from './metrics';
+import {
+  databaseReady,
+  httpDuration,
+  httpRequests,
+  readinessCheckedAt,
+  registry,
+} from './metrics';
 
 const app = new Hono();
 
@@ -71,6 +80,8 @@ app.get('/metrics', async (c) => {
 app.get('/ready', async (c) => {
   try {
     await db.execute(sql`select 1`);
+    databaseReady.set(1);
+    readinessCheckedAt.set(Date.now() / 1000);
     return c.json({
       status: 'ready',
       service: 'api',
@@ -78,6 +89,8 @@ app.get('/ready', async (c) => {
       timestamp: new Date().toISOString(),
     });
   } catch {
+    databaseReady.set(0);
+    readinessCheckedAt.set(Date.now() / 1000);
     return c.json(
       {
         status: 'not_ready',
@@ -100,6 +113,9 @@ app.onError((err, c) => errorResponse(c, err));
 
 export const appRouter = app
   .route('/auth', authRouter)
-  .route('/dashboard', dashboardRouter);
+  .route('/dashboard', dashboardRouter)
+  .route('/alarms', alarmsRouter)
+  .route('/twin', twinRouter)
+  .route('/twin', controlsRouter);
 
 export type AppType = typeof appRouter;

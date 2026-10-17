@@ -10,6 +10,7 @@
     "format": "prettier --write .",
     "check-types": "turbo run check-types",
     "test:dto": "vitest run packages/dto/**/*.test.ts",
+    "test:website": "vitest run apps/website/app",
     "validate:openapi": "python3 ../scripts/validate_openapi.py",
     "format:check": "prettier --check .",
     "test": "turbo run test"

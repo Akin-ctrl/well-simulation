@@ -25,11 +25,26 @@ RUN pnpm install --frozen-lockfile
 COPY . .
 RUN pnpm --filter @well-simulation/website exec react-router build
 
-FROM nginx:1.27-alpine AS runner
+# Fill the CSP with hashes of this build's inline startup scripts. Fails the
+# image build if they cannot be found.
+RUN node apps/website/scripts/csp-inline-script-hashes.mjs \
+      apps/website/build/client/index.html \
+      apps/website/nginx.conf \
+      /app/nginx.conf
 
-COPY apps/website/nginx.conf /etc/nginx/conf.d/default.conf
+# nginx 1.27.5, including dynamic upstream DNS support added in 1.27.3.
+FROM nginx@sha256:65645c7bb6a0661892a8b03b89d0743208a18dd2f3f17a54ef4b76fb8e2f2a10 AS runner
+
+COPY --from=builder /app/nginx.conf /etc/nginx/conf.d/default.conf
 RUN rm -rf /usr/share/nginx/html/*
 COPY --from=builder /app/apps/website/build/client /usr/share/nginx/html
+
+RUN nginx -t
+
+# Readiness includes the route used by the browser and the API's database check.
+HEALTHCHECK --interval=15s --timeout=5s --start-period=10s --retries=3 \
+  CMD wget -q -T 2 -O /dev/null http://127.0.0.1/ \
+      && wget -q -T 2 -O /dev/null http://127.0.0.1/api/ready || exit 1
 
 EXPOSE 80
 

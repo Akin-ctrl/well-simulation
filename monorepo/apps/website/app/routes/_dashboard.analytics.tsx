@@ -1,300 +1,118 @@
-import {
-  Cell,
-  Line,
-  LineChart,
-  Pie,
-  PieChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from 'recharts';
 import { useLoaderData } from 'react-router';
-import type {
-  AlarmCount,
-  DashboardAnalyticsResponse,
-  TrendPoint,
-} from '@well-simulation/dto/res/dashboard';
-import { Title } from '../domains/dashboard/components/misc';
+import type { DashboardAnalyticsResponse } from '@well-simulation/dto/res/dashboard';
+import { TrendChart } from '../domains/dashboard/components/trend-chart';
+import { PageHelp } from '../domains/dashboard/components/page-help';
+import {
+  ReadStatus,
+  readDashboardView,
+} from '../domains/dashboard/components/read-status';
+import { ReadFailure } from '../domains/twin/read-failure';
+import { useRetainedRead } from '../hooks/use-retained-read';
 import { client, fetchFn } from '../utils/api';
 import { REFRESH_INTERVALS, useAutoRefresh } from '../hooks/use-auto-refresh';
 
-type MultiMetricPoint = {
-  date: string;
-  [metricCode: string]: string | number;
-};
-
-type AlarmSegment = {
-  color: string;
-  name: string;
-  amount: number;
-};
-
-const METRIC_LABELS: Record<string, string> = {
-  tubing_pressure: 'Tubing Pressure',
-  casing_pressure: 'Casing Pressure',
-  annulus_pressure: 'Annulus Pressure',
-  wellhead_temperature: 'Temperature',
-  flow_rate: 'Flow Rate',
-  water_cut: 'Water Cut',
-  gas_oil_ratio: 'Gas/Oil Ratio',
-};
-
-const METRIC_COLORS: Record<string, string> = {
-  tubing_pressure: '#553AFE',
-  casing_pressure: '#01C0F6',
-  annulus_pressure: '#10B981',
-  wellhead_temperature: '#F97316',
-  flow_rate: '#553AFE',
-  water_cut: '#01C0F6',
-  gas_oil_ratio: '#10B981',
-};
-
-const SEVERITY_COLORS: Record<string, string> = {
-  critical: '#DC2626',
-  high: '#F97316',
-  warning: '#F59E0B',
-  medium: '#EAB308',
-  low: '#01C0F6',
-};
-
 export async function clientLoader() {
-  const response = await fetchFn<DashboardAnalyticsResponse>(
-    client.dashboard.analytics.$get()
-  );
-  return response.data;
-}
-
-function formatDate(value: string | Date | null | undefined) {
-  if (!value) {
-    return 'n/a';
-  }
-
-  return new Intl.DateTimeFormat('en', {
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-  }).format(new Date(value));
-}
-
-function formatNumber(value: number | null | undefined) {
-  if (value === null || value === undefined) {
-    return '—';
-  }
-
-  return new Intl.NumberFormat('en', {
-    maximumFractionDigits: 1,
-  }).format(value);
-}
-
-function multiSeries(points: TrendPoint[], metricCodes: string[]): MultiMetricPoint[] {
-  const buckets = new Map<string, MultiMetricPoint>();
-
-  for (const point of [...points].reverse()) {
-    const metricCode = point.parameterCode;
-    if (!metricCode || !metricCodes.includes(metricCode)) {
-      continue;
-    }
-
-    const date = formatDate(point.bucketTime);
-    const bucket = buckets.get(date) ?? { date };
-    bucket[metricCode] = point.avgValue ?? 0;
-    buckets.set(date, bucket);
-  }
-
-  return [...buckets.values()];
-}
-
-function alarmSegments(counts: AlarmCount[]): AlarmSegment[] {
-  const totals = new Map<string, number>();
-
-  for (const count of counts) {
-    const severity = count.severityLevel?.toLowerCase() ?? 'unknown';
-    totals.set(severity, (totals.get(severity) ?? 0) + (count.alarmsTriggered ?? 0));
-  }
-
-  if (!totals.size) {
-    return [{ color: '#D1D5DB', name: 'No alarms', amount: 1 }];
-  }
-
-  return [...totals.entries()].map(([severity, total]) => ({
-    color: SEVERITY_COLORS[severity] ?? '#6B7280',
-    name: severity,
-    amount: total,
-  }));
-}
-
-function totalAlarms(segments: AlarmSegment[]) {
-  if (segments.length === 1 && segments[0]?.name === 'No alarms') {
-    return 0;
-  }
-
-  return segments.reduce((total, segment) => total + segment.amount, 0);
-}
-
-function EmptyChart({ message }: { message: string }) {
-  return (
-    <div className='flex h-64 items-center justify-center text-sm text-fgColor-muted'>
-      {message}
-    </div>
+  return readDashboardView(
+    async () =>
+      (await fetchFn<DashboardAnalyticsResponse>(client.dashboard.analytics.$get()))
+        .data
   );
 }
 
-function MultiMetricChart({
-  data,
-  metricCodes,
-}: {
-  data: MultiMetricPoint[];
-  metricCodes: string[];
-}) {
-  if (!data.length) {
-    return <EmptyChart message='No aggregate metric data available yet.' />;
-  }
-
-  return (
-    <ResponsiveContainer width='100%' height={260}>
-      <LineChart data={data}>
-        <XAxis dataKey='date' stroke='#636c76' tickLine={false} axisLine={false} />
-        <YAxis
-          stroke='#636c76'
-          axisLine={false}
-          tickLine={false}
-          tickFormatter={(value: number) => formatNumber(value)}
-        />
-        <Tooltip
-          formatter={(value: number, name: string) => [
-            formatNumber(value),
-            METRIC_LABELS[name] ?? name,
-          ]}
-        />
-        {metricCodes.map((metricCode) => (
-          <Line
-            key={metricCode}
-            type='monotone'
-            dataKey={metricCode}
-            stroke={METRIC_COLORS[metricCode] ?? '#553AFE'}
-            strokeWidth={2}
-            dot={false}
-            connectNulls
-          />
-        ))}
-      </LineChart>
-    </ResponsiveContainer>
-  );
-}
-
-function Analytics() {
-  const data = useLoaderData() as DashboardAnalyticsResponse;
+/** Fleet averages and alarm counts retain their own meaning and timestamps. */
+export default function Analytics() {
+  const incoming = useLoaderData<typeof clientLoader>();
+  const retained = useRetainedRead(incoming.value, 'analytics');
   useAutoRefresh(REFRESH_INTERVALS.analytics);
-  const pressureData = multiSeries(data.pressureTrend, [
-    'tubing_pressure',
-    'casing_pressure',
-    'annulus_pressure',
-  ]);
-  const temperatureFlowData = multiSeries(data.temperatureFlowTrend, [
-    'wellhead_temperature',
-    'flow_rate',
-  ]);
-  const waterCutGorData = multiSeries(data.waterCutGorTrend, [
-    'water_cut',
-    'gas_oil_ratio',
-  ]);
-  const alarmData = alarmSegments(data.alarmCounts);
-  const alarmTotal = totalAlarms(alarmData);
-
+  if (!retained) return incoming.error ? <ReadFailure error={incoming.error} /> : null;
+  const data = retained.data;
+  const totals = new Map<string, number>();
+  for (const count of data.alarmCounts) {
+    const severity = count.severityLevel ?? 'Unknown';
+    totals.set(severity, (totals.get(severity) ?? 0) + count.alarmsTriggered);
+  }
   return (
-    <div className='space-y-5'>
-      <div>
-        <Title>Analytics</Title>
-        <p className='text-fg-muted'>
-          Two-minute aggregate trends from TimescaleDB continuous aggregates.
+    <div className='twin-workspace twin-stack'>
+      {incoming.error && <ReadFailure error={incoming.error} retained />}
+      <header>
+        <h1>Analytics</h1>
+        <p className='twin-muted'>
+          Compare recent trends across the fleet. Open a well for its individual
+          history.
         </p>
-      </div>
-
-      <div className='grid grid-cols-1 gap-4 xl:grid-cols-5'>
-        <div className='card xl:col-span-2'>
-          <div className='mb-4'>
-            <h2 className='font-semibold'>Pressure Trends</h2>
-            <p className='text-sm text-fgColor-muted'>
-              Tubing, casing, and annulus pressure averages across wells.
-            </p>
-          </div>
-          <MultiMetricChart
-            data={pressureData}
-            metricCodes={['tubing_pressure', 'casing_pressure', 'annulus_pressure']}
-          />
+      </header>
+      <ReadStatus
+        checkedAt={retained.checkedAt}
+        intervalMs={REFRESH_INTERVALS.analytics}
+      />
+      <PageHelp title='What these charts show'>
+        <p>
+          Each point averages available readings across wells over two minutes. A fleet
+          average can hide a change at one well.
+        </p>
+        <p>
+          Check each chart’s timestamps. A line gap means missing data. Temperature and
+          flow use separate axes because their units differ.
+        </p>
+        <p>
+          Alarm counts include events triggered in the last 24 hours, including events
+          that have cleared. Alarms shows only the active events.
+        </p>
+      </PageHelp>
+      <section className='twin-panel'>
+        <div className='twin-panel-heading'>
+          <h2>Alarms triggered in the last 24 hours</h2>
         </div>
-
-        <div className='card xl:col-span-2'>
-          <div className='mb-4'>
-            <h2 className='font-semibold'>Temperature / Flow</h2>
-            <p className='text-sm text-fgColor-muted'>
-              Two-minute averages; values use their native units.
-            </p>
-          </div>
-          <MultiMetricChart
-            data={temperatureFlowData}
-            metricCodes={['wellhead_temperature', 'flow_rate']}
-          />
+        <div className='twin-panel-body'>
+          {totals.size ? (
+            <dl className='twin-grid'>
+              {[...totals].map(([severity, count]) => (
+                <div key={severity}>
+                  <dt className='twin-muted'>{severity}</dt>
+                  <dd className='twin-number'>{count}</dd>
+                </div>
+              ))}
+            </dl>
+          ) : (
+            <p className='twin-muted'>No alarm events in this period.</p>
+          )}
         </div>
-
-        <div className='card'>
-          <div className='mb-4'>
-            <h2 className='font-semibold'>Alarm Severity</h2>
-            <p className='text-sm text-fgColor-muted'>
-              Five-minute alarm counts by severity.
-            </p>
-          </div>
-          <div className='relative h-56'>
-            <ResponsiveContainer>
-              <PieChart width={100} height={100}>
-                <Pie
-                  data={alarmData}
-                  dataKey='amount'
-                  outerRadius={80}
-                  innerRadius={65}
-                  paddingAngle={5}
-                  cornerRadius={5}
-                >
-                  {alarmData.map((segment) => (
-                    <Cell
-                      key={segment.name}
-                      fill={segment.color}
-                      strokeLinejoin='round'
-                      strokeLinecap='round'
-                    />
-                  ))}
-                </Pie>
-                <Tooltip
-                  formatter={(value: number, name: string) => [
-                    formatNumber(value),
-                    name,
-                  ]}
-                />
-              </PieChart>
-            </ResponsiveContainer>
-            <div className='absolute left-0 top-0 flex h-full w-full flex-col items-center justify-center'>
-              <p className='text-fgColor-muted'>Total</p>
-              <p className='text-title-medium'>{formatNumber(alarmTotal)}</p>
+      </section>
+      <div className='twin-grid'>
+        {[
+          {
+            title: 'Pressure trends',
+            points: data.pressureTrend,
+            codes: ['tubing_pressure', 'casing_pressure', 'annulus_pressure'],
+          },
+          {
+            title: 'Temperature and flow',
+            points: data.temperatureFlowTrend,
+            codes: ['wellhead_temperature', 'flow_rate'],
+          },
+          {
+            title: 'Water cut and gas–oil ratio',
+            points: data.waterCutGorTrend,
+            codes: ['water_cut', 'gas_oil_ratio'],
+          },
+        ].map((chart) => (
+          <section className='twin-panel' key={chart.title}>
+            <div className='twin-panel-heading'>
+              <div>
+                <h2>{chart.title}</h2>
+                <p className='twin-muted'>Two-minute averages across wells.</p>
+              </div>
             </div>
-          </div>
-        </div>
-
-        <div className='card xl:col-span-3'>
-          <div className='mb-4'>
-            <h2 className='font-semibold'>Water Cut / Gas-Oil Ratio</h2>
-            <p className='text-sm text-fgColor-muted'>
-              Two-minute averages; values use their native units.
-            </p>
-          </div>
-          <MultiMetricChart
-            data={waterCutGorData}
-            metricCodes={['water_cut', 'gas_oil_ratio']}
-          />
-        </div>
+            <div className='twin-panel-body'>
+              <TrendChart
+                points={chart.points}
+                metricCodes={chart.codes}
+                emptyMessage='No readings in this period yet.'
+              />
+            </div>
+          </section>
+        ))}
       </div>
     </div>
   );
 }
-
-export default Analytics;

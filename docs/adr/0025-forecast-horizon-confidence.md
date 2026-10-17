@@ -2,7 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-05-31
-- Implementation: Not started
+- Implementation: Implemented as an uncalibrated run-level heuristic
 
 ## Context
 
@@ -80,4 +80,18 @@ At the forecast-point level:
 - Forecasts are useful for near-term operational awareness without overclaiming.
 - The dashboard should label heuristic confidence clearly.
 - Historical forecast error tracking can later support calibrated confidence intervals.
+
+## Implementation on 2026-10-13
+
+Milestone 8 implements the defaults and limits above, with a 300-second minimum
+horizon. It uses the existing one-second model step and samples output at the
+requested interval. The run-level score starts at 0.65, falls by up to 0.25
+with horizon, and deducts 0.10 each for recent recovery, being near a rule
+threshold or having no active rules, and a sharp control change. It is clamped
+to 0.10 through 0.65. Every response labels the method
+`heuristic_uncalibrated` and `fieldCalibrated: false`. A rule crossing is a
+categorical risk label, not a probability. Model status must be running and
+fresh before a run starts; non-running states are refused instead of being
+assigned a lower score. The exact formula and units are in the
+[Milestone 8 design](../design/twin-core-milestone-8.md).
 

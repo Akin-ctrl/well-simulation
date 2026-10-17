@@ -1,8 +1,12 @@
 # ADR 0026: Use Tiered Retention And TimescaleDB Compression
 
-- Status: Accepted
+- Status: Accepted, amended
 - Date: 2026-05-31
-- Implementation: Implemented
+- Implementation: Installed local policies recorded in the 2026-10-17 amendment
+
+The original policy table below records the proposed targets. Use the
+[current policy amendment](#amendment-2026-10-17-record-the-installed-retention-policy)
+for this deployment's actual retention and compression.
 
 ## Context
 
@@ -61,4 +65,78 @@ Retention should be configurable by deployment environment:
 - Scenario metadata may outlive detailed scenario points.
 - Operators should understand that forecast points are not permanent historical truth.
 - Retention policies must be documented in deployment docs.
+
+## Implementation on 2026-10-12
+
+Migration 0010 gives `twin_state_snapshot` a 90-day retention policy and
+compression after 7 days. `twin_recovery_event` has a 2-year retention policy.
+The prediction, scenario, and control rows in the table above remain plans for
+later milestones.
+
+## Implementation on 2026-10-13
+
+Migration 0011 compresses prediction points after 3 days and retains them for
+30 days. Scenario points are compressed after 7 days and retained for 90 days.
+Run metadata remains in ordinary tables and outlives its points; the API
+returns HTTP 410 when any saved point has expired. The control-command policy
+is still planned for Milestone 8B.
+
+## Amendment 2026-10-17: Record the installed retention policy
+
+### Context and decision
+
+The original targets above do not describe the local schema. Milestone 8B also
+deliberately retained command history without automatic expiry. Scheduled jobs
+and alarm actions added more durable ordinary tables. This amendment records
+the implemented policy from `data/sql/schema.sql`; it changes no database policy.
+
+| Stored data | Automatic retention | Compression after |
+| --- | --- | --- |
+| `parameterreading` | 7 days | 1 day |
+| `alarmevent` | 90 days | 7 days |
+| `auditevent` | 90 days | None configured |
+| `twin_state_snapshot` | 90 days | 7 days |
+| `twin_recovery_event` | 2 years | None configured |
+| `prediction_point` | 30 days | 3 days |
+| `scenario_point` | 90 days | 7 days |
+| `prediction_run`, `scenario_run` | No automatic expiry | Not configured |
+| `control_command`, `control_command_event`, `model_parameter_change` | No automatic expiry | Not configured |
+| `wellhead_control_state`, `wellhead_model_parameter` | No automatic expiry | Not configured |
+| `forecast_schedule`, `forecast_job` | No automatic expiry | Not configured |
+| `alarm_action`, `alarm_acknowledgement`, `alarm_shelf` | No automatic expiry | Not configured |
+
+Retention policies remove eligible time chunks when their background jobs run;
+these ages are not exact per-row deletion deadlines. Projection point retention
+uses simulated time. A newly calculated historical scenario can therefore lose
+points sooner than one starting now. The API returns 410 when a saved run no
+longer has its complete point set, while run metadata and job receipts remain.
+
+Continuous aggregates have refresh policies, but no separate automatic retention
+policy. A refresh window is not a retention guarantee. Metadata tables also have
+no age-based expiry. Explicit asset deletion and foreign-key actions are separate
+from the time-based policies in this table.
+
+There is no environment-variable interface for changing these policies. A future
+policy change must update the canonical SQL and provide a reviewed conversion for
+existing installations. Do not reintroduce numbered schema files.
+
+### Consequences
+
+**Good.** Short demo retention bounds the largest histories. Durable receipts keep
+the meaning of reviewed operating actions after general audit rows expire.
+
+**Costs.** Ordinary history and aggregate storage can grow. A future archive
+policy must account for references between commands, results and receipts.
+
+**Accepted risks.** This local deployment has no automatic archive for those
+records. Do not infer three-year command expiry or permanent alarm-event storage
+from the original targets. A longer-lived installation needs an explicit archive
+and capacity plan.
+
+### Related
+
+- [ADR 0038](0038-live-control-command-lifecycle.md): durable control history.
+- [ADR 0039](0039-alarm-operator-actions.md): acknowledgement survives event retention.
+- [Scheduled forecasts](../design/scheduled-forecasts.md): job records and expiring points.
+- [Database updates](../operations/database-updates.md): verified changes to an existing installation.
 

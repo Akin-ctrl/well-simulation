@@ -4,11 +4,17 @@ from __future__ import annotations
 
 import logging
 import threading
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 
 from twin_core.config import ModelDefaults, ParameterOverrideSource, resolve_parameters
+from twin_core.control_store import (
+    ActiveControls,
+    CommandOutcome,
+    ControlCommitUnknownError,
+    ControlContext,
+)
 from twin_core.model import (
     ControlInputs,
     ModelParameters,
@@ -16,6 +22,8 @@ from twin_core.model import (
     initial_state,
     step_model,
 )
+from twin_core.projection import ProjectionBase
+from twin_core.recovery import parameter_fingerprint
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +40,9 @@ class WellheadState:
     skipped_ticks: int = 0
     last_tick_at: datetime | None = None
     process: ProcessState | None = None
+    restored_from: datetime | None = None
+    last_recovery_event_type: str | None = None
+    last_recovery_event_at: datetime | None = None
 
     def to_payload(self) -> dict[str, object]:
         """Distinguish model output, service ticks, and skipped time."""
@@ -46,6 +57,17 @@ class WellheadState:
                 self.last_tick_at.isoformat() if self.last_tick_at else None
             ),
             "process": self.process.to_payload() if self.process else None,
+            "restoredFrom": (
+                self.restored_from.isoformat() if self.restored_from else None
+            ),
+            "lastRecoveryEvent": (
+                {
+                    "type": self.last_recovery_event_type,
+                    "time": self.last_recovery_event_at.isoformat(),
+                }
+                if self.last_recovery_event_type and self.last_recovery_event_at
+                else None
+            ),
         }
 
 
@@ -65,6 +87,9 @@ class ModelRegistry:
         self._states: dict[int, WellheadState] = {}
         self._parameters: dict[int, ModelParameters] = {}
         self._controls: dict[int, ControlInputs] = {}
+        self._control_revisions: dict[int, int] = {}
+        self._durable_controls = False
+        self._controls_ready: set[int] = set()
         self._lock = threading.RLock()
 
     def replace_wellheads(self, wellhead_ids: Sequence[int]) -> None:
@@ -145,18 +170,36 @@ class ModelRegistry:
             self._states = next_states
             self._parameters = next_parameters
             self._controls = next_controls
+            self._controls_ready.intersection_update(next_controls)
+            self._control_revisions = {
+                key: self._control_revisions.get(key, 0) for key in next_controls
+            }
 
-    def tick(self, at: datetime) -> tuple[int, int]:
+    def tick(
+        self, at: datetime, before_step: Callable[[], None] | None = None
+    ) -> tuple[int, int]:
         """Advance each available well exactly one second at a UTC instant."""
         advanced = 0
         failures = 0
         with self._lock:
+            if before_step is not None:
+                before_step()
             next_states: dict[int, WellheadState] = {}
             for wellhead_id, state in self._states.items():
+                if self._durable_controls and wellhead_id not in self._controls_ready:
+                    next_states[wellhead_id] = state
+                    continue
+                if state.process is not None and at <= state.process.simulated_at:
+                    next_states[wellhead_id] = state
+                    continue
                 updated = replace(
                     state, tick_index=state.tick_index + 1, last_tick_at=at
                 )
-                if state.status not in ("initializing", "running"):
+                if state.status not in ("initializing", "recovering", "running"):
+                    if state.reason == "control_commit_unknown":
+                        updated = replace(
+                            updated, skipped_ticks=updated.skipped_ticks + 1
+                        )
                     next_states[wellhead_id] = updated
                     continue
                 parameters = self._parameters.get(wellhead_id)
@@ -187,11 +230,80 @@ class ModelRegistry:
                 next_states[wellhead_id] = replace(
                     updated,
                     status="running",
-                    reason="cold_start_no_snapshot",
+                    reason=(
+                        "restored_from_snapshot"
+                        if state.restored_from
+                        else "cold_start_no_snapshot"
+                    ),
                     process=process,
                 )
             self._states = next_states
         return advanced, failures
+
+    def control_context(self, wellhead_id: int) -> ControlContext | None:
+        """Copy active inputs and their identity without exposing mutable state."""
+        with self._lock:
+            state = self._states.get(wellhead_id)
+            parameters = self._parameters.get(wellhead_id)
+            controls = self._controls.get(wellhead_id)
+            if state is None or parameters is None or controls is None:
+                return None
+            return ControlContext(
+                wellhead_id,
+                state.model_version,
+                parameter_fingerprint(parameters),
+                state.status,
+                controls,
+                self._control_revisions.get(wellhead_id, 0),
+            )
+
+    def require_durable_controls(self) -> None:
+        """Prevent new wells from ticking until saved controls have been loaded."""
+        with self._lock:
+            self._durable_controls = True
+
+    def install_controls(self, wellhead_id: int, active: ActiveControls) -> bool:
+        """Adopt a confirmed durable revision; return whether setpoints changed."""
+        active.controls.validate()
+        with self._lock:
+            context = self.control_context(wellhead_id)
+            if (
+                context is None
+                or active.model_version != context.model_version
+                or active.parameter_fingerprint != context.parameter_fingerprint
+            ):
+                raise ValueError("Active control identity differs from running model")
+            changed = self._controls[wellhead_id] != active.controls
+            self._controls[wellhead_id] = active.controls
+            self._control_revisions[wellhead_id] = active.revision
+            self._controls_ready.add(wellhead_id)
+            state = self._states[wellhead_id]
+            if state.reason == "control_commit_unknown":
+                self._states[wellhead_id] = replace(
+                    state, status="recovering", reason="controls_reconciled"
+                )
+            return changed
+
+    def apply_control(
+        self,
+        wellhead_id: int,
+        operation: Callable[[ControlContext | None], CommandOutcome],
+    ) -> CommandOutcome:
+        """Hold the registry lock across the database commit and memory adoption."""
+        with self._lock:
+            try:
+                outcome = operation(self.control_context(wellhead_id))
+                if outcome.active is not None:
+                    self.install_controls(wellhead_id, outcome.active)
+                return outcome
+            except (ControlCommitUnknownError, ValueError):
+                if wellhead_id in self._states:
+                    self._states[wellhead_id] = replace(
+                        self._states[wellhead_id],
+                        status="unavailable",
+                        reason="control_commit_unknown",
+                    )
+                raise
 
     def record_gap(self, skipped: int) -> None:
         """Count unmodelled scheduler time without advancing process state."""
@@ -207,6 +319,94 @@ class ModelRegistry:
         """Return immutable current state for an active wellhead."""
         with self._lock:
             return self._states.get(wellhead_id)
+
+    def parameters_for(self, wellhead_id: int) -> ModelParameters | None:
+        """Return the immutable resolved parameter set for one active well."""
+        with self._lock:
+            return self._parameters.get(wellhead_id)
+
+    def projection_base(self, wellhead_id: int) -> ProjectionBase | None:
+        """Copy process state, controls, and parameters under the same lock."""
+        with self._lock:
+            state = self._states.get(wellhead_id)
+            parameters = self._parameters.get(wellhead_id)
+            controls = self._controls.get(wellhead_id)
+            if (
+                state is None
+                or state.status != "running"
+                or state.process is None
+                or parameters is None
+                or controls is None
+            ):
+                return None
+            return ProjectionBase(
+                wellhead_id,
+                state.model_version,
+                parameter_fingerprint(parameters),
+                state.process,
+                controls,
+                parameters,
+                state.restored_from,
+                state.last_recovery_event_at,
+            )
+
+    def restore(
+        self,
+        wellhead_id: int,
+        process: ProcessState,
+        tick_index: int,
+        skipped_ticks: int,
+        snapshot_time: datetime,
+        event_time: datetime,
+    ) -> None:
+        """Install a validated saved state before the first service tick."""
+        with self._lock:
+            current = self._states[wellhead_id]
+            if current.status != "initializing":
+                raise ValueError("Only an unstarted well can be restored")
+            self._controls[wellhead_id] = ControlInputs(
+                choke_position_percent=process.choke_position_percent,
+                master_valve_open=process.master_valve_open,
+                wing_valve_open=process.wing_valve_open,
+                swab_valve_open=process.swab_valve_open,
+                pump_on=process.pump_on,
+                emergency_shutdown=process.emergency_shutdown,
+            )
+            self._states[wellhead_id] = replace(
+                current,
+                status="recovering",
+                reason="restored_from_snapshot",
+                process=process,
+                tick_index=tick_index,
+                skipped_ticks=skipped_ticks,
+                last_tick_at=process.simulated_at,
+                restored_from=snapshot_time,
+                last_recovery_event_type="snapshot_restored",
+                last_recovery_event_at=event_time,
+            )
+
+    def record_recovery_event(
+        self, wellhead_id: int, event_type: str, at: datetime
+    ) -> None:
+        """Expose a cold start or rejected snapshot in the state API."""
+        with self._lock:
+            state = self._states.get(wellhead_id)
+            if state is None:
+                return
+            self._states[wellhead_id] = replace(
+                state,
+                last_recovery_event_type=event_type,
+                last_recovery_event_at=at,
+            )
+
+    def persistence_copy(self) -> tuple[tuple[WellheadState, str], ...]:
+        """Copy state and matching parameter identities under one registry lock."""
+        with self._lock:
+            return tuple(
+                (state, parameter_fingerprint(self._parameters[wellhead_id]))
+                for wellhead_id, state in sorted(self._states.items())
+                if state.status == "running" and wellhead_id in self._parameters
+            )
 
     def snapshot(self) -> tuple[WellheadState, ...]:
         """Return one consistent view of every active model state."""

@@ -1,8 +1,8 @@
 # ADR 0029: Expose Prometheus-Compatible Metrics With Optional Observability Stack
 
-- Status: Accepted
+- Status: Accepted, amended
 - Date: 2026-05-31
-- Implementation: Partial
+- Implementation: Implemented
 
 ## Context
 
@@ -90,3 +90,20 @@ docker compose --profile observability up
 - Dashboards can be added after core service metrics stabilize.
 - Default local setup remains lightweight.
 
+
+## Amendment: optional stack delivered on 2026-10-17
+
+Add Prometheus and Grafana through the `observability` Compose profile, with
+pinned official images, separate persistent volumes and loopback host ports.
+Provision one Service health dashboard from versioned files. Keep the normal
+well stack independent of these tools and their credentials.
+
+Keep the existing `api_` and `wellhead_` metrics as published interfaces. New
+readiness and timestamp metrics use `well_sim_`; recording rules join them into
+consistent service status and elapsed-time queries. A successful scrape alone
+does not establish readiness. Missing, stale or future observations stay unknown.
+
+Grafana has a separate local administrator password, initialized from the ignored
+environment file. It cannot change well controls or alarm state. The design,
+limits and verification are in [Optional service metrics](../design/observability.md).
+Startup and recovery instructions are in the [metrics runbook](../../observability/README.md).

@@ -14,9 +14,23 @@ import { TEST_DATABASE, databaseUrl, loadRepoEnv } from './env';
 loadRepoEnv();
 
 process.env.DATABASE_URL = databaseUrl(TEST_DATABASE);
+// Requests use the deployed grants; fixture setup keeps its separate admin connection.
+const applicationUser = process.env.TEST_API_DB_USER ?? process.env.API_DB_USER;
+if (!applicationUser || !process.env.API_DB_PASSWORD) {
+  throw new Error(
+    'API tests require API_DB_USER and API_DB_PASSWORD for a restricted application role'
+  );
+}
+const applicationUrl = new URL(process.env.DATABASE_URL);
+applicationUrl.username = applicationUser;
+applicationUrl.password = process.env.API_DB_PASSWORD;
+process.env.DATABASE_URL = applicationUrl.toString();
 process.env.NODE_ENV = 'test';
 process.env.JWT_SECRET =
   process.env.TEST_JWT_SECRET ?? 'test-secret-of-at-least-thirty-two-characters';
+process.env.TWIN_INTERNAL_TOKEN =
+  process.env.TEST_TWIN_INTERNAL_TOKEN ??
+  'test-twin-token-of-at-least-thirty-two-characters';
 process.env.COOKIE_SECURE = 'false';
 process.env.TRUSTED_PROXY_IPS = '';
 process.env.ALLOWED_ORIGINS = '';

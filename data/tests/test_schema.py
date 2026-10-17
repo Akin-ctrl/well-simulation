@@ -1,4 +1,4 @@
-"""Tests for the migration runner.
+"""Tests for canonical SQL loading and statement splitting.
 
 The statement splitter exists because TimescaleDB refuses to create a
 continuous aggregate inside a transaction block, and Postgres wraps any
@@ -10,9 +10,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
-from schema import Migration, split_statements
+from schema_sql import SqlFile, split_statements
 
 
 class TestSplitStatements:
@@ -59,14 +57,9 @@ class TestSplitStatements:
         assert len(statements) == 2
         assert statements[1] == "SELECT 2"
 
-    def test_real_continuous_aggregate_migration_splits_cleanly(self) -> None:
+    def test_canonical_aggregates_split_cleanly(self) -> None:
         """The file this splitter exists for must produce runnable statements."""
-        path = (
-            Path(__file__).resolve().parents[1]
-            / "sql"
-            / "migrations"
-            / "0004_continuous_aggregates.sql"
-        )
+        path = Path(__file__).resolve().parents[1] / "sql" / "schema.sql"
         statements = split_statements(path.read_text(encoding="utf-8"))
 
         assert len(statements) > 1
@@ -78,11 +71,11 @@ class TestSplitStatements:
             assert "GROUP BY" in create
 
 
-class TestMigration:
-    def _write(self, tmp_path: Path, name: str, body: str) -> Migration:
+class TestSqlFile:
+    def _write(self, tmp_path: Path, name: str, body: str) -> SqlFile:
         path = tmp_path / name
         path.write_text(body, encoding="utf-8")
-        return Migration.load(path)
+        return SqlFile.load(path)
 
     def test_checksum_changes_with_content(self, tmp_path: Path) -> None:
         a = self._write(tmp_path, "a.sql", "SELECT 1;")
@@ -95,24 +88,3 @@ class TestMigration:
             self._write(tmp_path, "a.sql", body).checksum
             == self._write(tmp_path, "b.sql", body).checksum
         )
-
-    def test_transactional_by_default(self, tmp_path: Path) -> None:
-        assert self._write(tmp_path, "a.sql", "SELECT 1;").in_transaction is True
-
-    def test_directive_opts_out_of_transaction(self, tmp_path: Path) -> None:
-        migration = self._write(
-            tmp_path, "a.sql", "-- migrate:no-transaction\nSELECT 1;"
-        )
-        assert migration.in_transaction is False
-
-    @pytest.mark.parametrize(
-        "filename",
-        [
-            "0004_continuous_aggregates.sql",
-            "0005_retention_and_compression.sql",
-        ],
-    )
-    def test_timescale_files_opt_out(self, filename: str) -> None:
-        """These must never be wrapped in a transaction; TimescaleDB rejects it."""
-        path = Path(__file__).resolve().parents[1] / "sql" / "migrations" / filename
-        assert Migration.load(path).in_transaction is False
