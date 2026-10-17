@@ -11,7 +11,8 @@ export async function readDashboardView<T>(read: () => Promise<T>) {
       error: null,
     };
   } catch (error) {
-    if (error instanceof ApiError && [401, 403].includes(error.statusCode ?? 0)) throw error;
+    if (error instanceof ApiError && [401, 403].includes(error.statusCode ?? 0))
+      throw error;
     return { value: null, error: errorState(error) };
   }
 }

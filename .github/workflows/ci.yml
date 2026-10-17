@@ -89,7 +89,7 @@ jobs:
         run: python3 scripts/check_prose.py
 
   api-tests:
-    name: API integration tests
+    name: Database and API integration tests
     runs-on: ubuntu-latest
     # These run against a real TimescaleDB. The dashboard reads continuous
     # aggregates and alarm evaluation lives in a trigger, so a mocked database
@@ -148,11 +148,12 @@ jobs:
         run: pnpm install --frozen-lockfile
         working-directory: monorepo
 
-      - name: Verify schema lifecycles and scheduled forecast transactions
+      - name: Verify schema, controls, projections and scheduled forecasts
         run: >-
           python -m pytest data/tests/test_schema_database.py
           data/tests/test_schema_extension_database.py data/tests/test_forecast_database.py
           data/tests/test_schema_normalize_database.py
+          twin_core/tests/test_control_database.py twin_core/tests/test_projection_database.py
         env:
           SCHEMA_DATABASE_TEST: '1'
 

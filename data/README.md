@@ -132,11 +132,28 @@ the [update guide](../docs/operations/database-updates.md#command-environment)
 shows an explicit loader. Run the checks with:
 
 ```sh
-SCHEMA_DATABASE_TEST=1 python -m pytest data/tests/test_schema_database.py data/tests/test_schema_extension_database.py data/tests/test_schema_normalize_database.py
+SCHEMA_DATABASE_TEST=1 python -m pytest \
+  data/tests/test_schema_database.py \
+  data/tests/test_schema_extension_database.py \
+  data/tests/test_schema_normalize_database.py \
+  data/tests/test_forecast_database.py \
+  twin_core/tests/test_control_database.py \
+  twin_core/tests/test_projection_database.py
 ```
 
 The tests use `TEST_POSTGRES_HOST`, `TEST_POSTGRES_PORT`, `POSTGRES_USER`, and
 `POSTGRES_PASSWORD`, creating and deleting only their own random database names.
+Use a disposable TimescaleDB server on the pinned engine version. Its test
+administrator must be able to create databases and roles. The model tests create
+separate API and twin-core logins through the application's provisioning code,
+then remove their grants and logins during cleanup. Each historical test writes
+its own source snapshot, so no running model worker is needed.
+
+`SCHEMA_DATABASE_TEST=1` now enables all these database suites, including the
+14 control and projection tests that CI previously skipped. The old
+`CONTROL_DATABASE_TEST`, `TEST_PROJECTION_DATABASE_URL`, and
+`TEST_PROJECTION_VERIFY_DATABASE_URL` settings no longer select a target. Tests
+never take a database name from `POSTGRES_DB`.
 
 Do not edit the generated record by hand. It records structure and the source
 checksum, not a second schema to maintain. Keep the Drizzle mirror consistent.

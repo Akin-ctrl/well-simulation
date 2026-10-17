@@ -1,10 +1,9 @@
-"""Opt-in command tests against a migrated, disposable PostgreSQL database."""
+"""Command tests against fresh schemas with the real service permissions."""
 
 from __future__ import annotations
 
 import os
 from collections.abc import Iterator
-from contextlib import closing
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
@@ -12,6 +11,7 @@ from uuid import uuid4
 import psycopg2
 import psycopg2.extensions
 import pytest
+from test_schema_database import pytestmark
 from twin_core.config import ServiceSettings
 from twin_core.control_store import (
     CommandRef,
@@ -22,47 +22,27 @@ from twin_core.control_store import (
 from twin_core.database import DatabaseUnavailableError
 from twin_core.model import ControlInputs
 
-pytestmark = pytest.mark.skipif(
-    os.getenv("CONTROL_DATABASE_TEST") != "1",
-    reason="Set CONTROL_DATABASE_TEST=1 for disposable database tests",
-)
+__all__ = ["pytestmark"]
 
 
 @pytest.fixture
-def admin() -> Iterator[psycopg2.extensions.connection]:
-    if not os.environ["POSTGRES_DB"].startswith("well_8b_"):
-        pytest.fail(
-            "Control integration tests require an explicitly disposable well_8b_ "
-            "database"
+def admin(
+    installed: psycopg2.extensions.connection, model_settings: ServiceSettings
+) -> Iterator[psycopg2.extensions.connection]:
+    assert installed.info.dbname == model_settings.database_name
+    with installed.cursor() as cur:
+        cur.execute(
+            "INSERT INTO "
+            "users(email,user_name,encrypted_password,role,status,deleted) VALUES "
+            "('control-test@example.com','control-test','unused','OPERATIONS','ACTIVE',false)"
         )
-    with closing(
-        psycopg2.connect(
-            host=os.environ["POSTGRES_HOST"],
-            port=os.environ["POSTGRES_PORT"],
-            dbname=os.environ["POSTGRES_DB"],
-            user=os.environ["POSTGRES_USER"],
-            password=os.environ["POSTGRES_PASSWORD"],
-        )
-    ) as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                "DELETE FROM wellhead_control_state; DELETE FROM control_command_event;"
-                " DELETE FROM control_command"
-            )
-            cur.execute(
-                "INSERT INTO "
-                "users(email,user_name,encrypted_password,role,status,deleted) VALUES "
-                "('control-test@example.com','control-test','unused','OPERATIONS','ACTIVE',false)"
-                " ON CONFLICT (email) DO UPDATE SET "
-                "role='OPERATIONS',status='ACTIVE',deleted=false,session_version=0"
-            )
-        conn.commit()
-        yield conn
+    installed.commit()
+    yield installed
 
 
 @pytest.fixture
-def store() -> ControlStore:
-    return ControlStore(ServiceSettings.from_env())
+def store(model_settings: ServiceSettings) -> ControlStore:
+    return ControlStore(model_settings)
 
 
 def queue(

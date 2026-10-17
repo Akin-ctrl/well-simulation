@@ -1,15 +1,16 @@
-"""Projection persistence checks against an explicitly supplied disposable DB."""
+"""Projection persistence checks with fresh schemas and test-owned snapshots."""
 
 from __future__ import annotations
 
-import os
+from contextlib import closing
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
-from urllib.parse import unquote, urlparse
 from uuid import uuid4
 
 import psycopg2
+import psycopg2.extensions
 import pytest
+from test_schema_database import pytestmark
 from twin_core.config import ServiceSettings, load_defaults, resolve_parameters
 from twin_core.database import DatabaseUnavailableError
 from twin_core.historical import historical_base
@@ -22,43 +23,33 @@ from twin_core.projection import (
     project,
 )
 from twin_core.recovery import parameter_fingerprint
+from twin_core.state import WellheadState
+
+__all__ = ["pytestmark"]
+
+ProjectionDatabase = tuple[
+    TwinPersistence, ServiceSettings, psycopg2.extensions.connection, int
+]
 
 
 @pytest.fixture
-def projection_database() -> tuple[TwinPersistence, str, str, int]:
-    """Use only a database named by the opt-in integration test variable."""
-    writer_dsn = os.getenv("TEST_PROJECTION_DATABASE_URL")
-    if not writer_dsn:
-        pytest.skip("TEST_PROJECTION_DATABASE_URL is not set")
-    verify_dsn = os.getenv("TEST_PROJECTION_VERIFY_DATABASE_URL", writer_dsn)
-    url = urlparse(writer_dsn)
-    assert url.hostname and url.port and url.path and url.username
-    settings = ServiceSettings(
-        bind_host="127.0.0.1",
-        port=0,
-        max_catchup_steps=5,
-        fleet_refresh_seconds=30,
-        telemetry_freshness_seconds=15,
-        database_host=url.hostname,
-        database_port=url.port,
-        database_name=url.path.lstrip("/"),
-        database_user=unquote(url.username),
-        database_password=unquote(url.password or ""),
-        environment_overrides={},
-    )
-    with psycopg2.connect(writer_dsn) as conn, conn.cursor() as cur:
+def projection_database(
+    installed: psycopg2.extensions.connection, model_settings: ServiceSettings
+) -> ProjectionDatabase:
+    """Use the schema and restricted role created for this test alone."""
+    with installed.cursor() as cur:
         cur.execute("SELECT min(wellhead_id) FROM wellhead")
         row = cur.fetchone()
         assert row is not None
         wellhead_id = int(row[0])
-    return TwinPersistence(settings), writer_dsn, verify_dsn, wellhead_id
+    return TwinPersistence(model_settings), model_settings, installed, wellhead_id
 
 
 def test_forecast_and_scenario_commit_complete_runs_and_rollback_duplicates(
-    projection_database: tuple[TwinPersistence, str, str, int],
+    projection_database: ProjectionDatabase,
 ) -> None:
     """Prove run metadata and sampled rows are one atomic database write."""
-    store, writer_dsn, verify_dsn, wellhead_id = projection_database
+    store, settings, admin, wellhead_id = projection_database
     now = datetime.now(timezone.utc)
     defaults = load_defaults()
     parameters = ModelParameters.from_values(
@@ -92,7 +83,7 @@ def test_forecast_and_scenario_commit_complete_runs_and_rollback_duplicates(
     )
     store.write_projection(forecast, 1)
     store.write_projection(scenario, 1)
-    with psycopg2.connect(verify_dsn) as conn, conn.cursor() as cur:
+    with admin.cursor() as cur:
         cur.execute(
             "SELECT count(*), min(flow_rate_bpd) FROM prediction_point WHERE run_id=%s",
             (forecast.run_id,),
@@ -121,40 +112,59 @@ def test_forecast_and_scenario_commit_complete_runs_and_rollback_duplicates(
     )
     with pytest.raises(DatabaseUnavailableError):
         store.write_projection(duplicate, 1)
-    with psycopg2.connect(verify_dsn) as conn, conn.cursor() as cur:
+    with admin.cursor() as cur:
         cur.execute("SELECT count(*) FROM prediction_run WHERE run_id=%s", (failed_id,))
         row = cur.fetchone()
         assert row is not None
         assert row[0] == 0
 
-    if writer_dsn != verify_dsn:
-        with psycopg2.connect(writer_dsn) as conn, conn.cursor() as cur:
-            with pytest.raises(psycopg2.errors.InsufficientPrivilege):
-                cur.execute("SELECT count(*) FROM prediction_run")
-            conn.rollback()
-            with pytest.raises(psycopg2.errors.InsufficientPrivilege):
-                cur.execute(
-                    "UPDATE prediction_run SET confidence_score = 0 WHERE run_id = %s",
-                    (forecast.run_id,),
-                )
+    with (
+        closing(
+            psycopg2.connect(
+                host=settings.database_host,
+                port=settings.database_port,
+                dbname=settings.database_name,
+                user=settings.database_user,
+                password=settings.database_password,
+            )
+        ) as conn,
+        conn.cursor() as cur,
+    ):
+        with pytest.raises(psycopg2.errors.InsufficientPrivilege):
+            cur.execute("SELECT count(*) FROM prediction_run")
+        conn.rollback()
+        with pytest.raises(psycopg2.errors.InsufficientPrivilege):
+            cur.execute(
+                "UPDATE prediction_run SET confidence_score = 0 WHERE run_id = %s",
+                (forecast.run_id,),
+            )
 
 
 def test_historical_branch_reads_exact_source_and_preserves_it(
-    projection_database: tuple[TwinPersistence, str, str, int],
+    projection_database: ProjectionDatabase,
 ) -> None:
     """Use a real retained source and the restricted model role for the branch."""
-    store, _, verify_dsn, wellhead_id = projection_database
+    store, _, admin, wellhead_id = projection_database
     now = datetime.now(timezone.utc)
     defaults = load_defaults()
     parameters = ModelParameters.from_values(
         resolve_parameters(defaults, {}, {}, wellhead_id)
     )
-    candidates = store.find_snapshots(wellhead_id, now - timedelta(days=1), now)
-    matching = next(
-        item
-        for item in candidates
-        if item.parameter_fingerprint == parameter_fingerprint(parameters)
+    saved_at = now - timedelta(minutes=1)
+    fingerprint = parameter_fingerprint(parameters)
+    well = WellheadState(
+        wellhead_id,
+        defaults.version,
+        "running",
+        "test_snapshot",
+        process=initial_state(wellhead_id, parameters, ControlInputs(), saved_at),
     )
+    assert store.write_snapshots(((well, fingerprint),)) == 1
+    candidates = store.find_snapshots(wellhead_id, saved_at, now)
+    assert len(candidates) == 1
+    matching = candidates[0]
+    assert matching.parameter_fingerprint == fingerprint
+    assert matching.selection.simulated_at == saved_at
     source = store.selected_snapshot(wellhead_id, matching.selection)
     assert source is not None
     assert store.selected_snapshot(wellhead_id + 10000, matching.selection) is None
@@ -186,7 +196,7 @@ def test_historical_branch_reads_exact_source_and_preserves_it(
     try:
         store.write_projection(result, 1)
         assert store.selected_snapshot(wellhead_id, matching.selection) == source
-        with psycopg2.connect(verify_dsn) as conn, conn.cursor() as cur:
+        with admin.cursor() as cur:
             cur.execute(
                 "SELECT base_state, control_values FROM scenario_run WHERE run_id=%s",
                 (result.run_id,),
@@ -210,6 +220,6 @@ def test_historical_branch_reads_exact_source_and_preserves_it(
                 matching.selection.simulated_at + timedelta(seconds=300),
             )
     finally:
-        with psycopg2.connect(verify_dsn) as conn, conn.cursor() as cur:
+        with admin.cursor() as cur:
             cur.execute("DELETE FROM scenario_point WHERE run_id=%s", (result.run_id,))
             cur.execute("DELETE FROM scenario_run WHERE run_id=%s", (result.run_id,))

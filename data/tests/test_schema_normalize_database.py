@@ -23,7 +23,9 @@ def test_dumped_duration_check_compares_equal_after_reparse(
             "SELECT pg_get_constraintdef(oid) FROM pg_constraint "
             "WHERE conrelid='duration_probe'::regclass"
         )
-        original = cursor.fetchone()[0]
+        original_row = cursor.fetchone()
+        assert original_row is not None
+        original = original_row[0]
         # The definition comes from this test's own table, as it would in pg_dump.
         cursor.execute(
             sql.SQL("CREATE TABLE restored_probe (interval_seconds INT {})").format(
@@ -34,7 +36,9 @@ def test_dumped_duration_check_compares_equal_after_reparse(
             "SELECT pg_get_constraintdef(oid) FROM pg_constraint "
             "WHERE conrelid='restored_probe'::regclass"
         )
-        restored = cursor.fetchone()[0]
+        restored_row = cursor.fetchone()
+        assert restored_row is not None
+        restored = restored_row[0]
         assert original != restored
         assert normalize_bounded_minutes(original) == restored
         cursor.execute(
@@ -43,5 +47,5 @@ def test_dumped_duration_check_compares_equal_after_reparse(
             "CROSS JOIN (VALUES (true),(false),(NULL::boolean)) y(b) "
             "CROSS JOIN (VALUES (true),(false),(NULL::boolean)) z(c)"
         )
-        assert cursor.fetchone()[0] is True
+        assert cursor.fetchone() == (True,)
         database.rollback()

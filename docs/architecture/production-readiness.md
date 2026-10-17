@@ -105,3 +105,44 @@ These entries do not reopen completed remediation phases. They state the limits
 of the local deployment and the remaining delivery actions. The documentation
 update reviewed existing evidence; it did not rerun the application test suites,
 perform another database conversion or check remote publication state.
+
+## Verification fixes on 2026-10-17
+
+A fresh audit after documentation commit `1e6a802` found three Python type
+errors, a source formatting failure, insufficient contrast in the stale telemetry
+label, a historical test that needed an existing snapshot, and 14 model database
+tests that CI did not enable.
+
+The fixes check database rows before indexing them, format the affected statement,
+exclude generated test and type-check caches from Prettier, and darken the stale
+label. The browser accessibility test now supplies stale telemetry explicitly.
+It no longer needs readings to age during the test to exercise that state.
+
+Control and projection tests now reuse the schema suite's temporary databases.
+Each test provisions separate service roles through the application's grant
+functions and removes those roles during cleanup. The historical test writes
+its own snapshot and verifies that the saved source stays unchanged after a
+scenario branches from it. CI enables all these tests with
+`SCHEMA_DATABASE_TEST=1`; the [database test instructions](../../data/README.md#changing-the-schema)
+give the same command for local use.
+
+| Check | Fresh result |
+| --- | --- |
+| Python, including database suites | 383 passed, zero skipped |
+| Model database checks within that total | All 14 control and projection tests passed; no test databases or service roles remained afterward |
+| API integration | 127 passed |
+| Shared-contract and frontend unit tests | 40 passed |
+| Chromium browser workflows | All nine passed against the updated isolated dashboard, including stale telemetry accessibility |
+| Types, lint and formatting | Python and TypeScript checks passed; Prettier passed with generated caches and browser artifacts present |
+| Dashboard image | Built successfully; isolated dashboard became healthy |
+| Documentation | Prose, local links and OpenAPI validation passed |
+
+The first disposable database startup exceeded its 60-second deadline while the
+build and TypeScript checks ran. No tests ran in that attempt. After those tasks
+finished, a retry with a longer startup deadline completed all database suites.
+Both temporary database containers were removed. Host JavaScript checks used
+Node 24; the dashboard image uses the repository's Node 22 build.
+
+These are local results. This follow-up did not run GitHub Actions, repeat backup
+restoration, or perform the deferred physical sleep/wake test. The field accuracy
+and manual assistive-technology limits above still apply.

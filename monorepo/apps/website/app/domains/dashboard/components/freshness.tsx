@@ -60,7 +60,7 @@ export function FreshnessIndicator({
   return (
     <span
       className={`inline-flex items-center gap-1.5 text-sm ${
-        isStale ? 'text-red-600' : 'text-green-700'
+        isStale ? 'text-red-700' : 'text-green-700'
       }`}
       title={new Date(latestReadingAt).toLocaleString()}
     >

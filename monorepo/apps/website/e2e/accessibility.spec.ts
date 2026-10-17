@@ -1,5 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
+import type { WellheadDetailResponse } from '@well-simulation/dto/res/dashboard';
+import type { ApiRes } from '@well-simulation/dto/res/response';
 
 async function scan(page: Page) {
   const results = await new AxeBuilder({ page })
@@ -52,8 +54,20 @@ test('workspace accessibility, recovery, keyboard focus and responsive states', 
   await page.getByRole('link', { name: 'Skip to main content' }).focus();
   await page.keyboard.press('Enter');
   await expect(page.locator('#main-content')).toBeFocused();
+  // Exercise stale telemetry without depending on the model's update timing.
+  await page.route('**/api/dashboard/wellheads/1', async (route) => {
+    const response = await route.fetch();
+    expect(response.ok()).toBe(true);
+    const payload: ApiRes<WellheadDetailResponse> = await response.json();
+    payload.data.latestReadingAt = new Date(Date.now() - 120_000).toISOString();
+    payload.data.latestReadingAgeSeconds = 120;
+    await route.fulfill({ response, json: payload });
+  });
   await page.getByRole('link', { name: 'WH-001', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Current parameters' })).toBeVisible();
+  await expect(
+    page.getByText('Telemetry stale, last reading', { exact: false })
+  ).toBeVisible();
   await expect(page.locator('#main-content')).toBeFocused();
   await page
     .getByText('View history values as a table', { exact: true })
@@ -61,6 +75,7 @@ test('workspace accessibility, recovery, keyboard focus and responsive states', 
     .click();
   await expect(page.getByRole('table').first()).toBeVisible();
   await scan(page);
+  await page.unroute('**/api/dashboard/wellheads/1');
   await page.getByRole('link', { name: 'Forecast', exact: true }).click();
   await scan(page);
   await page.getByLabel('Duration (minutes)').fill('5');
