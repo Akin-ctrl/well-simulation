@@ -148,8 +148,10 @@ pg_dumpall --roles-only for the roles. Restore into a separate server, create
 the original roles, and create an empty database with the original name and
 owner from template0. Install the exact TimescaleDB version first.
 
-Run timescaledb_pre_restore(), then pg_restore --exit-on-error against that
-database, followed by timescaledb_post_restore(). Check all exit codes.
+Run timescaledb_pre_restore(), then serial pg_restore --exit-on-error against
+that database, followed by timescaledb_post_restore(). Check all exit codes.
+Do not use --jobs for a full TimescaleDB restore; see the
+[restore finding](schema-extension.md#restore-comparison-follow-up-2026-10-17).
 
 The pre-created database is required by this restore sequence. pg_restore
 without --create does not apply the archive's database-level grants. In our
@@ -173,19 +175,26 @@ restoration check must verify the restrictions before declaring recovery complet
 
 ## Accepting the generated reference
 
-The existing installer rejects an engine or contract mismatch. That safeguard
-still applies to normal startup. After the separately verified engine upgrade,
-run:
+For the original consolidated baseline, use the `e150992` installer and SQL
+with the previous `cd09691` contract. Their schema source is identical. Today's
+schema also contains schedule and alarm tables, so it cannot perform that
+engine-only acceptance directly. Follow the
+[existing-database sequence](../operations/database-updates.md) to keep the
+installer, source and engine reference together, then add later tables separately.
+
+The installer rejects an engine or contract mismatch during normal startup.
+Use the Bash helper and historical directories from the update guide after
+verifying the converted copy's records, permissions and catalog:
 
 ```sh
-python data/src/schema.py accept-engine \
-  --previous-contract /private/path/previous-schema-contract.json
-python data/src/schema.py check
+schema_python "$schema_engine_dir/data/src/schema.py" accept-engine \
+  --previous-contract "$schema_legacy_dir/data/sql/schema-contract.json"
+schema_python "$schema_engine_dir/data/src/schema.py" check
 ```
 
-POSTGRES_* must identify the database being checked. The current generated
-data/sql/schema-contract.json must come from a fresh installation on the target
-engine. The saved previous contract must match the database's recorded identity.
+POSTGRES_* must identify the database being checked. The generated contract in
+the selected historical tree must describe its schema on the target engine.
+The saved previous contract must match the database's recorded identity.
 
 accept-engine runs under the existing installer lock. It requires the same
 schema.sql checksum and legacy file checksums in both references. It verifies

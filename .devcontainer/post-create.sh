@@ -18,8 +18,13 @@ Ready.
   (cd monorepo && pnpm turbo run check-types lint)
   python3 scripts/check_prose.py
 
-  cp .env.example .env                     then set POSTGRES_PASSWORD,
-                                           TWIN_DB_PASSWORD and JWT_SECRET
+  cp .env.example .env                     for a new local environment
+                                           set separate POSTGRES_PASSWORD,
+                                           TWIN_DB_PASSWORD, API_DB_PASSWORD,
+                                           JWT_SECRET and TWIN_INTERNAL_TOKEN
   docker compose up --build                dashboard on port 8090
+
+  README.md                               existing-database setup and demo login
+  monorepo/README.md                       host development and full web checks
 
 EOF

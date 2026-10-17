@@ -54,9 +54,9 @@ the canonical SQL in `data/sql/schema.sql`, the Docker images and
   makes it worse.
 - Findings that need an already-compromised host.
 
-The full list of known gaps is in
-[docs/architecture/production-readiness.md](../docs/architecture/production-readiness.md).
-Anything listed there as missing is a known gap, not a new finding.
+The readiness record separates [open work and deployment limits](../docs/architecture/production-readiness.md#open-work-and-deployment-limits)
+from verified local behavior. A documented limitation is known, but a report that
+shows a failure within an implemented boundary is still useful.
 
 ## Disclosure
 

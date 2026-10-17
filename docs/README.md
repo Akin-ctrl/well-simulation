@@ -1,89 +1,101 @@
 # Documentation
 
-Product framing, architecture notes, the production readiness checklist, and the
-architecture decision records.
+This project simulates wellhead monitoring, model analysis and reviewed operating
+actions. Its process model is synthetic and uncalibrated. It has no physical
+control connection. Call it a wellhead monitoring simulation, not a finished
+field digital twin.
 
-## What to call this project
+## Start here
 
-Call it a wellhead monitoring simulation, or a SCADA-style industrial telemetry
-platform.
-
-Do not call it a finished digital twin yet. It has a stateful synthetic process
-model, durable snapshots, and forecast and what-if APIs. It has no field
-calibration or physical control connection.
+- [Run the application](../README.md#quick-start): setup and demo account.
+- [Follow the demo](demo/demo-script.md): monitoring, saved comparisons and optional operating workflows.
+- [Read the architecture](architecture/overview.md): service boundaries and current diagrams.
+- [Check readiness and open work](architecture/production-readiness.md): evidence, limitations and delivery gates.
+- [Develop the web application](../monorepo/README.md): local environment and verification commands.
 
 ## What is built
 
-- Synthetic wellhead telemetry
-- Modbus ingestion
-- A PostgreSQL and TimescaleDB historian
-- Alarm evaluation in SQL
-- A public TypeScript API
-- A separate twin-core service with an uncalibrated per-well process model
-- Durable model snapshots and recorded restart recovery
-- Saved on-demand forecasts and isolated what-if scenarios through the API
-- Durable live synthetic control commands and reviewed parameter publication
-- A React dashboard with fleet monitoring, analytics, an Alarm Center, model
-  status, forecast and scenario forms, comparison charts, and saved-run history
+Twin-core calculates all 18 seeded signals, serves them through Modbus and saves
+its state for restart recovery. Ingestion stores source-labelled readings in
+TimescaleDB. SQL evaluates alarm conditions.
 
-The Alarm Center shows active alarms and their thresholds. It does not offer
-acknowledge or shelve actions because the data model cannot store those states.
+The dashboard connects fleet monitoring with forecasts, historical scenarios,
+saved results and administrator-owned forecast schedules. OPERATIONS users can
+review live synthetic controls, acknowledge exact alarm events and manage timed
+shelves. ADMIN users can publish model parameters and create accounts. Parameter
+publication requires a model-service restart. Optional Prometheus and Grafana
+services show application health and metrics.
 
-## Contents
+## Architecture and decisions
 
-- `architecture/overview.md`: the current architecture and the target one
-- `architecture/production-readiness.md`: what production-grade means here
-- `adr/README.md`: the ADR format and the index
-- `demo/demo-script.md`: the demo flow for a portfolio review
-- `design/twin-core-milestone-4.md`: the service boundary and its limits
-- `design/twin-core-milestone-5.md`: the process model equations and limits
-- `design/twin-core-milestone-6.md`: model telemetry through Modbus
-- `design/twin-core-milestone-7.md`: twin persistence and restore
-- `design/twin-core-milestone-8.md`: forecasts, scenarios, and saved results
-- `design/twin-core-milestone-8b.md`: live model controls, authorization, and recovery
-- `design/twin-core-milestone-9.md`: the wellhead workspace and browser verification
-- `design/milestone-9/visual-specification.md`: shared visual rules, state matrix, and mockup gallery
-- `design/milestone-9/accessibility-verification.md`: completed checks and accessibility limits
-- `design/consolidated-schema.md`: single schema source and checked adoption of existing data
-- `design/database-engine-upgrade.md`: engine conversion, backup restoration, and recorded acceptance
-- `design/reference-well-physics.md`: phase and diagnostic equations
-- `openapi/README.md`: the API contracts and the rules for changing them
-- `roadmap.md`: the local feature plan (ignored by Git)
-- `remediation-roadmap.md`: the local repair record (ignored by Git)
+- [Architecture overview](architecture/overview.md)
+- [Production readiness](architecture/production-readiness.md)
+- [ADR index](adr/README.md): accepted decisions, amendments and implementation status.
+- [API contracts](openapi/README.md): public Hono API and internal twin-core HTTP API.
+- [Synthetic reference-well physics](design/reference-well-physics.md): equations, units and limits.
 
-The root README and ADR index provide published implementation status. The two
-local roadmaps are optional working notes and are absent from a clean checkout.
+## Model and feature designs
 
-## Documentation backlog
+| Design | What it covers |
+| --- | --- |
+| [Milestone 4](design/twin-core-milestone-4.md) | Service boundary and initial lifecycle |
+| [Milestone 5](design/twin-core-milestone-5.md) | Original process equations and units |
+| [Milestone 6](design/twin-core-milestone-6.md) | Model telemetry through Modbus |
+| [Milestone 7](design/twin-core-milestone-7.md) | Snapshots, parameters and restart recovery |
+| [Milestone 8](design/twin-core-milestone-8.md) | Forecasts, scenarios and saved results |
+| [Milestone 8B](design/twin-core-milestone-8b.md) | Reviewed control commands and parameter publication |
+| [Historical scenarios](design/historical-scenarios.md) | Exact snapshot selection and compatible branches |
+| [Scheduled forecasts](design/scheduled-forecasts.md) | Ownership, bounded jobs and automatic saved results |
+| [Alarm lifecycle](design/alarm-lifecycle.md) | Acknowledgement, shelving, receipts and condition state |
 
-- Keep the README matching what is actually built.
-- Write the ADR before adding major twin behaviour, not after.
-- Update the OpenAPI spec with every public API change.
-- Keep model assumptions visible wherever synthetic readings appear.
-- Keep the demo honest. Show what works, then say what is planned.
-- Complete relevant screen mockups, loading and failure states, shared visual
-  rules, and responsive behaviour before new UI implementation. Follow the
-  [design completion gate](design/twin-core-milestone-9.md#design-completion-gate).
-  Validate accessibility during implementation and record the checks actually run.
+Milestone documents record their original scope and dated verification. Later
+designs extend that scope. Use the current architecture and ADR index to establish
+what runs now; a test result from an earlier milestone does not cover later work.
 
-## How we write docs here
+## Interface design and verification
 
-- Every major architectural choice gets an ADR.
-- Each ADR lists the options that were considered.
-- Each ADR says why the chosen option won.
-- Rejected options stay on the record. They are the reasoning.
-- Docs say plainly what is built and what is only planned.
-- Prose follows the plain English standard in
-  the project's coding standards: short sentences, everyday words, active
-  voice, and no em dashes. `scripts/check_prose.py` enforces the checkable
-  parts.
+- [Milestone 9 workspace](design/twin-core-milestone-9.md): design completion gate and browser workflow.
+- [Visual specification](design/milestone-9/visual-specification.md): spacing, type, colours, charts and responsive states.
+- [Original mockup gallery](design/milestone-9/mockups/index.html): illustrative screen states.
+- [Accessibility verification](design/milestone-9/accessibility-verification.md): checks run and combinations not tested.
+- [Usability follow-up](design/dashboard-usability.md): Guide, page explanations and local delivery checks.
+- [Operating workspace](design/operating-workspace.md): control and parameter forms, reviews and outcome recovery.
 
-The [dashboard usability design](design/dashboard-usability.md) records the
-revised workflow, design checks and delivery sequence.
+Historical-scenario, schedule, alarm and observability designs link their own
+mockups and verification. Application screenshots live in `screenshots/`;
+each design identifies captures that use browser-test fixtures.
 
-The [operating workspace design](design/operating-workspace.md) covers the
-control and parameter screens, role boundaries and uncertain-response recovery.
+## Database and service operation
 
-- [Historical scenario design and verification](design/historical-scenarios.md)
+- [Data layer](../data/README.md): telemetry, schema ownership and service accounts.
+- [Existing-database update guide](operations/database-updates.md): choose the correct adoption, engine or extension path.
+- [Schema consolidation](design/consolidated-schema.md): the single SQL source and checked legacy adoption.
+- [Engine upgrade](design/database-engine-upgrade.md): preserved volumes and recovery verification.
+- [Schema extension](design/schema-extension.md): verified additions to existing installations.
+- [Retention policy](adr/0026-retention-and-compression.md#amendment-2026-10-17-record-the-installed-retention-policy): actual retention and durable records.
+- [Service metrics design](design/observability.md) and [runbook](../observability/README.md): optional Prometheus and Grafana.
+- [Security policy](../.github/SECURITY.md): private vulnerability reporting.
 
-- [Alarm operator actions](design/alarm-lifecycle.md): exact event acknowledgement, timed shelving, reviews and receipts.
+## Local planning notes
+
+`roadmap.md` records feature work and `remediation-roadmap.md` records the repair
+history. Both remain ignored by Git and are absent from a clean checkout.
+The committed README, readiness record and ADR index provide current status
+without requiring those local notes. `github-hardening-checklist.md` is also an
+ignored reference from another project, not this repository's delivery status.
+
+## Maintaining these documents
+
+Write for someone who has not seen the project. Use active voice, ordinary words
+and concrete examples. Define technical terms when first needed. Avoid em dashes.
+`scripts/check_prose.py` checks the mechanical parts of that style.
+
+Keep setup commands consistent with the current scripts and configuration.
+Update API specifications with route changes. Append dated ADR amendments when
+a decision changes, preserve the original reasoning and update the index status.
+State which checks actually ran and keep local results separate from remote CI.
+
+Complete relevant mockups, loading and failure states, shared visual rules and
+responsive behavior before implementing a new screen. Follow the
+[design completion gate](design/twin-core-milestone-9.md#design-completion-gate)
+and record accessibility checks during implementation.

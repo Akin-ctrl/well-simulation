@@ -1,5 +1,9 @@
 # Milestone 6: Model Telemetry Through Modbus
 
+This document records this milestone’s original scope and dated checks. See the
+[current architecture](../architecture/overview.md) and [ADR index](../adr/README.md)
+for later additions, including operating screens, historical scenarios and schedules.
+
 ## Purpose
 
 A well's pressure and flow now come from the running process model. The Modbus

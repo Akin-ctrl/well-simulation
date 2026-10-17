@@ -1,6 +1,6 @@
 # ADR 0035: How Metadata Changes Reach A Running Service
 
-- Status: Accepted
+- Status: Accepted, amended
 - Date: 2026-08-29
 - Implementation: Implemented
 
@@ -153,3 +153,42 @@ That balance changes when the control API ships. At that point a config change
 becomes an operator action that should take effect when the operator says so,
 not up to an interval later, and it needs the audit trail from ADR 0034 around
 it. Revisit Option D then.
+
+## Amendment 2026-10-17: Separate metadata refresh from operating changes
+
+### Current behavior
+
+The model replaced the old random simulator. Gateway and ingestion still reload
+mappings each telemetry interval, five seconds by default. Twin-core refreshes
+active wells and parameter overrides every 30 seconds by default, configured by
+`TWIN_FLEET_REFRESH_SECONDS`. Alarm evaluation reads the current rules when a
+reading batch arrives; it does not wait for a separate rule-reload timer.
+
+A valid parameter publication does not silently alter a running model. Fleet
+refresh detects the changed parameters and marks that well `restart_required`.
+A service restart adopts them. Invalid parameters make that well unavailable.
+
+Live controls now use the durable command queue in ADR 0038. An authenticated
+HTTP hint can wake the worker, and queue polling recovers a missed hint. A
+general metadata reload endpoint is not the control application mechanism.
+
+### Decision and consequences
+
+Keep timed metadata refresh, reviewed parameter publication and durable command
+application as separate paths. A `config.change` audit record establishes a
+stored change, not proof that every service has adopted it. Read the running
+revision, parameter fingerprint and model status to establish adoption.
+
+**Good.** Operators can distinguish publication, pending restart and application.
+
+**Costs.** The UI must expose both stored and running state, and metadata has a
+bounded delay during healthy operation. Dependency failures can extend that delay.
+
+**Accepted risks.** Parameter publication requires a coordinated restart. This
+local workflow does not offer uninterrupted model reconfiguration.
+
+### Related
+
+- [ADR 0021](0021-model-parameterization.md): override resolution and restart adoption.
+- [ADR 0038](0038-live-control-command-lifecycle.md): durable control application.
+- [Operating screens](../design/operating-workspace.md): review and outcome recovery.

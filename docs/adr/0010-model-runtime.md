@@ -47,3 +47,10 @@ Python is the best fit for the model layer now and leaves room for NumPy, SciPy,
 ## Implementation on 2026-09-29
 
 The separate Python service runs in Docker Compose. It owns its own state, scheduler, internal HTTP listener, logs, and metrics. The process equations remain Milestone 5 work.
+
+## Implementation update on 2026-10-17
+
+The process equations, snapshot recovery, private projections and durable control
+application now run in this service. Scheduled forecasts use a worker thread
+inside the same service. The deployment boundary remains unchanged. See the
+[architecture overview](../architecture/overview.md) for the current data paths.

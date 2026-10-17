@@ -1,5 +1,9 @@
 # Milestone 8: Forecasts and Isolated Scenarios
 
+This document records this milestone’s original scope and dated checks. See the
+[current architecture](../architecture/overview.md) and [ADR index](../adr/README.md)
+for later additions, including operating screens, historical scenarios and schedules.
+
 Status: implemented and validated against a disposable TimescaleDB database,
 2026-10-13.
 

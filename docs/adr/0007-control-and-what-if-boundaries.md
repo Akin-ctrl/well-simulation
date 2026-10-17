@@ -1,6 +1,6 @@
 # ADR 0007: Separate Live Control From What-If Simulation
 
-- Status: Accepted
+- Status: Accepted, amended
 - Date: 2026-05-31
 - Implementation: Separate scenario, live control and parameter screens implemented
 

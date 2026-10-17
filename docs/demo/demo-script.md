@@ -91,6 +91,51 @@ reload the link to confirm that it reopens the same saved branch. The model uses
 alarm rules active at execution. Older branches can lose chart points sooner
 because retention follows simulated dates.
 
+## Inspect a scheduled forecast
+
+Open Forecast and find Scheduled forecasts. Read whether it is enabled, its next
+due time and its latest attempt. Compare that attempt with Latest completed result:
+a failed new job does not make an older successful forecast current. Select
+Open scheduled result to read the existing result. Check its saved time and
+execution origin, then find the same entry in Saved runs.
+
+New installations have no enabled schedules. If there is no scheduled result,
+explain that state or use a separate test installation for this longer walkthrough:
+
+1. Sign in as ADMIN and choose a test well with no enabled schedule. Open
+   Edit forecast schedule. Do not replace a schedule someone else is using.
+2. Select Enable scheduled forecasts. Set Run every and Forecast ahead to five
+   minutes. Enter a reason, review the well and values, confirm, then Save schedule.
+   Allowed intervals are 5 to 1440 minutes; forecast duration is 5 to 30 minutes.
+3. Wait for the displayed next due time, then inspect the attempt and saved result.
+   Saving starts a new interval. It does not run a forecast immediately.
+4. Open the saved result and inspect its original inputs. The worker copies
+   current state and controls without changing the running well's controls.
+5. Turn off the test schedule, enter the reason and confirm the save. A job
+   already running may finish. Saved results remain available subject to retention.
+
+If saving loses its reply, use Check saved schedule before another save. The page
+does not retry the write automatically. The worker also skips missed intervals
+instead of calculating every missed forecast. See the
+[schedule design](../design/scheduled-forecasts.md) for authority and failure rules.
+
+## Read service health
+
+This optional walkthrough explains the software pipeline. Follow the
+[metrics runbook](../../observability/README.md) to start the observability profile
+and sign into Grafana with its separate local account. Open
+Well simulation → Service health and allow about 30 seconds for initial samples.
+
+Compare Reachable with Ready. Reachable means the metrics endpoint answered;
+Ready means the service reported that it could do its work. Read Time since last
+commit alongside committed readings, then inspect model lag and API request time.
+Expand Automation for scheduled-job and control outcomes. Open a panel's
+Inspect → Data view to read its values as a table.
+
+Missing samples remain gaps or Unknown. An empty failure series does not prove
+that no failures occurred. Check the time range and reachability first. Return to
+the well dashboard for readings, saved analyses and operating actions.
+
 ## Inspect and acknowledge an alarm
 
 Open Alarm Center and choose a well. Needs acknowledgement can include an event

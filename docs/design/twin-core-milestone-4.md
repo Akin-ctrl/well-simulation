@@ -1,5 +1,9 @@
 # Milestone 4: Twin-Core Service Design
 
+This document records this milestone’s original scope and dated checks. See the
+[current architecture](../architecture/overview.md) and [ADR index](../adr/README.md)
+for later additions, including operating screens, historical scenarios and schedules.
+
 ## Purpose
 
 Milestone 4 creates the service boundary for the future wellhead model. It does

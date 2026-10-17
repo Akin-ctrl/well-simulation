@@ -1,3 +1,4 @@
-# `@turbo/eslint-config`
+# `@repo/eslint-config`
 
-Collection of internal eslint configurations.
+Shared ESLint rules for the workspace. Each package selects its configuration
+from this package's exports. Run `pnpm lint` from `monorepo/` to check all packages.

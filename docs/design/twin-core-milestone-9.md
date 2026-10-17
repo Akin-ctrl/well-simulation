@@ -1,7 +1,7 @@
 # Milestone 9: A Wellhead Workspace For Monitoring And Analysis
 
 Date: 2026-10-16
-Status: Design completed, implemented, and verified locally; uncommitted
+Status: Design completed, implemented, and verified locally; usability delivery committed as `afaca24`.
 
 ## Purpose
 

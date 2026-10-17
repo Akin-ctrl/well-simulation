@@ -1,6 +1,6 @@
 # ADR 0029: Expose Prometheus-Compatible Metrics With Optional Observability Stack
 
-- Status: Accepted
+- Status: Accepted, amended
 - Date: 2026-05-31
 - Implementation: Implemented
 

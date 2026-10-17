@@ -1,6 +1,6 @@
 # ADR-0038: Apply live model controls through durable, reviewed commands
 
-**Status**: Accepted
+**Status**: Accepted, amended
 **Implementation**: Built; verification results are recorded in the Milestone 8B design.
 **Date**: 2026-10-13
 **Decision**: An operator creates a draft command, then explicitly activates it. Activation records the command and its audit event before twin-core applies the target controls at a model tick. A command expires after 30 seconds if it cannot be applied. The active control row has a revision, so a stale command cannot replace newer controls. This changes only the synthetic model, never a physical actuator.

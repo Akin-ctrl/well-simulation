@@ -1,6 +1,6 @@
 # ADR 0032: Implement Active Alarm Inspection Before Alarm Lifecycle Workflows
 
-- Status: Accepted
+- Status: Accepted, amended
 - Date: 2026-06-21
 - Implementation: Implemented
 

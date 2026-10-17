@@ -27,6 +27,11 @@ use it locally to inspect **Status → Target health** and queries. This profile
 assumes a trusted local machine and Compose network. Remote access needs its
 own authenticated TLS deployment design.
 
+Prometheus scrapes internal service addresses. The well dashboard proxy also
+exposes the API's service metrics at `/api/metrics` without a login. Grafana's
+login does not protect that route. The other service metrics have no host route
+in the default Compose setup.
+
 The password initializes a fresh Grafana database. Changing `.env` afterward
 will not change an existing Grafana account. Change an existing password in
 Grafana's account preferences. For a locked-out local administrator, follow the

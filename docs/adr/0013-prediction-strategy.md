@@ -1,6 +1,6 @@
 # ADR 0013: Start With On-Demand Forecasts And Evolve To Hybrid Forecasting
 
-- Status: Accepted
+- Status: Accepted, amended
 - Date: 2026-05-31
 - Implementation: On-demand and scheduled forecasts implemented
 

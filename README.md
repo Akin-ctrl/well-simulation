@@ -28,13 +28,17 @@ implemented decisions and the work still needed for a field-calibrated twin.
 - React dashboard with a fleet overview, analytics, an Alarm Center, and per-well
   monitoring, forecasts, scenario comparisons, and saved-run history.
 - Health, readiness, and metrics endpoints for the API, telemetry services,
-  and the new twin-core service boundary.
+  and twin-core.
 - A twin-core service with one-second process steps, deterministic per-well
   variation, bounded model state, and source-labelled historian reads.
 - Durable model snapshots, parameter overrides, and recorded restart recovery.
-- Authenticated APIs for saved forecasts and isolated what-if scenarios.
+- Saved on-demand and scheduled forecasts, plus isolated what-if scenarios
+  from current state or an exact compatible historical snapshot.
 - Draft, activate, cancel, and status APIs for live synthetic controls, with
   durable revisions and a separate administrator parameter publication path.
+- Reviewed control and parameter screens, and audited alarm acknowledgement
+  and timed shelving for OPERATIONS users.
+- An optional Prometheus and Grafana profile for service metrics.
 - Docker-based local orchestration.
 
 ## Current Dashboard Scope
@@ -51,21 +55,23 @@ The dashboard connects monitoring with the existing model analysis:
 - Saved comparison charts, original inputs, confidence reasons, and value tables.
 - Per-well history with direct links that reopen results without running the model.
 - Historical scenarios from exact compatible model snapshots, with saved origin metadata.
+- Administrator-owned forecast schedules, with the latest attempt and latest
+  completed result shown separately.
 
 OPERATIONS can acknowledge an exact event, shelve a well’s rule for 5–480 minutes,
 or end a shelf early. Each action records a reason and an audited receipt. Active
 counts still include acknowledged and shelved conditions. See the
 [alarm workflow](docs/design/alarm-lifecycle.md).
 
-## Target Direction
+## Model boundary and further work
 
-The target system is a lightweight wellhead digital twin with:
+The synthetic model already supports state, control inputs and isolated
+predictions. Field use would require measured well data, calibration and
+independent validation. Measured-versus-model comparison, divergence detection
+and a physical control connection remain outside the implemented scope.
 
-- Stateful process simulation per wellhead.
-- Control inputs such as choke position, valve state, and pump state.
-- Prediction and what-if simulation APIs.
-- Historical comparison between observed and predicted behavior.
-- Production-grade deployment, observability, security, and documentation.
+The [readiness record](docs/architecture/production-readiness.md) separates local
+verification from open delivery items and requirements for another deployment.
 
 ## What happens next
 
@@ -75,6 +81,8 @@ control, and the documentation. Repair phases 0 to 9 are complete as of
 The local `docs/roadmap.md` records feature work, and the local
 `docs/remediation-roadmap.md` records the repair. Both are ignored by Git.
 The committed design documents and ADRs record the implemented decisions.
+The approved usability, operating-screen, historical-scenario, scheduled-forecast,
+metrics and alarm work is committed through `82c9baf` and verified locally.
 
 Milestones 4 through 8 are implemented: the model feeds Modbus and the historian,
 recovers saved state, and runs forecasts and private scenarios. The
@@ -100,8 +108,10 @@ roadmaps are working notes, not dependencies for understanding the project.
 ## Quick Start
 
 New installations use PostgreSQL 16.15 and TimescaleDB 2.30.2. For an existing
-PostgreSQL 14 volume, complete the [engine conversion and recovery checks](docs/design/database-engine-upgrade.md)
-before starting the updated database image.
+database, first select its path in the
+[existing-database update guide](docs/operations/database-updates.md).
+PostgreSQL 14 volumes require the matching legacy baseline and verified engine
+conversion before the current database image can use them.
 
 ```bash
 cp .env.example .env
@@ -112,10 +122,11 @@ docker compose up --build
 
 The `migrator` service installs `data/sql/schema.sql` on a new database and
 verifies its recorded baseline on later starts. A database from the numbered
-schema runner needs a one-time checked adoption. Follow the
-[data-layer instructions](data/README.md#existing-database-adoption) before
-starting the updated installer against an existing volume. Adoption preserves
-the volume and its data. New ordinary tables use the [verified extension](docs/design/schema-extension.md); changes to existing definitions need a reviewed conversion.
+runner needs adoption with its matching historical installer and contract.
+Today's `adopt` does not add missing schedule or alarm tables. Follow the
+[update sequence](docs/operations/database-updates.md) for adoption, engine
+acceptance and table extension. Changes to existing definitions need a reviewed
+conversion. These steps preserve the existing data.
 The engine conversion preserves the original volume and selects the verified
 new volume through TIMESCALE_DATA_VOLUME.
 
@@ -161,6 +172,7 @@ users.
 | Acknowledge or shelve an alarm | no | yes | no |
 | Issue a live control command | no | yes | no |
 | Manage users | no | no | yes |
+| Publish model parameters or edit forecast schedules | no | no | yes |
 | Edit alarm rules and asset metadata | no | no | yes |
 
 Dashboard access, forecasts, scenarios, and administrator user creation are
@@ -174,8 +186,8 @@ commands queued by those sessions from applying.
 ## Documentation
 
 - `docs/README.md`: index of everything in `docs/`
-- `docs/architecture/overview.md`: the current architecture and the target one
-- `docs/architecture/production-readiness.md`: what production-grade means here
+- `docs/architecture/overview.md`: current services, data paths and model boundaries
+- `docs/architecture/production-readiness.md`: local evidence, open work and deployment limits
 - `docs/adr/README.md`: the architecture decision records
 - `docs/openapi/README.md`: the API contracts
 - `docs/design/twin-core-milestone-4.md`: the twin-core skeleton design
@@ -185,6 +197,11 @@ commands queued by those sessions from applying.
 - `docs/design/twin-core-milestone-8.md`: forecasts, scenarios, and saved results
 - `docs/design/twin-core-milestone-8b.md`: live control lifecycle and operating steps
 - `docs/design/twin-core-milestone-9.md`: dashboard layout, interactions, and verification
+- `docs/design/historical-scenarios.md`: exact saved-state branches
+- `docs/design/scheduled-forecasts.md`: owned schedules and durable jobs
+- `docs/design/alarm-lifecycle.md`: acknowledgement, shelving and receipts
+- `docs/operations/database-updates.md`: the correct path for each database baseline
+- `observability/README.md`: optional metrics startup and troubleshooting
 - `docs/design/reference-well-physics.md`: the phase and diagnostic equations
 - `docs/roadmap.md`: the local feature plan (ignored by Git)
 - `docs/remediation-roadmap.md`: the local repair record (ignored by Git)

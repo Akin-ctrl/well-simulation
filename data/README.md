@@ -10,7 +10,7 @@ The telemetry pipeline and the database schema. The dashboard and API live in
 | `src/wellhead_simulator.py` | Legacy random simulator, no longer started by Compose |
 | `src/modbus_gateway.py` | Fetches model snapshots and serves supported values as holding registers |
 | `src/database_ingestion.py` | Polls Modbus and writes model readings to the historian |
-| `src/schema.py` | Installs, checks, adopts, or extends the current schema |
+| `src/schema.py` | Installs, checks, adopts or extends a schema, and accepts a verified engine change |
 | `src/model_source.py` | Validates model snapshots and maps all 18 seeded signals |
 | `src/telemetry_common.py` | Config, logging, database access, and the health endpoints |
 | `src/telemetry_metrics.py` | Prometheus metric definitions |
@@ -43,9 +43,11 @@ the database on startup and configures itself from what it finds.
 
 The gateway and ingestion re-read mappings every telemetry interval (five
 seconds by default). Twin-core refreshes its active fleet and parameter
-overrides every 30 seconds. Alarm evaluation reads current rules in the
-database. ADR 0035 records why timed refresh was chosen over a notification
-or a reload endpoint.
+overrides every 30 seconds by default. A changed parameter marks an existing
+model `restart_required`; refresh does not apply it during a tick. Alarm
+evaluation reads current rules when readings arrive. The
+[ADR 0035 amendment](../docs/adr/0035-metadata-reload.md#amendment-2026-10-17-separate-metadata-refresh-from-operating-changes)
+distinguishes timed refresh, parameter adoption and durable control commands.
 
 When a register mapping moves, the gateway clears its whole register image. A
 value left at an address nothing maps any more would be a stale reading on a
@@ -70,10 +72,11 @@ time. Both are UTC. `model_version` records which model calculated the reading.
 Alarm rules live in `alarmRule`. A statement-level trigger on `parameterReading`
 evaluates each batch.
 
-Alarms have hysteresis: three consecutive breaching readings to open one, three
-consecutive normal ones to clear it. Without that, randomised telemetry made
-alarms flap continuously and `alarmEvent` filled with events that lasted a
-single sample.
+Each rule has `trigger_after` and `clear_after` counts. The seeded defaults
+require three consecutive breaching readings to open an event and three normal
+readings to clear it. These counts prevent a single fluctuating sample from
+opening or clearing a condition. Acknowledgement and shelving live in separate
+tables and never clear the condition. See [alarm lifecycle records](#alarm-lifecycle-records).
 
 ## Operational endpoints
 
@@ -96,23 +99,20 @@ image directly.
 
 ### Existing database adoption
 
-Back up the database and test restoring that backup into a disposable database
-before adoption. An old TimescaleDB 2.19.3 database needs the physical-backup
-procedure because its compressed-null logical restore is broken. Upgrade its
-engine before comparing it with the current generated reference.
-Follow the [adoption design](../docs/design/consolidated-schema.md)
-for the full checks. The original volume stays in place.
+Follow the [existing-database update guide](../docs/operations/database-updates.md)
+before building the current installer for an older installation. It separates
+legacy adoption, engine acceptance and additions to the current schema.
 
-```sh
-docker compose build migrator
-docker compose run --rm --no-deps migrator python schema.py adopt
-docker compose run --rm --no-deps migrator python schema.py check
-```
+For the original PostgreSQL 14 legacy database, use the matching `cd09691`
+installer, SQL and contract to adopt its complete 13-file history. Verify
+physical recovery, convert a copy, then use `e150992` for engine acceptance with
+the same schema source. Finally, use the current `extend` command to add the
+schedule and alarm tables. A PostgreSQL 16 installation already at a known
+baseline can start at the extension step.
 
-`adopt` checks all 13 legacy schema checksums and the actual database structure.
-It records the new baseline without replaying schema SQL. Existing ledger rows,
-readings, controls, and account records remain. Configured service grants are
-then provisioned. The usual startup command defaults to `init`.
+Today's `adopt` cannot add missing tables to a legacy database. It requires
+the actual structure to match its supplied contract. The guide provides commands
+that keep each installer with its matching source and preserve the existing data.
 
 `check` reads identity, history, and structure without applying SQL or grants.
 Use `--without-seeds` with `init` to omit demo records and the bootstrap account.
@@ -124,7 +124,17 @@ Edit `sql/schema.sql`. Generate `sql/schema-contract.json` from a fresh disposab
 database using `python data/src/schema.py build-reference --contract-output PATH`,
 with `POSTGRES_*` pointing to that disposable database. The command refuses a
 populated application schema. Review the generated differences and run
-`SCHEMA_DATABASE_TEST=1 python -m pytest data/tests/test_schema_database.py`.
+the schema, extension and comparison database checks.
+
+Run these commands from the repository root with the Python dependencies
+installed and database settings exported. Python does not load `.env` itself;
+the [update guide](../docs/operations/database-updates.md#command-environment)
+shows an explicit loader. Run the checks with:
+
+```sh
+SCHEMA_DATABASE_TEST=1 python -m pytest data/tests/test_schema_database.py data/tests/test_schema_extension_database.py data/tests/test_schema_normalize_database.py
+```
+
 The tests use `TEST_POSTGRES_HOST`, `TEST_POSTGRES_PORT`, `POSTGRES_USER`, and
 `POSTGRES_PASSWORD`, creating and deleting only their own random database names.
 
@@ -143,8 +153,11 @@ Follow the [engine upgrade design](../docs/design/database-engine-upgrade.md).
 It separates a PostgreSQL major-version upgrade from the TimescaleDB extension
 update and verifies both on a copy before changing the running stack.
 Save the previous generated contract before building the new one.
-After the upgrade, use accept-engine --previous-contract PATH to verify and
-record the changed engine identity. Normal startup never accepts it implicitly.
+After the upgrade, use the matching engine-only installer with
+`accept-engine --previous-contract PATH` to record the changed engine identity.
+Its schema source must match the previous contract. Add later tables separately,
+following the [update sequence](../docs/operations/database-updates.md).
+Normal startup never accepts an engine change implicitly.
 
 TIMESCALE_DATA_VOLUME selects the verified converted Docker volume. Leave it
 empty for a new stack to use its normal project-specific volume. Keeping the
@@ -154,7 +167,7 @@ PostgreSQL 16, rather than silently starting an empty historian.
 To inspect the data:
 
 ```sh
-docker exec -it wellhead_db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"
+docker compose exec db sh -c 'exec psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"'
 ```
 
 ```sql

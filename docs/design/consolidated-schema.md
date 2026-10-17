@@ -148,6 +148,11 @@ failed.
 
 ### Existing database
 
+For an installation older than today's schema, first use the
+[version-matched update sequence](../operations/database-updates.md). The original
+legacy adoption uses `cd09691`; later engine acceptance and table extensions are
+separate steps. The rules below describe adoption of matching structure.
+
 Adopt a fully current legacy installation without replaying its schema SQL:
 
 1. Take a backup and verify the backup procedure on a disposable database.

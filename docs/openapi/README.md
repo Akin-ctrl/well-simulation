@@ -1,14 +1,14 @@
 # OpenAPI Contracts
 
-This directory contains committed API specifications for the wellhead monitoring simulation and its planned lightweight digital-twin evolution.
+This directory describes the implemented public API and internal model service.
 
 ## Specifications
 
 - `public-api.yaml`: dashboard-facing TypeScript/Hono API implemented by `monorepo/apps/api`.
-  Includes model status, per-well saved-run history, and original inputs and
-  canonical signal metadata on saved forecast and scenario reads. It also documents
-  exact alarm event identities, timed shelves and reviewed operator actions with
-  idempotent receipt lookup.
+  Includes model status, saved analyses and their original inputs, historical
+  scenario sources, scheduled forecasts, live synthetic controls and parameter
+  publication. It also documents alarm acknowledgement, timed shelves and
+  action receipt lookup, plus the unauthenticated service metrics endpoint.
 - `twin-core-internal-api.yaml`: implemented internal reads and operational
   endpoints, protected model status, forecasts, scenarios, installed controls, command wake-up hints,
   and parameter validation for the Python twin-core service. Live targets are
@@ -27,10 +27,12 @@ This directory contains committed API specifications for the wellhead monitoring
 Run the local contract hygiene check from the monorepo:
 
 ```sh
-npx --yes pnpm@10.11.1 validate:openapi
+pnpm validate:openapi
 ```
 
-This checks that each committed spec parses, declares OpenAPI 3.x metadata, has paths, uses unique operation IDs, declares success responses, and resolves internal `$ref` values.
+Install the Python dependencies in `requirements-dev.txt` first. The command
+checks both specifications for OpenAPI metadata, paths, unique operation IDs,
+success responses and valid internal references.
 
 CI runs this structural check. Endpoint tests verify behavior separately; the
 structural check alone cannot prove a running response matches every schema.

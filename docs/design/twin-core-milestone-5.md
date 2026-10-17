@@ -1,5 +1,9 @@
 # Milestone 5: Reduced-Order Wellhead Model
 
+This document records this milestone’s original scope and dated checks. See the
+[current architecture](../architecture/overview.md) and [ADR index](../adr/README.md)
+for later additions, including operating screens, historical scenarios and schedules.
+
 ## Purpose and boundary
 
 Milestone 5 gives each active well a deterministic process state. It models cause

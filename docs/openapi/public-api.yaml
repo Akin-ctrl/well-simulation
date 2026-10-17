@@ -427,6 +427,27 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ReadinessResponse"
+  /metrics:
+    get:
+      tags: [Health]
+      summary: Read API service metrics in Prometheus format.
+      description: |
+        Unauthenticated service counters, durations and database-readiness metrics.
+        This endpoint exposes no well readings. Prometheus scrapes the internal
+        API address; the dashboard proxy also exposes it at /api/metrics.
+        Global API rate limiting applies. Reading metrics does not probe the
+        database again; readiness metrics describe the most recent /ready check.
+      operationId: getApiMetrics
+      security: []
+      responses:
+        '200':
+          description: Current metrics from this API process.
+          content:
+            text/plain:
+              schema:
+                type: string
+        '429':
+          description: API request limit exceeded.
   /auth/register:
     post:
       tags: [Auth]
@@ -1153,7 +1174,7 @@ paths:
       - cookieAuth: []
       responses:
         '201':
-          description: Durable status. A queued command is not yet applied.
+          description: Stored proposal status. A new draft needs explicit publication.
           content:
             application/json:
               schema:
@@ -1165,7 +1186,7 @@ paths:
         '403':
           description: Current account lacks authority.
         '404':
-          description: Unknown command or well.
+          description: Unknown parameter proposal or well.
         '409':
           description: Stale revision, conflicting proposal, or idempotency-key reuse.
         '429':
@@ -1196,7 +1217,7 @@ paths:
       - cookieAuth: []
       responses:
         '200':
-          description: Durable status. A queued command is not yet applied.
+          description: Stored proposal status. A published override requires model restart; it is not proof of running adoption.
           content:
             application/json:
               schema:
@@ -1208,7 +1229,7 @@ paths:
         '403':
           description: Current account lacks authority.
         '404':
-          description: Unknown command or well.
+          description: Unknown parameter proposal or well.
         '409':
           description: Stale revision, conflicting proposal, or idempotency-key reuse.
         '429':
@@ -1239,7 +1260,7 @@ paths:
       - cookieAuth: []
       responses:
         '200':
-          description: Durable status. A queued command is not yet applied.
+          description: Stored proposal status. Cancels a draft; an already terminal proposal keeps its outcome.
           content:
             application/json:
               schema:
@@ -1251,7 +1272,7 @@ paths:
         '403':
           description: Current account lacks authority.
         '404':
-          description: Unknown command or well.
+          description: Unknown parameter proposal or well.
         '409':
           description: Stale revision, conflicting proposal, or idempotency-key reuse.
         '429':
@@ -1282,26 +1303,23 @@ paths:
       - cookieAuth: []
       responses:
         '200':
-          description: Durable status. A queued command is not yet applied.
+          description: Stored proposal status and running parameter identity, or null when the model read is unavailable.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ParameterChangeResponse'
         '400':
-          description: Invalid JSON, target, or confirmation.
+          description: Invalid proposal identifier.
         '401':
           description: Missing or revoked session.
         '403':
           description: Current account lacks authority.
         '404':
-          description: Unknown command or well.
-        '409':
-          description: Stale revision, conflicting proposal, or idempotency-key reuse.
+          description: Unknown parameter proposal or well.
         '429':
-          description: More than ten writes per authenticated user per minute.
+          description: API request limit exceeded.
         '503':
-          description: Dependency unavailable or commit outcome unknown. Read status
-            or retry the same proposal; do not assume a write failed.
+          description: Proposal storage unavailable. Retry the status read.
       parameters:
       - name: id
         in: path

@@ -1,6 +1,6 @@
 # ADR 0019: Use A Reduced-Order Mechanistic Wellhead Model
 
-- Status: Accepted
+- Status: Accepted, amended
 - Date: 2026-05-31
 - Implementation: Implemented
 

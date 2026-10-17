@@ -30,7 +30,10 @@ flowchart LR
 
 The four Compose targets are `twin-core:8000`, `api:3000`, `modbus:9102` and
 `ingestion:9101`. Prometheus is available only on host loopback port 9090;
-Grafana uses loopback port 3010. Service metrics remain inside the Compose network.
+Grafana uses loopback port 3010. Prometheus scrapes the internal service addresses.
+The dashboard proxy also exposes the API metrics at `/api/metrics` without login.
+That endpoint reports service activity, not well readings. The other three
+metrics endpoints have no host route in the default Compose setup.
 Each optional service has its own named volume. Prometheus retains at most seven
 days or 512MB of retained blocks, whichever limit applies first. Its WAL and
 in-memory working data need additional capacity; the block cap is not a hard
