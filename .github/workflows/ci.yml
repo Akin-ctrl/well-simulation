@@ -114,6 +114,9 @@ jobs:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       TEST_JWT_SECRET: ci-secret-of-at-least-thirty-two-characters
+      # Only the disposable CI database uses this public test credential.
+      API_DB_USER: well_api_test
+      API_DB_PASSWORD: ci-only-api-database-password
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -145,8 +148,10 @@ jobs:
         run: pnpm install --frozen-lockfile
         working-directory: monorepo
 
-      - name: Verify schema installation and adoption
-        run: python -m pytest data/tests/test_schema_database.py
+      - name: Verify schema lifecycles and scheduled forecast transactions
+        run: >-
+          python -m pytest data/tests/test_schema_database.py
+          data/tests/test_schema_extension_database.py data/tests/test_forecast_database.py
         env:
           SCHEMA_DATABASE_TEST: '1'
 

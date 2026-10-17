@@ -37,6 +37,13 @@ export default function Guide() {
               then choose Run forecast. The model copies the well state and keeps its
               controls unchanged.
             </p>
+            <p>
+              Scheduled forecasts can keep a recent result available. Check Latest
+              attempt and the timestamp of Latest completed result separately. An
+              administrator can expand Edit forecast schedule, choose an interval and
+              duration, explain the change and confirm it. New schedules start off.
+              Disabling stops future jobs; a job already running may finish.
+            </p>
           </li>
           <li>
             <h3>Try a scenario</h3>

@@ -1,3 +1,4 @@
+import { storedExecutionOrigin } from '@well-simulation/dto/res/forecast-schedule';
 /** Saved-run presentation uses stored inputs and the canonical signal catalogue. */
 import { HTTPException } from 'hono/http-exception';
 import { db, desc, eq, sql } from '@well-simulation/db/query';
@@ -77,6 +78,7 @@ export async function runHistory(
       horizonSeconds: table.horizonSeconds,
       stepSeconds: table.stepSeconds,
       confidenceScore: table.confidenceScore,
+      execution: sql<unknown>`coalesce(${table.baseState}->'executionOrigin', '{"kind":"manual"}'::jsonb)`,
       origin: sql<unknown>`coalesce(${table.baseState}->'branchOrigin', '{"kind":"current"}'::jsonb)`,
     })
     .from(table)
@@ -85,10 +87,11 @@ export async function runHistory(
     .limit(limit + 1)
     .offset(offset);
   return {
-    items: rows.slice(0, limit).map(({ origin, ...row }) => ({
+    items: rows.slice(0, limit).map(({ origin, execution, ...row }) => ({
       ...row,
       kind,
       branchOrigin: storedBranchOrigin({ branchOrigin: origin }),
+      executionOrigin: storedExecutionOrigin({ executionOrigin: execution }),
     })),
     hasMore: rows.length > limit,
   };

@@ -18,6 +18,11 @@ from psycopg2.extras import Json, execute_batch
 
 from twin_core.config import ParameterOverride, ServiceSettings
 from twin_core.database import DatabaseUnavailableError
+from twin_core.forecast_store import (
+    ForecastClaimError,
+    authorize_completion,
+    complete_job,
+)
 from twin_core.historical import (
     SNAPSHOT_PAGE_SIZE,
     SnapshotCandidate,
@@ -231,6 +236,15 @@ class TwinPersistence:
     def write_projection(self, result: ProjectionResult, requested_by: int) -> None:
         """Insert a completed run and every point in one transaction."""
         base = result.base
+        job = result.scheduled_job
+        if job is not None and (
+            result.kind != "forecast"
+            or job.owner_user_id != requested_by
+            or job.wellhead_id != base.wellhead_id
+            or job.horizon_seconds != result.horizon_seconds
+            or job.step_seconds != result.step_seconds
+        ):
+            raise ForecastClaimError("claim_mismatch")
         common = (
             result.run_id,
             result.generated_at,
@@ -241,7 +255,13 @@ class TwinPersistence:
             base.state.simulated_at,
             result.horizon_seconds,
             result.step_seconds,
-            Json({**base.state.to_payload(), "branchOrigin": base.branch_origin()}),
+            Json(
+                {
+                    **base.state.to_payload(),
+                    "branchOrigin": base.branch_origin(),
+                    "executionOrigin": result.execution_origin(),
+                }
+            ),
             Json(asdict(base.parameters)),
             Json(asdict(base.controls)),
         )
@@ -249,6 +269,8 @@ class TwinPersistence:
         reasons = Json(list(result.confidence_reasons))
         try:
             with closing(self._connect(read_only=False)) as conn, conn.cursor() as cur:
+                if result.scheduled_job is not None:
+                    authorize_completion(cur, result.scheduled_job)
                 if result.kind == "forecast":
                     cur.execute(
                         "INSERT INTO prediction_run (run_id, created_at, wellhead_id, "
@@ -332,6 +354,8 @@ class TwinPersistence:
                             for point in result.points
                         ],
                     )
+                if result.scheduled_job is not None:
+                    complete_job(cur, result.scheduled_job, result.run_id)
                 conn.commit()
         except psycopg2.Error as exc:
             raise DatabaseUnavailableError("Could not save projection run") from exc

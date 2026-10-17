@@ -1,3 +1,4 @@
+import { executionOriginSchema } from './forecast-schedule';
 import z from 'zod';
 import { branchOriginSchema } from './snapshots';
 
@@ -25,6 +26,7 @@ export const projectionResponseSchema = z.object({
   baseSimulatedAt: z.string(),
   generatedAt: z.string(),
   branchOrigin: branchOriginSchema.default({ kind: 'current' }),
+  executionOrigin: executionOriginSchema.default({ kind: 'manual' }),
   horizonSeconds: z.number().int().min(300).max(7200),
   stepSeconds: z.number().int().min(5).max(300),
   confidence: z.object({

@@ -1,3 +1,8 @@
+import {
+  forecastScheduleViewSchema,
+  type ForecastScheduleView,
+} from '@well-simulation/dto/res/forecast-schedule';
+import { readDashboardView } from '../domains/dashboard/components/read-status';
 import { useRetainedRead } from '../hooks/use-retained-read';
 import { ReadFailure } from '../domains/twin/read-failure';
 import { errorState } from '../domains/twin/presentation';
@@ -23,6 +28,9 @@ import { ModelBadge, useModelCheckOverdue } from '../domains/twin/model-status';
 import { FreshnessIndicator } from '../domains/dashboard/components/freshness';
 
 export type WellheadContext = {
+  scheduleRead?: Awaited<
+    ReturnType<typeof readDashboardView<ForecastScheduleView>>
+  > | null;
   unverified?: boolean;
   detail: WellheadDetailResponse;
   fleet: FleetModelStatus | null;
@@ -42,10 +50,16 @@ async function optional<T>(read: Promise<T>): Promise<T | null> {
     return null;
   }
 }
-export async function clientLoader({ params }: { params: { wellheadId?: string } }) {
+export async function clientLoader({
+  params,
+  request,
+}: {
+  params: { wellheadId?: string };
+  request: Request;
+}) {
   try {
     const wellheadId = params.wellheadId ?? '';
-    const [detail, fleet, controls] = await Promise.all([
+    const [detail, fleet, controls, scheduleRead] = await Promise.all([
       fetchFn<WellheadDetailResponse>(
         client.dashboard.wellheads[':wellheadId'].$get({ param: { wellheadId } })
       ),
@@ -55,9 +69,23 @@ export async function clientLoader({ params }: { params: { wellheadId?: string }
           client.twin.wellheads[':wellheadId'].controls.$get({ param: { wellheadId } })
         )
       ),
+      new URL(request.url).pathname.endsWith('/forecast')
+        ? readDashboardView(async () =>
+            forecastScheduleViewSchema.parse(
+              (
+                await fetchFn<unknown>(
+                  client.twin.wellheads[':wellheadId']['forecast-schedule'].$get({
+                    param: { wellheadId },
+                  })
+                )
+              ).data
+            )
+          )
+        : null,
     ]);
     return {
       value: {
+        scheduleRead,
         detail: detail.data,
         fleet: fleet?.data ?? null,
         controls: controls?.data ?? null,

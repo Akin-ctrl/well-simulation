@@ -1,9 +1,9 @@
+import { errorCode } from './utils/database-error';
 /** Atomic command and parameter lifecycles, with current authority and audit. */
 import { randomUUID } from 'node:crypto';
 import type { Context } from 'hono';
 import { HTTPException } from 'hono/http-exception';
 import { and, asc, db, desc, eq, sql } from '@well-simulation/db/query';
-import { users } from '@well-simulation/db/schemas/user';
 import { auditEvent } from '@well-simulation/db/schemas/audit';
 import { wellhead, wellheadModelParameter } from '@well-simulation/db/schemas/schema';
 import {
@@ -12,11 +12,7 @@ import {
   modelParameterChange,
   wellheadControlState,
 } from '@well-simulation/db/schemas/controls';
-import {
-  hasCapability,
-  isRole,
-  type Capability,
-} from '@well-simulation/dto/auth/roles';
+import { currentActor } from './transaction-authority';
 import type { ControlDraft, ParameterDraft } from '@well-simulation/dto/req/controls';
 import {
   runningControls,
@@ -42,23 +38,6 @@ function requireRunning(state: Awaited<ReturnType<typeof runningControls>>): voi
     Math.abs(Date.now() - Date.parse(state.lastTickAt)) > 3000
   )
     throw new HTTPException(503, { message: 'Model is not current' });
-}
-
-/** Lock the current account, not the potentially stale role in its JWT. */
-async function currentActor(tx: Transaction, c: Context, capability: Capability) {
-  const id = sessionUserId(c);
-  const [actor] = await tx.select().from(users).where(eq(users.id, id)).for('update');
-  const claims = c.get('session') as Record<string, unknown>;
-  if (!actor || actor.sessionVersion !== claims.sv)
-    throw new HTTPException(401, { message: 'Session revoked' });
-  if (
-    actor.status !== 'ACTIVE' ||
-    actor.deleted === true ||
-    !isRole(actor.role) ||
-    !hasCapability(actor.role, capability)
-  )
-    throw new HTTPException(403, { message: 'Forbidden' });
-  return actor;
 }
 
 /** Transactional audit: throwing here rolls back the accepted change too. */
@@ -96,16 +75,6 @@ async function commandEvent(
     requestId: currentRequestId(c),
   });
   await audit(tx, c, `control.${eventType}`, 'control_command', commandId);
-}
-
-function errorCode(error: unknown): string | undefined {
-  if (typeof error !== 'object' || error === null) return undefined;
-  const value = error as { code?: unknown; cause?: unknown };
-  return typeof value.code === 'string'
-    ? value.code
-    : value.cause
-      ? errorCode(value.cause)
-      : undefined;
 }
 
 /** Avoid driver errors containing a command reason or a credential in logs. */

@@ -847,3 +847,48 @@ BEGIN
 END $$;
 CREATE TRIGGER enforce_parameter_change_lifecycle BEFORE UPDATE ON model_parameter_change
     FOR EACH ROW EXECUTE FUNCTION enforce_parameter_change_lifecycle();
+
+-- Scheduled forecasts: configuration and immutable claimed-work context.
+CREATE TABLE forecast_schedule (
+    schedule_id UUID PRIMARY KEY,
+    wellhead_id INT NOT NULL UNIQUE REFERENCES wellhead(wellhead_id),
+    owner_user_id INT NOT NULL REFERENCES users(id),
+    owner_role TEXT NOT NULL CHECK (owner_role = 'ADMIN'),
+    enabled BOOLEAN NOT NULL DEFAULT FALSE,
+    interval_seconds INT NOT NULL CHECK (interval_seconds BETWEEN 300 AND 86400 AND interval_seconds % 60 = 0),
+    horizon_seconds INT NOT NULL CHECK (horizon_seconds BETWEEN 300 AND 1800 AND horizon_seconds % 60 = 0),
+    step_seconds INT NOT NULL DEFAULT 60 CHECK (step_seconds = 60),
+    revision INT NOT NULL CHECK (revision > 0),
+    next_due_at TIMESTAMPTZ,
+    reason VARCHAR(500) NOT NULL CHECK (length(trim(reason)) > 0),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+    CHECK (enabled = (next_due_at IS NOT NULL))
+);
+CREATE INDEX ix_forecast_schedule_due ON forecast_schedule(next_due_at, schedule_id) WHERE enabled;
+
+CREATE TABLE forecast_job (
+    job_id UUID PRIMARY KEY,
+    schedule_id UUID NOT NULL REFERENCES forecast_schedule(schedule_id),
+    schedule_revision INT NOT NULL CHECK (schedule_revision > 0),
+    wellhead_id INT NOT NULL REFERENCES wellhead(wellhead_id),
+    owner_user_id INT NOT NULL REFERENCES users(id),
+    owner_role TEXT NOT NULL CHECK (owner_role = 'ADMIN'),
+    interval_seconds INT NOT NULL CHECK (interval_seconds BETWEEN 300 AND 86400 AND interval_seconds % 60 = 0),
+    horizon_seconds INT NOT NULL CHECK (horizon_seconds BETWEEN 300 AND 1800 AND horizon_seconds % 60 = 0),
+    step_seconds INT NOT NULL CHECK (step_seconds = 60),
+    scheduled_for TIMESTAMPTZ NOT NULL,
+    started_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+    lease_expires_at TIMESTAMPTZ NOT NULL,
+    missed_intervals INT NOT NULL CHECK (missed_intervals >= 0),
+    status TEXT NOT NULL CHECK (status IN ('running', 'complete', 'skipped', 'failed')),
+    completed_at TIMESTAMPTZ,
+    reason_code VARCHAR(64),
+    run_id UUID REFERENCES prediction_run(run_id),
+    UNIQUE (schedule_id, scheduled_for),
+    CHECK ((status = 'running') = (completed_at IS NULL)),
+    CHECK ((status = 'complete') = (run_id IS NOT NULL)),
+    CHECK (lease_expires_at > started_at)
+);
+CREATE UNIQUE INDEX ix_forecast_job_running ON forecast_job(schedule_id) WHERE status = 'running';
+CREATE INDEX ix_forecast_job_recent ON forecast_job(wellhead_id, started_at DESC);
+CREATE INDEX ix_forecast_job_expiry ON forecast_job(lease_expires_at) WHERE status = 'running';

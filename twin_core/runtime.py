@@ -24,6 +24,7 @@ from twin_core.database import (
     HistorianReader,
     TelemetrySnapshot,
 )
+from twin_core.forecast_job import ScheduledForecastJob
 from twin_core.historical import (
     MAX_SNAPSHOT_AGE,
     SNAPSHOT_PAGE_SIZE,
@@ -559,6 +560,7 @@ class TwinRuntime:
         name: str | None = None,
         controls: tuple[ScheduledControl, ...] = (),
         base_snapshot: SnapshotSelection | None = None,
+        scheduled_job: ScheduledForecastJob | None = None,
     ) -> ProjectionResult:
         """Run one bounded private model copy and persist it atomically."""
         if self.persistence is None:
@@ -568,6 +570,14 @@ class TwinRuntime:
             raise ProjectionBusyError("Projection capacity is full")
         started = self._monotonic()
         try:
+            if scheduled_job is not None and (
+                kind != "forecast"
+                or scheduled_job.wellhead_id != wellhead_id
+                or scheduled_job.owner_user_id != requested_by
+                or scheduled_job.horizon_seconds != horizon_seconds
+                or scheduled_job.step_seconds != step_seconds
+            ):
+                raise ValueError("Scheduled job inputs do not match the claim")
             if base_snapshot is not None and kind != "scenario":
                 raise ValueError("Only scenarios accept a saved starting state")
             base = (
@@ -599,6 +609,7 @@ class TwinRuntime:
                 name=name,
                 controls=controls,
             )
+            result = replace(result, scheduled_job=scheduled_job)
             self.persistence.write_projection(result, requested_by)
             self.metrics.projection_runs.labels(kind=kind, outcome="complete").inc()
             return result

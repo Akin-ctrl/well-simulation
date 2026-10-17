@@ -1,3 +1,9 @@
+import { forecastScheduleInputSchema } from '@well-simulation/dto/req/forecast-schedule';
+import { storedExecutionOrigin } from '@well-simulation/dto/res/forecast-schedule';
+import {
+  readForecastSchedule,
+  saveForecastSchedule,
+} from '../forecast-schedule-service';
 import { Hono } from 'hono';
 import { validator } from 'hono/validator';
 import { HTTPException } from 'hono/http-exception';
@@ -139,6 +145,7 @@ function baseResponse(run: {
     baseSimulatedAt: run.baseSimulatedAt,
     generatedAt: run.createdAt,
     branchOrigin: storedBranchOrigin(run.baseState),
+    executionOrigin: storedExecutionOrigin(run.baseState),
     horizonSeconds: run.horizonSeconds,
     stepSeconds: run.stepSeconds,
     confidence: {
@@ -217,6 +224,28 @@ async function savedScenario(runId: string) {
 /** Public analysis routes. They cannot apply a live actuator command. */
 export const twinRouter = new Hono()
   .use('*', bodyLimit({ maxSize: 4096 }))
+  .get(
+    '/wellheads/:wellheadId/forecast-schedule',
+    requireCapability('dashboard:read'),
+    responseHandler((c) =>
+      readForecastSchedule(positiveWellheadId(c.req.param('wellheadId')))
+    )
+  )
+  .put(
+    '/wellheads/:wellheadId/forecast-schedule',
+    requireCapability('asset:manage'),
+    validator('json', (value) => forecastScheduleInputSchema.parse(value)),
+    (c) =>
+      responseHandler(
+        () =>
+          saveForecastSchedule(
+            c,
+            positiveWellheadId(c.req.param('wellheadId')),
+            c.req.valid('json')
+          ),
+        'Schedule saved'
+      )(c)
+  )
   .get('/status', requireCapability('dashboard:read'), responseHandler(modelStatus))
   .get(
     '/wellheads/:wellheadId/snapshots',

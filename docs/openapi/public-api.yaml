@@ -19,6 +19,80 @@ tags:
   - name: Dashboard
   - name: Twin
 paths:
+  /twin/wellheads/{wellheadId}/forecast-schedule:
+    parameters:
+      - name: wellheadId
+        in: path
+        required: true
+        schema: {type: integer, minimum: 1, maximum: 2147483647}
+    get:
+      tags: [Twin]
+      operationId: readForecastSchedule
+      summary: Read the schedule, latest attempt and latest completed job.
+      security: [{cookieAuth: []}]
+      responses:
+        "200":
+          description: Schedule metadata, with null for records that do not exist.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, msg, status]
+                properties:
+                  msg: {type: string}
+                  status: {type: integer, const: 200}
+                  data:
+                    type: object
+                    required: [schedule, latestJob, latestCompleted]
+                    properties:
+                      schedule: {oneOf: [{$ref: "#/components/schemas/ForecastSchedule"}, {type: "null"}]}
+                      latestJob: {oneOf: [{$ref: "#/components/schemas/ForecastJob"}, {type: "null"}]}
+                      latestCompleted: {oneOf: [{$ref: "#/components/schemas/ForecastJob"}, {type: "null"}]}
+        "400": {$ref: "#/components/responses/ValidationError"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "500": {$ref: "#/components/responses/ServerError"}
+    put:
+      tags: [Twin]
+      operationId: saveForecastSchedule
+      summary: Save reviewed settings with current administrator authority.
+      description: Saving takes ownership and starts a new interval. Disabling leaves claimed work intact. Read status after an uncertain response; do not replay automatically.
+      security: [{cookieAuth: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [expectedRevision, enabled, intervalMinutes, durationMinutes, reason, confirmed]
+              properties:
+                expectedRevision: {type: integer, minimum: 0, maximum: 2147483646}
+                enabled: {type: boolean}
+                intervalMinutes: {type: integer, minimum: 5, maximum: 1440}
+                durationMinutes: {type: integer, minimum: 5, maximum: 30}
+                reason: {type: string, minLength: 1, maxLength: 500}
+                confirmed: {type: boolean, const: true}
+      responses:
+        "200":
+          description: Settings and audit record committed together.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, msg, status]
+                properties:
+                  msg: {type: string}
+                  status: {type: integer, const: 200}
+                  data: {$ref: "#/components/schemas/ForecastSchedule"}
+        "400": {$ref: "#/components/responses/ValidationError"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409":
+          description: Settings changed or the well is inactive. Reload and review before saving.
+        "503": {$ref: "#/components/responses/ServerError"}
   /twin/wellheads/{wellheadId}/snapshots:
     get:
       summary: Find exact saved states for historical scenarios.
@@ -1739,6 +1813,19 @@ components:
           type: string
           format: date-time
           description: UTC timestamp with at most six fractional digits.
+    ExecutionOrigin:
+      oneOf:
+        - type: object
+          required: [kind]
+          properties:
+            kind: {type: string, const: manual}
+        - type: object
+          required: [kind, scheduleId, jobId, scheduledFor]
+          properties:
+            kind: {type: string, const: scheduled}
+            scheduleId: {type: string, format: uuid}
+            jobId: {type: string, format: uuid}
+            scheduledFor: {type: string, format: date-time}
     BranchOrigin:
       oneOf:
         - type: object
@@ -1837,9 +1924,10 @@ components:
     RunSummary:
       type: object
       required: [runId, kind, wellheadId, name, createdAt, baseSimulatedAt,
-        modelVersion, horizonSeconds, stepSeconds, confidenceScore, branchOrigin]
+        modelVersion, horizonSeconds, stepSeconds, confidenceScore, branchOrigin, executionOrigin]
       properties:
         branchOrigin: {$ref: "#/components/schemas/BranchOrigin"}
+        executionOrigin: {$ref: "#/components/schemas/ExecutionOrigin"}
         runId: {type: string, format: uuid}
         kind: {type: string, enum: [forecast, scenario]}
         wellheadId: {type: integer, minimum: 1}
@@ -1876,6 +1964,43 @@ components:
                       displayName: {type: string}
                       canonicalUnit: {type: [string, "null"]}
                       dataType: {type: string}
+    ForecastSchedule:
+      type: object
+      required: [scheduleId, wellheadId, ownerUserId, ownerRole, enabled, intervalSeconds, horizonSeconds, stepSeconds, revision, nextDueAt, reason, updatedAt]
+      properties:
+        scheduleId: {type: string, format: uuid}
+        wellheadId: {type: integer}
+        ownerUserId: {type: integer}
+        ownerRole: {type: string, const: ADMIN}
+        enabled: {type: boolean}
+        intervalSeconds: {type: integer, minimum: 300, maximum: 86400, multipleOf: 60}
+        horizonSeconds: {type: integer, minimum: 300, maximum: 1800, multipleOf: 60}
+        stepSeconds: {type: integer, const: 60}
+        revision: {type: integer, minimum: 1}
+        nextDueAt: {type: [string, "null"], format: date-time}
+        reason: {type: string}
+        updatedAt: {type: string, format: date-time}
+    ForecastJob:
+      type: object
+      required: [jobId, scheduleId, scheduleRevision, wellheadId, ownerUserId, ownerRole, intervalSeconds, horizonSeconds, stepSeconds, scheduledFor, startedAt, leaseExpiresAt, missedIntervals, status, completedAt, reasonCode, runId]
+      properties:
+        jobId: {type: string, format: uuid}
+        scheduleId: {type: string, format: uuid}
+        scheduleRevision: {type: integer}
+        wellheadId: {type: integer}
+        ownerUserId: {type: integer}
+        ownerRole: {type: string, const: ADMIN}
+        intervalSeconds: {type: integer}
+        horizonSeconds: {type: integer}
+        stepSeconds: {type: integer, const: 60}
+        scheduledFor: {type: string, format: date-time}
+        startedAt: {type: string, format: date-time}
+        leaseExpiresAt: {type: string, format: date-time}
+        missedIntervals: {type: integer, minimum: 0}
+        status: {type: string, enum: [running, complete, skipped, failed]}
+        completedAt: {type: [string, "null"], format: date-time}
+        reasonCode: {type: [string, "null"]}
+        runId: {type: [string, "null"], format: uuid}
     ProjectionEnvelope:
       type: object
       required: [msg, data, status]
@@ -1886,7 +2011,7 @@ components:
           type: object
           required: [runId, kind, wellheadId, source, fieldCalibrated, modelVersion,
             baseSimulatedAt, generatedAt, horizonSeconds, stepSeconds,
-            confidence, points, branchOrigin]
+            confidence, points, branchOrigin, executionOrigin]
           properties:
             runId: {type: string, format: uuid}
             kind: {type: string, enum: [forecast, scenario]}
@@ -1896,6 +2021,7 @@ components:
             fieldCalibrated: {type: boolean, const: false}
             modelVersion: {type: string}
             branchOrigin: {$ref: "#/components/schemas/BranchOrigin"}
+            executionOrigin: {$ref: "#/components/schemas/ExecutionOrigin"}
             baseSimulatedAt: {type: string, format: date-time}
             generatedAt: {type: string, format: date-time}
             horizonSeconds: {type: integer}

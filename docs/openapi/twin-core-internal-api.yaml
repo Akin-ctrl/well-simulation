@@ -941,6 +941,19 @@ components:
           type: string
           format: date-time
           description: UTC timestamp with at most six fractional digits.
+    ExecutionOrigin:
+      oneOf:
+        - type: object
+          required: [kind]
+          properties:
+            kind: {type: string, const: manual}
+        - type: object
+          required: [kind, scheduleId, jobId, scheduledFor]
+          properties:
+            kind: {type: string, const: scheduled}
+            scheduleId: {type: string, format: uuid}
+            jobId: {type: string, format: uuid}
+            scheduledFor: {type: string, format: date-time}
     BranchOrigin:
       oneOf:
         - type: object
@@ -1035,9 +1048,10 @@ components:
       type: object
       required: [runId, kind, wellheadId, name, source, fieldCalibrated,
         modelVersion, baseSimulatedAt, generatedAt, horizonSeconds,
-        stepSeconds, confidence, points, branchOrigin]
+        stepSeconds, confidence, points, branchOrigin, executionOrigin]
       properties:
         branchOrigin: {$ref: "#/components/schemas/BranchOrigin"}
+        executionOrigin: {$ref: "#/components/schemas/ExecutionOrigin"}
         runId:
           type: string
           format: uuid

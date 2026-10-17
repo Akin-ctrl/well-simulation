@@ -10,7 +10,7 @@ The telemetry pipeline and the database schema. The dashboard and API live in
 | `src/wellhead_simulator.py` | Legacy random simulator, no longer started by Compose |
 | `src/modbus_gateway.py` | Fetches model snapshots and serves supported values as holding registers |
 | `src/database_ingestion.py` | Polls Modbus and writes model readings to the historian |
-| `src/schema.py` | Installs, checks, or adopts the current schema |
+| `src/schema.py` | Installs, checks, adopts, or extends the current schema |
 | `src/model_source.py` | Validates model snapshots and maps all 18 seeded signals |
 | `src/telemetry_common.py` | Config, logging, database access, and the health endpoints |
 | `src/telemetry_metrics.py` | Prometheus metric definitions |
@@ -189,3 +189,11 @@ Pressure, flow, temperature, water cut, valve state, and pump state now share
 one model tick. They are uncalibrated and unsuitable for plant decisions.
 Rows written before this change retain `synthetic_random_simulator` in
 `source_kind`; new rows carry `synthetic_reduced_order_model`.
+
+### Add ordinary tables to an existing installation
+
+The `extend` command checks the installed schema against its previous committed
+SQL and contract, then applies only new ordinary tables and their indexes from
+the current canonical SQL. It verifies and audits the new identity in the same
+transaction. Keep temporary copies of the installed SQL and contract, take a
+private backup, and verify a restored copy first. See the [extension workflow](../docs/design/schema-extension.md) and [command example](../docs/design/consolidated-schema.md#adding-new-ordinary-tables).

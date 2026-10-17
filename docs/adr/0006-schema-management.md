@@ -119,3 +119,29 @@ This adds an explicit operational step and tests for engine compatibility. It
 keeps one SQL source and avoids adding a new numbered-file workflow. See the
 [engine upgrade design](../design/database-engine-upgrade.md) for its checks.
 
+
+## Amendment 2026-10-17: Verify additions to the current schema
+
+### Context
+
+Scheduled forecasts and alarm lifecycle records need new ordinary tables. The
+single canonical SQL file remains the owner's chosen workflow. Existing data must
+survive additions without replaying the full bootstrap or creating a migration chain.
+
+### Decision
+
+Add an explicit `extend` installer mode. Supply the previous committed schema and
+contract as temporary references. Require an exact source prefix, unchanged engine
+and legacy identity, unchanged existing catalog definitions, and a permitted suffix
+containing only new ordinary tables and their indexes. Apply that suffix, verify
+the complete generated target catalog and record the new identity and audit event
+in one transaction. Provision service grants afterward. Repeating a completed
+extension checks its target without replaying DDL.
+
+### Consequences
+
+Fresh installations still use the complete `data/sql/schema.sql`. Existing
+installations take a private backup and verify a restored copy before extending.
+This mode refuses changes to existing tables or functions; those changes need a
+separate reviewed design. Previous files remain temporary release references,
+not maintained alternate schemas. See the [extension design](../design/schema-extension.md).

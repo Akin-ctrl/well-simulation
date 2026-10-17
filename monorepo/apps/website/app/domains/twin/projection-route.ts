@@ -1,3 +1,4 @@
+import { scheduleAction } from './schedule-route';
 import { redirect, type ShouldRevalidateFunctionArgs } from 'react-router';
 import { ApiError } from '@well-simulation/dto/error';
 import {
@@ -54,6 +55,8 @@ export function projectionAction(kind: ProjectionKind) {
   return async ({ params, request }: Arguments) => {
     try {
       const fields = await request.formData();
+      if (kind === 'forecast' && fields.get('intent') === 'schedule')
+        return scheduleAction(params.wellheadId ?? '', fields);
       const raw: unknown = JSON.parse(String(fields.get('payload')));
       const wellheadId = params.wellheadId ?? '';
       let response;

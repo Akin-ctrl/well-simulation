@@ -13,6 +13,8 @@ from twin_core.config import (
 )
 from twin_core.control_store import ControlStore
 from twin_core.database import HistorianReader
+from twin_core.forecast_store import ForecastStore
+from twin_core.forecast_worker import ForecastWorker
 from twin_core.http_api import create_server
 from twin_core.logging_config import configure_logging
 from twin_core.metrics import TwinMetrics
@@ -54,6 +56,7 @@ def main() -> int:
             control_store=ControlStore(settings),
         )
         server = create_server(settings.bind_host, settings.port, runtime)
+        forecasts = ForecastWorker(runtime, ForecastStore(settings))
     except (OSError, ValueError):
         logger.error("Twin-core startup configuration is invalid")
         return 1
@@ -69,10 +72,12 @@ def main() -> int:
         runtime.control_inbox.start()
     http_thread = threading.Thread(target=server.serve_forever, daemon=True)
     http_thread.start()
+    forecasts.start()
     logger.info("Twin-core service started")
     try:
         runtime.run()
     finally:
+        forecasts.stop()
         if runtime.control_inbox is not None:
             runtime.control_inbox.stop()
         final_snapshot_saved = writer.stop(registry.persistence_copy())

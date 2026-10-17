@@ -149,6 +149,28 @@ class TwinMetrics:
             registry=self.registry,
         )
 
+        self.scheduled_forecasts = Counter(
+            "well_sim_twin_scheduled_forecasts_total",
+            "Scheduled job outcomes",
+            ["outcome"],
+            registry=self.registry,
+        )
+        self.forecast_intervals_missed = Counter(
+            "well_sim_twin_forecast_intervals_missed_total",
+            "Due forecast intervals skipped without replay",
+            registry=self.registry,
+        )
+        self.forecast_scheduler_ready = Gauge(
+            "well_sim_twin_forecast_scheduler_ready",
+            "One after a successful schedule scan",
+            registry=self.registry,
+        )
+        self.forecast_scheduler_last_scan = Gauge(
+            "well_sim_twin_forecast_scheduler_last_scan_timestamp_seconds",
+            "Wall time of the last successful schedule scan",
+            registry=self.registry,
+        )
+
     def render(self) -> bytes:
         """Return the Prometheus text format."""
         return generate_latest(self.registry)

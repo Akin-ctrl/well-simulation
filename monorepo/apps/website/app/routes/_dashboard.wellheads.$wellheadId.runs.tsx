@@ -183,6 +183,7 @@ export default function SavedRuns() {
                           {run.name ?? 'Forecast'}
                         </Link>
                         <p className='twin-caption'>
+                          {run.executionOrigin.kind === 'scheduled' && 'Scheduled · '}
                           {run.branchOrigin.kind === 'snapshot'
                             ? 'Saved snapshot'
                             : 'Current state'}{' '}

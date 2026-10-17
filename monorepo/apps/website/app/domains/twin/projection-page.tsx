@@ -1,3 +1,4 @@
+import { ForecastSchedulePanel } from './forecast-schedule';
 import { PageHelp } from '../dashboard/components/page-help';
 import { Link, useLoaderData, useOutletContext } from 'react-router';
 import type { WellheadContext } from '../../routes/_dashboard.wellheads.$wellheadId';
@@ -56,6 +57,7 @@ export function ProjectionPage({ kind }: { kind: ProjectionKind }) {
           Editing the draft does not change a saved result.
         </p>
       </PageHelp>
+      {kind === 'forecast' && <ForecastSchedulePanel key={wellheadId} />}
       <div className='twin-analysis'>
         <ProjectionForm
           key={`${wellheadId}-${kind}`}

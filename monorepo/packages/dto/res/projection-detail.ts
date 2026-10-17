@@ -1,3 +1,4 @@
+import type { executionOriginSchema } from './forecast-schedule';
 import z from 'zod';
 import type { BranchOrigin } from './snapshots';
 import { controlChangeSchema } from '../req/projection';
@@ -40,6 +41,7 @@ export type RunSummary = {
   baseSimulatedAt: string;
   modelVersion: string;
   branchOrigin: BranchOrigin;
+  executionOrigin: z.infer<typeof executionOriginSchema>;
   horizonSeconds: number;
   stepSeconds: number;
   confidenceScore: number;

@@ -14,14 +14,17 @@ import { TEST_DATABASE, databaseUrl, loadRepoEnv } from './env';
 loadRepoEnv();
 
 process.env.DATABASE_URL = databaseUrl(TEST_DATABASE);
-// Exercise the actual application grants while fixture setup keeps its admin
-// connection. CI may omit these values when it tests the ordinary admin harness.
-if (process.env.TEST_API_DB_USER && process.env.API_DB_PASSWORD) {
-  const url = new URL(process.env.DATABASE_URL);
-  url.username = process.env.TEST_API_DB_USER;
-  url.password = process.env.API_DB_PASSWORD;
-  process.env.DATABASE_URL = url.toString();
+// Requests use the deployed grants; fixture setup keeps its separate admin connection.
+const applicationUser = process.env.TEST_API_DB_USER ?? process.env.API_DB_USER;
+if (!applicationUser || !process.env.API_DB_PASSWORD) {
+  throw new Error(
+    'API tests require API_DB_USER and API_DB_PASSWORD for a restricted application role'
+  );
 }
+const applicationUrl = new URL(process.env.DATABASE_URL);
+applicationUrl.username = applicationUser;
+applicationUrl.password = process.env.API_DB_PASSWORD;
+process.env.DATABASE_URL = applicationUrl.toString();
 process.env.NODE_ENV = 'test';
 process.env.JWT_SECRET =
   process.env.TEST_JWT_SECRET ?? 'test-secret-of-at-least-thirty-two-characters';

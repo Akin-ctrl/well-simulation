@@ -153,3 +153,12 @@ running private baseline and scenario copies. The saved run carries its source
 identity and complete inputs. Historical scenarios use alarm rules active at
 execution; chart retention follows simulated dates. Forecasts continue from
 current state. See [historical scenarios](../design/historical-scenarios.md).
+
+## Scheduled forecasts
+
+The Forecast page also shows an optional administrator-owned schedule. A separate
+model-service worker claims bounded jobs from PostgreSQL, copies current running
+state and calculates with the same model as manual forecasts. It checks owner
+authority and claim expiry before atomically saving the result and completion.
+The page distinguishes the latest attempt from the latest successful result and
+shows each timestamp. No job writes live controls. See [scheduled forecasts](../design/scheduled-forecasts.md).

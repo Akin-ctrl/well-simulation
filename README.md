@@ -113,7 +113,7 @@ verifies its recorded baseline on later starts. A database from the numbered
 schema runner needs a one-time checked adoption. Follow the
 [data-layer instructions](data/README.md#existing-database-adoption) before
 starting the updated installer against an existing volume. Adoption preserves
-the volume and its data; later structural changes need a reviewed conversion.
+the volume and its data. New ordinary tables use the [verified extension](docs/design/schema-extension.md); changes to existing definitions need a reviewed conversion.
 The engine conversion preserves the original volume and selects the verified
 new volume through TIMESCALE_DATA_VOLUME.
 

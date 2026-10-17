@@ -364,3 +364,24 @@ checking it against the current PostgreSQL 16 reference.
 - [ADR 0006](../adr/0006-schema-management.md): original schema ownership decision and the single-file amendment.
 - [ADR 0036](../adr/0036-model-telemetry-through-modbus.md): reading source and model-version compatibility.
 - [8B design](twin-core-milestone-8b.md): existing controls and privileges that consolidation must preserve.
+
+## Adding new ordinary tables
+
+The `extend` mode applies reviewed additions from the same canonical source.
+Before changing the schema, save its installed commit's SQL and contract as
+private temporary reference files. Generate the target contract from a fresh
+reference database. Verify a backup restore, then run:
+
+```sh
+python data/src/schema.py extend \
+  --previous-schema /private/previous-schema.sql \
+  --previous-contract /private/previous-schema-contract.json \
+  --without-seeds
+```
+
+Use the installed database's environment and the matching Python dependencies.
+The command checks the old installation, adds only new ordinary tables and their
+indexes, verifies the complete target and audits the identity change. It then
+provisions service grants. It never infers changes to an existing table. A normal
+startup refuses an old installation until this explicit operation succeeds.
+See [allowed changes and failure behavior](schema-extension.md).

@@ -7,6 +7,7 @@ from dataclasses import asdict, dataclass, replace
 from datetime import datetime, timedelta
 from typing import Literal
 
+from twin_core.forecast_job import ScheduledForecastJob
 from twin_core.model import ControlInputs, ModelParameters, ProcessState, step_model
 
 MIN_HORIZON_SECONDS = 300
@@ -157,6 +158,15 @@ class ProjectionResult:
     alarm_rules: tuple[AlarmRule, ...]
     name: str | None = None
     controls: tuple[ScheduledControl, ...] = ()
+    scheduled_job: ScheduledForecastJob | None = None
+
+    def execution_origin(self) -> dict[str, str]:
+        """Keep automatic work distinct from a human's on-demand request."""
+        return (
+            self.scheduled_job.execution_origin()
+            if self.scheduled_job
+            else {"kind": "manual"}
+        )
 
     def to_payload(self) -> dict[str, object]:
         """Keep synthetic origin and heuristic uncertainty visible to clients."""
@@ -171,6 +181,7 @@ class ProjectionResult:
             "baseSimulatedAt": self.base.state.simulated_at.isoformat(),
             "generatedAt": self.generated_at.isoformat(),
             "branchOrigin": self.base.branch_origin(),
+            "executionOrigin": self.execution_origin(),
             "horizonSeconds": self.horizon_seconds,
             "stepSeconds": self.step_seconds,
             "confidence": {

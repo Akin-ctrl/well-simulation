@@ -78,6 +78,9 @@ export function ProjectionResult({ run }: { run: ProjectionDetail }) {
             change it.
           </p>
           <p className='twin-caption mb-4'>
+            {run.executionOrigin.kind === 'scheduled'
+              ? `Scheduled forecast for ${timeText(run.executionOrigin.scheduledFor)}. `
+              : 'Requested manually. '}
             Starting state:{' '}
             {run.branchOrigin.kind === 'snapshot'
               ? `Saved snapshot ${run.branchOrigin.snapshotId} at ${timeText(run.branchOrigin.simulatedAt)}. Chart retention follows simulated dates, so older scenarios may remain available for less time.`

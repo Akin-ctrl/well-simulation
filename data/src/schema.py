@@ -14,6 +14,7 @@ import psycopg2.extensions
 from psycopg2 import sql
 
 from schema_engine import accept_engine
+from schema_extend import extend_schema
 from schema_install import (
     SchemaContract,
     adopt,
@@ -244,6 +245,27 @@ def provision_twin_reader(
                 "GRANT EXECUTE ON FUNCTION control_actor_authority(INT) TO {}"
             ).format(sql.Identifier(user))
         )
+    with conn.cursor() as cursor:
+        cursor.execute(
+            sql.SQL("GRANT SELECT ON forecast_schedule, forecast_job TO {}").format(
+                sql.Identifier(user)
+            )
+        )
+        cursor.execute(
+            sql.SQL("GRANT INSERT ON forecast_job TO {}").format(sql.Identifier(user))
+        )
+        cursor.execute(
+            sql.SQL(
+                "GRANT UPDATE (next_due_at, enabled, revision, updated_at) "
+                "ON forecast_schedule TO {}"
+            ).format(sql.Identifier(user))
+        )
+        cursor.execute(
+            sql.SQL(
+                "GRANT UPDATE (status, completed_at, reason_code, run_id) ON "
+                "forecast_job TO {}"
+            ).format(sql.Identifier(user))
+        )
     conn.commit()
     logger.info("Twin-core database role is ready", extra={"role": user})
 
@@ -312,6 +334,17 @@ def provision_api_role(
                 sql.Identifier(user)
             )
         )
+    with conn.cursor() as cursor:
+        cursor.execute(
+            sql.SQL("GRANT SELECT ON forecast_schedule, forecast_job TO {}").format(
+                sql.Identifier(user)
+            )
+        )
+        cursor.execute(
+            sql.SQL("GRANT INSERT, UPDATE ON forecast_schedule TO {}").format(
+                sql.Identifier(user)
+            )
+        )
     conn.commit()
     logger.info("API database role is ready", extra={"role": user})
 
@@ -323,7 +356,14 @@ def command_parser() -> argparse.ArgumentParser:
         "mode",
         nargs="?",
         default="init",
-        choices=("init", "check", "adopt", "build-reference", "accept-engine"),
+        choices=(
+            "init",
+            "check",
+            "adopt",
+            "build-reference",
+            "accept-engine",
+            "extend",
+        ),
     )
     parser.add_argument(
         "--without-seeds",
@@ -338,7 +378,12 @@ def command_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--previous-contract",
         type=Path,
-        help="Verified pre-upgrade reference, required only by accept-engine",
+        help="Verified previous reference, required by accept-engine or extend",
+    )
+    parser.add_argument(
+        "--previous-schema",
+        type=Path,
+        help="Exact installed SQL source, required by extend",
     )
     return parser
 
@@ -349,6 +394,18 @@ def provision(conn: psycopg2.extensions.connection, settings: DatabaseSettings) 
     provision_api_role(conn, settings)
 
 
+def validate_mode_arguments(args: argparse.Namespace) -> None:
+    """Require explicit previous references for schema identity changes."""
+    if (args.mode in ("accept-engine", "extend")) != (
+        args.previous_contract is not None
+    ):
+        raise ValueError(
+            "--previous-contract is required only for accept-engine or extend"
+        )
+    if (args.mode == "extend") != (args.previous_schema is not None):
+        raise ValueError("--previous-schema is required only for extend")
+
+
 def execute_mode(
     conn: psycopg2.extensions.connection,
     settings: DatabaseSettings,
@@ -357,8 +414,7 @@ def execute_mode(
     """Dispatch the explicit database action while holding the installer lock."""
     source = SqlFile.load(SCHEMA_PATH)
     seeds = discover(SEEDS_DIR)
-    if (args.mode == "accept-engine") != (args.previous_contract is not None):
-        raise ValueError("--previous-contract is required only for accept-engine")
+    validate_mode_arguments(args)
     if args.mode == "build-reference":
         if args.contract_output is None:
             raise ValueError("build-reference requires --contract-output")
@@ -374,7 +430,12 @@ def execute_mode(
         accept_engine(conn, previous, contract, seeds)
         logger.info("Verified engine change accepted and audited")
         return
-    if args.mode == "adopt":
+    if args.mode == "extend":
+        previous_source = SqlFile.load(args.previous_schema)
+        previous = SchemaContract.load(args.previous_contract, previous_source)
+        extend_schema(conn, previous_source, source, previous, contract, seeds)
+        logger.info("Schema additions verified and audited")
+    elif args.mode == "adopt":
         adopt(conn, source, contract, seeds)
     elif args.mode == "check" or has_table(conn, "schema_installation"):
         check_installed(conn, contract, seeds)
